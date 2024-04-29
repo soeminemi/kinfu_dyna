@@ -184,7 +184,7 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
         helper.setLevelIntr(level_index, intr.fx, intr.fy, intr.cx, intr.cy);
         helper.vcurr = vcurr[level_index];
         helper.ncurr = ncurr[level_index];
-
+        //迭代计算，不同pyramid有不同的迭代次数
         for(int iter = 0; iter < iters_[level_index]; ++iter)
         {
             helper.aff = device_cast<device::Aff3f>(affine);

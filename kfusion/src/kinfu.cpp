@@ -125,7 +125,7 @@ void kfusion::KinFu::reset()
 {
     if (frame_counter_)
         cout << "Reset" << endl;
-
+    //reset the frame counter
     frame_counter_ = 0;
     poses_.clear();
     poses_.reserve(30000);

@@ -129,7 +129,8 @@ namespace kfusion
     template<> __kf_device__ void kfusion::device::gmem::StCs(const TsdfVolume::elem_type& val, TsdfVolume::elem_type*& ptr)
     {
         short cx = val.x, cy = val.y;
-        asm("st.global.cs.v2.u16 [%0], {%1, %2};" : "="_ASM_PTR_(ptr) : "h"(reinterpret_cast<ushort&>(cx)), "h"(reinterpret_cast<ushort&>(cy)));
+        // asm("st.global.cs.v2.u16 [%0], {%1, %2};" : "="_ASM_PTR_(ptr) : "h"(reinterpret_cast<ushort&>(cx)), "h"(reinterpret_cast<ushort&>(cy)));
+        asm("st.global.cs.v2.u16 [%0], {%1, %2};" : : _ASM_PTR_(ptr), "h"(reinterpret_cast<ushort&>(cx)), "h"(reinterpret_cast<ushort&>(cy)));
     }
     #undef _ASM_PTR_
 

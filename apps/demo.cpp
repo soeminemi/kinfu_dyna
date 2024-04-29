@@ -12,24 +12,19 @@ struct KinFuApp
     static void KeyboardCallback(const cv::viz::KeyboardEvent& event, void* pthis)
     {
         KinFuApp& kinfu = *static_cast<KinFuApp*>(pthis);
-
         if(event.action != cv::viz::KeyboardEvent::KEY_DOWN)
             return;
-
         if(event.code == 't' || event.code == 'T')
             kinfu.take_cloud(*kinfu.kinfu_);
-
         if(event.code == 'i' || event.code == 'I')
             kinfu.iteractive_mode_ = !kinfu.iteractive_mode_;
     }
 
-    KinFuApp(OpenNISource& source) : exit_ (false),  iteractive_mode_(false), capture_ (source), pause_(false)
+    KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(true)
     {
         KinFuParams params = KinFuParams::default_params();
         kinfu_ = KinFu::Ptr( new KinFu(params) );
-
-        capture_.setRegistration(true);
-
+        // capture_.setRegistration(true);
         cv::viz::WCube cube(cv::Vec3d::all(0), cv::Vec3d(params.volume_size), true, cv::viz::Color::apricot());
         viz.showWidget("cube", cube, params.volume_pose);
         viz.showWidget("coor", cv::viz::WCoordinateSystem(0.1));
@@ -73,14 +68,23 @@ struct KinFuApp
         double time_ms = 0;
         bool has_image = false;
 
-        for (int i = 0; !exit_ && !viz.wasStopped(); ++i)
+        std::vector<cv::String> depths;             // store paths,
+        std::vector<cv::String> images;             // store paths,
+
+        cv::glob("./data/rgbd_dataset_freiburg1_desk/depth", depths);
+        cv::glob("./data/rgbd_dataset_freiburg1_desk/color", images);
+
+        std::sort(depths.begin(), depths.end());
+        std::sort(images.begin(), images.end());
+
+
+        for (int i = 0; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
         {
-            bool has_frame = capture_.grab(depth, image);
-            if (!has_frame)
-                return std::cout << "Can't grab" << std::endl, false;
-
+            // bool has_frame = capture_.grab(depth, image);``
+            image = cv::imread(images[i], cv::IMREAD_COLOR);
+            depth = cv::imread(depths[i], cv::IMREAD_ANYDEPTH);
             depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
-
+            // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
             {
                 SampledScopeTime fps(time_ms); (void)fps;
                 has_image = kinfu(depth_device_);
@@ -113,7 +117,7 @@ struct KinFuApp
 
     bool pause_ /*= false*/;
     bool exit_, iteractive_mode_;
-    OpenNISource& capture_;
+    // OpenNISource& capture_;
     KinFu::Ptr kinfu_;
     cv::viz::Viz3d viz;
 
@@ -135,20 +139,10 @@ int main (int argc, char* argv[])
     if(cuda::checkIfPreFermiGPU(device))
         return std::cout << std::endl << "Kinfu is not supported for pre-Fermi GPU architectures, and not built for them by default. Exiting..." << std::endl, 1;
 
-    OpenNISource capture;
-    capture.open (0);
-    //capture.open("d:/onis/20111013-224932.oni");
-    //capture.open("d:/onis/reg20111229-180846.oni");
-    //capture.open("d:/onis/white1.oni");
-    //capture.open("/media/Main/onis/20111013-224932.oni");
-    //capture.open("20111013-225218.oni");
-    //capture.open("d:/onis/20111013-224551.oni");
-    //capture.open("d:/onis/20111013-224719.oni");
-
-    KinFuApp app (capture);
+    KinFuApp app;
 
     // executing
-    try { app.execute (); }
+    try { app.execute(); }
     catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
     catch (const std::exception& /*e*/) { std::cout << "Exception" << std::endl; }
 
