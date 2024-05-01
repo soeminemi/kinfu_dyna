@@ -77,6 +77,7 @@ namespace kfusion
             return 0;
         }
 #else
+        // 通过将voxel的体素投影到深度图像平面上，找到对应点，并判断法向是否接近，一次判断是否为对应点
         __kf_device__
         int ComputeIcpHelper::find_coresp(int x, int y, float3& nd, float3& d, float3& s) const
         {
@@ -355,7 +356,7 @@ namespace kfusion
             float3 n, d, s;
             int filtered = (x < helper.cols && y < helper.rows) ? helper.find_coresp (x, y, n, d, s) : 1;
             //if (x < helper.cols && y < helper.rows) mask(y, x) = filtered;
-
+            // find correspondence : filtered == 0
             float row[7];
 
             if (!filtered)
