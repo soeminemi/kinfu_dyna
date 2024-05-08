@@ -20,7 +20,7 @@ struct KinFuApp
             kinfu.iteractive_mode_ = !kinfu.iteractive_mode_;
     }
 
-    KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(true)
+    KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(false)
     {
         KinFuParams params = KinFuParams::default_params();
         kinfu_ = KinFu::Ptr( new KinFu(params) );
@@ -78,8 +78,9 @@ struct KinFuApp
         std::sort(images.begin(), images.end());
 
 
-        for (int i = 0; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
+        for (int i = 496; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
         {
+            std::cout<<"frame: "<<i<<std::endl;
             // bool has_frame = capture_.grab(depth, image);``
             image = cv::imread(images[i], cv::IMREAD_COLOR);
             depth = cv::imread(depths[i], cv::IMREAD_ANYDEPTH);
@@ -111,6 +112,7 @@ struct KinFuApp
 
             //exit_ = exit_ || i > 100;
             viz.spinOnce(3, true);
+            std::cout<<"finish frame"<<std::endl;
         }
         return true;
     }

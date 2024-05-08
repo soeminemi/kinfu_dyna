@@ -190,7 +190,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             return reset(), false;
     }
 
-    poses_.push_back(poses_.back() * affine); // curr -> global
+    poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Volume integration
@@ -199,6 +199,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     float rnorm = (float)cv::norm(affine.rvec());
     float tnorm = (float)cv::norm(affine.translation());
     bool integrate = (rnorm + tnorm)/2 >= p.tsdf_min_camera_movement;
+    cout<<"integrate : "<<rnorm<<","<<tnorm<<endl;
     if (integrate)
     {
         //ScopeTime time("tsdf");

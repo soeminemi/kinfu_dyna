@@ -1,6 +1,6 @@
 #include "device.hpp"
 #include "texture_binder.hpp"
-
+#include <stdio.h>
 
 namespace kfusion
 {
@@ -364,6 +364,7 @@ namespace kfusion
                 *(float3*)&row[0] = cross (s, n);
                 *(float3*)&row[3] = n;
                 row[6] = dot (n, d - s);
+                // printf("f:%f\n",row[6]);
             }
             else
                 row[0] = row[1] = row[2] = row[3] = row[4] = row[5] = row[6] = 0.f;
@@ -391,11 +392,13 @@ namespace kfusion
             Block::reduce<ComputeIcpHelper::Policy::FINAL_REDUCE_CTA_SIZE>(smem, plus());
 
             if (tid == 0)
+            {
                 final_buf[blockIdx.x] = smem[0];
+            }
         }
     }
 }
-
+// 计算对应点，并获取估计平移和旋转的矩阵，SVD--
 void kfusion::device::ComputeIcpHelper::operator()(const Depth& dprev, const Normals& nprev, DeviceArray2D<float>& buffer, float* data, cudaStream_t s)
 {
     dprev_tex.filterMode = cudaFilterModePoint;

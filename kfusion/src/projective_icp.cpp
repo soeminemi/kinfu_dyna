@@ -37,8 +37,8 @@ struct kfusion::cuda::ProjectiveICP::StreamHelper
     StreamHelper() { cudaSafeCall( cudaStreamCreate(&stream) ); }
     ~StreamHelper() { cudaSafeCall( cudaStreamDestroy(stream) ); }
 
-    operator float*() { return locked_buffer.data; }
-    operator cudaStream_t() { return stream; }
+    operator float*() { return locked_buffer.data; } //返回数据指针
+    operator cudaStream_t() { return stream; } //返回cudastream，通过不同类型的调用实现
 
     Mat6f get(Vec6f& b)
     {
@@ -56,7 +56,10 @@ struct kfusion::cuda::ProjectiveICP::StreamHelper
                 if (j == 6)               // vector b
                     data_b[i] = value;
                 else
+                {
                     data_A[j * 6 + i] = data_A[i * 6 + j] = value;
+                    // printf("A:%f\n",data_A[j * 6 + i]);
+                }
             }
         return A;
     }
@@ -153,6 +156,7 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
 
             if (fabs (det) < 1e-15 || cv::viz::isNan(det))
             {
+                cout<< "det = " << det << endl;
                 if (cv::viz::isNan(det)) cout << "qnan" << endl;
                 return false;
             }
@@ -188,7 +192,7 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
         for(int iter = 0; iter < iters_[level_index]; ++iter)
         {
             helper.aff = device_cast<device::Aff3f>(affine);
-            helper(v, n, buffer_, sh, sh);
+            helper(v, n, buffer_, sh, sh);//重新计算对应点，并计算affine
 
             StreamHelper::Vec6f b;
             StreamHelper::Mat6f A = sh.get(b);
@@ -198,6 +202,7 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
 
             if (fabs (det) < 1e-15 || cv::viz::isNan (det))
             {
+                cout<<"det = "<<det<<endl;
                 if (cv::viz::isNan (det)) cout << "qnan" << endl;
                 return false;
             }
