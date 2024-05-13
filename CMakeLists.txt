@@ -14,12 +14,13 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 include(cmake/Utils.cmake)
 include(cmake/Targets.cmake)
 
+
 # ---[ find dependencies
 find_package(OpenCV REQUIRED COMPONENTS core viz highgui)
 find_package(CUDA REQUIRED)
 find_package(OpenNI REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${OPENNI_INCLUDE_DIR})
-
+find_package(Ceres REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${OPENNI_INCLUDE_DIR} ${CERES_INCLUDE_DIRS})
 # ---[ misc settings
 if(USE_PROJECT_FOLDERS)
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)

@@ -14,13 +14,17 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
 
     KinFuParams p;
 
-    p.cols = 640;  //pixels
-    p.rows = 480;  //pixels
-    p.intr = Intr(525.f, 525.f, p.cols/2 - 0.5f, p.rows/2 - 0.5f);
+    // p.cols = 640;  //pixels
+    // p.rows = 480;  //pixels
+    // p.intr = Intr(598.68896484375f, 599.1634521484375f, 328.7f, 235.72f);
 
-    p.volume_dims = Vec3i::all(512);  //number of voxels
+    p.cols = 1280;  //pixels
+    p.rows = 780;  //pixels
+    p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
+
+    p.volume_dims = Vec3i::all(512);  //number of voxels    
     p.volume_size = Vec3f::all(3.f);  //meters
-    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.5f));
+    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.35f)); //设置初始帧相机所在的位置
 
     p.bilateral_sigma_depth = 0.04f;  //meter
     p.bilateral_sigma_spatial = 4.5; //pixels
@@ -40,6 +44,7 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
 
     //p.light_pose = p.volume_pose.translation()/4; //meters
     p.light_pose = Vec3f::all(0.f); //meters
+    p.depth_scale = 0.25;
 
     return p;
 }
@@ -187,7 +192,10 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
 #endif
         if (!ok)
+        {
             return reset(), false;
+            // return false;
+        }
     }
 
     poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
@@ -199,7 +207,6 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     float rnorm = (float)cv::norm(affine.rvec());
     float tnorm = (float)cv::norm(affine.translation());
     bool integrate = (rnorm + tnorm)/2 >= p.tsdf_min_camera_movement;
-    cout<<"integrate : "<<rnorm<<","<<tnorm<<endl;
     if (integrate)
     {
         //ScopeTime time("tsdf");
@@ -220,7 +227,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
 #endif
         cuda::waitAllDefaultStream();
-    }
+    } 
 
     return ++frame_counter_, true;
 }

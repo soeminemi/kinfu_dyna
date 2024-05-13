@@ -122,7 +122,7 @@ void kfusion::cuda::TsdfVolume::raycast(const Affine3f& camera_pose, const Intr&
     device::Vec3f vsz  = device_cast<device::Vec3f>(getVoxelSize());
 
     device::TsdfVolume volume(data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
-    device::raycast(volume, aff, Rinv, reproj, p, n, raycast_step_factor_, gradient_delta_factor_);
+    device::raycast(volume, aff, Rinv, reproj, p, n, raycast_step_factor_, gradient_delta_factor_); 
 }
 
 DeviceArray<Point> kfusion::cuda::TsdfVolume::fetchCloud(DeviceArray<Point>& cloud_buffer) const

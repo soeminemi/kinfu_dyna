@@ -1,6 +1,6 @@
 #include "device.hpp"
 #include "texture_binder.hpp"
-
+#include <stdio.h>
 using namespace kfusion::device;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -71,10 +71,10 @@ namespace kfusion
                 float3 vc = vol2cam * vx; //tranform from volume coo frame to camera one
 
                 TsdfVolume::elem_type* vptr = volume.beg(x, y);
+                // printf("x, y: %f, %f,%f\n"vc.x, vol2cam.t.y, vol2cam.t.z);
                 for(int i = 0; i < volume.dims.z; ++i, vc += zstep, vptr = volume.zstep(vptr))
                 {
                     float2 coo = proj(vc);
-
                     //#if defined __CUDA_ARCH__ && __CUDA_ARCH__ >= 300
                     // this is actually workaround for kepler. it doesn't return 0.f for texture
                     // fetches for out-of-border coordinates even for cudaaddressmodeborder mode
@@ -86,7 +86,7 @@ namespace kfusion
                         continue;
 
                     float sdf = Dp - __fsqrt_rn(dot(vc, vc)); //Dp - norm(v)
-
+                    // printf("%f,%f\n",Dp, __fsqrt_rn(dot(vc, vc)));
                     if (sdf >= -volume.trunc_dist)
                     {
                         float tsdf = fmin(1.f, sdf * tranc_dist_inv);

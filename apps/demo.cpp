@@ -71,14 +71,14 @@ struct KinFuApp
         std::vector<cv::String> depths;             // store paths,
         std::vector<cv::String> images;             // store paths,
 
-        cv::glob("./data/rgbd_dataset_freiburg1_desk/depth", depths);
-        cv::glob("./data/rgbd_dataset_freiburg1_desk/color", images);
+        cv::glob("./data/desk1/depth", depths);
+        cv::glob("./data/desk1/color", images);
 
         std::sort(depths.begin(), depths.end());
         std::sort(images.begin(), images.end());
 
 
-        for (int i = 496; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
+        for (int i = 0; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
         {
             std::cout<<"frame: "<<i<<std::endl;
             // bool has_frame = capture_.grab(depth, image);``
@@ -107,7 +107,7 @@ struct KinFuApp
             case 't': case 'T' : take_cloud(kinfu); break;
             case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
             case 27: exit_ = true; break;
-            case 32: pause_ = !pause_; break;
+            case 'p': pause_ = !pause_; break;
             }
 
             //exit_ = exit_ || i > 100;
@@ -142,11 +142,10 @@ int main (int argc, char* argv[])
         return std::cout << std::endl << "Kinfu is not supported for pre-Fermi GPU architectures, and not built for them by default. Exiting..." << std::endl, 1;
 
     KinFuApp app;
-
     // executing
     try { app.execute(); }
     catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
     catch (const std::exception& /*e*/) { std::cout << "Exception" << std::endl; }
-
+    std::cout<<"finished"<<std::endl;
     return 0;
 }

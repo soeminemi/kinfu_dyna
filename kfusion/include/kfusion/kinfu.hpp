@@ -5,6 +5,7 @@
 #include <kfusion/cuda/projective_icp.hpp>
 #include <vector>
 #include <string>
+#include <kfusion/warp_field.hpp>
 
 namespace kfusion
 {
@@ -46,6 +47,8 @@ namespace kfusion
 
         float raycast_step_factor;   // in voxel sizes
         float gradient_delta_factor; // in voxel sizes
+
+        float depth_scale; //transform to mm from the depth image
 
         Vec3f light_pose; //meters
 

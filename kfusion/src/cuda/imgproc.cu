@@ -1,5 +1,5 @@
 #include "device.hpp"
-
+#include <stdio.h>
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Depth bilateral filter
 
@@ -265,7 +265,7 @@ namespace kfusion
                 float xl = (x - c.x) * finv.x;
                 float yl = (y - c.y) * finv.y;
                 float lambda = sqrtf (xl * xl + yl * yl + 1);
-                dists(y, x) = __float2half_rn(depth(y, x) * lambda * 0.001f); //meters
+                dists(y, x) = __float2half_rn(0.25*depth(y, x) * lambda * 0.001f); //meters， store as half
             }
         }
     }
