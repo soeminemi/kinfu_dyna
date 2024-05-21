@@ -348,7 +348,7 @@ namespace kfusion
          STOR
         }
 
-        __global__ void icp_helper_kernel(const ComputeIcpHelper helper, PtrStep<float> partial_buf)
+        __global__ void icp_helper_kernel(const ComputeIcpHelper helper, PtrStep<float> partial_buf, int &valid_num)
         {
             int x = threadIdx.x + blockIdx.x * ComputeIcpHelper::Policy::CTA_SIZE_X;
             int y = threadIdx.y + blockIdx.y * ComputeIcpHelper::Policy::CTA_SIZE_Y;
@@ -365,6 +365,8 @@ namespace kfusion
                 *(float3*)&row[0] = cross (s, n);
                 *(float3*)&row[3] = n;
                 row[6] = dot (n, d - s);
+                // valid_num = valid_num + 1;
+                // printf("valid: %d\n",valid_num);
             }
             else
                 row[0] = row[1] = row[2] = row[3] = row[4] = row[5] = row[6] = 0.f;
@@ -411,8 +413,8 @@ void kfusion::device::ComputeIcpHelper::operator()(const Depth& dprev, const Nor
 
     int partials_count = (int)(grid.x * grid.y);
     allocate_buffer(buffer, partials_count);
-
-    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer);
+    valid_num = 0;
+    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer,valid_num);
     cudaSafeCall ( cudaGetLastError () );
 
     int b = Policy::FINAL_REDUCE_CTA_SIZE;
@@ -462,8 +464,8 @@ void kfusion::device::ComputeIcpHelper::operator()(const Points& vprev, const No
 
     int partials_count = (int)(grid.x * grid.y);
     allocate_buffer(buffer, partials_count);
-
-    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer);
+    valid_num = 0;
+    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer,valid_num);
     cudaSafeCall ( cudaGetLastError () );
 
     int b = Policy::FINAL_REDUCE_CTA_SIZE;

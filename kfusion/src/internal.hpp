@@ -107,6 +107,7 @@ namespace kfusion
             __kf_device__ void partial_reduce(const float row[7], PtrStep<float>& partial_buffer) const;
             __kf_device__ float2 proj(const float3& p) const;
             __kf_device__ float3 reproj(float x, float y, float z)  const;
+            int valid_num;
         };
 
         //tsdf volume functions

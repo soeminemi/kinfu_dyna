@@ -156,7 +156,7 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
 //    options.minimizer_type = ceres::TRUST_REGION;
     options.linear_solver_type = ceres::SPARSE_SCHUR;
     options.minimizer_progress_to_stdout = true;
-    options.num_linear_solver_threads = 8;
+    // options.num_linear_solver_threads = 8;
     options.num_threads = 8;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);

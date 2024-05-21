@@ -71,8 +71,8 @@ struct KinFuApp
         std::vector<cv::String> depths;             // store paths,
         std::vector<cv::String> images;             // store paths,
 
-        cv::glob("./data/desk1/depth", depths);
-        cv::glob("./data/desk1/color", images);
+        cv::glob("./data/test/depth", depths);
+        cv::glob("./data/test/color", images);
 
         std::sort(depths.begin(), depths.end());
         std::sort(images.begin(), images.end());

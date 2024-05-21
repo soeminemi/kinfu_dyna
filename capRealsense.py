@@ -15,7 +15,7 @@ if __name__ == "__main__":
     rscam.start_capture()
     cam_param = rscam.get_metadata()
     print(cam_param)
-    for fid in range(150):
+    for fid in range(350):
         print("frame:",fid)
         rgbd_frame = rscam.capture_frame()
         depths.append( rgbd_frame.depth.to_legacy())
@@ -26,7 +26,8 @@ if __name__ == "__main__":
         cv2.imshow("color",img_o3d_numpy)
         cv2.waitKey(1)
     print("saving to disk")
+    path = "/home/john/Projects/dynamicfusion/data/desk1"
     for fid in range(150):
-        o3d.io.write_image(f"color/color{fid:05d}.png", images[fid])
-        o3d.io.write_image(f"depth/depth{fid:05d}.png",depths[fid])
+        o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
+        o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
     rscam.stop_capture()

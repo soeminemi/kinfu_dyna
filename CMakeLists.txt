@@ -20,7 +20,7 @@ find_package(OpenCV REQUIRED COMPONENTS core viz highgui)
 find_package(CUDA REQUIRED)
 find_package(OpenNI REQUIRED)
 find_package(Ceres REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${OPENNI_INCLUDE_DIR} ${CERES_INCLUDE_DIRS})
+include_directories(${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${OPENNI_INCLUDE_DIR} ${CERES_INCLUDE_DIRS} /usr/include/eigen3)
 # ---[ misc settings
 if(USE_PROJECT_FOLDERS)
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
