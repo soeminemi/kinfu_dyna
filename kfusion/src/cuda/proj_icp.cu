@@ -79,30 +79,30 @@ namespace kfusion
 #else
         // 通过将voxel的体素投影到深度图像平面上，找到对应点，并判断法向是否接近，一次判断是否为对应点
         __kf_device__
-        int ComputeIcpHelper::find_coresp(int x, int y, float3& nd, float3& d, float3& s) const
+        int ComputeIcpHelper::find_coresp(int x, int y, float3& nd, float3& d, float3& s) const //d, and s is the correspond locations at previous and current map
         {
-            s = tr(vcurr(y, x));
+            s = tr(vcurr(y, x));//Get the coor of (y,z)
             if (isnan(s.x))
                 return 40;
 
-            s = aff * s;
+            s = aff * s; // Transform to current camera coor
 
-            float2 coo = proj(s);
+            float2 coo = proj(s); //project to current depth map/points map
             if (s.z <= 0 || coo.x < 0 || coo.y < 0 || coo.x >= cols || coo.y >= rows)
                 return 80;
 
-            d = tr(tex2D(vprev_tex, coo.x, coo.y));
+            d = tr(tex2D(vprev_tex, coo.x, coo.y)); //Get the previouos point coor at coo
             if (isnan(d.x))
                 return 120;
 
-            float dist2 = norm_sqr(s - d);
+            float dist2 = norm_sqr(s - d); //distance of s and d
             if (dist2 > dist2_thres)
                 return 160;
 
             float3 ns = aff.R * tr(ncurr(y, x));
             nd = tr(tex2D(nprev_tex, coo.x, coo.y));
 
-            float cosine = fabs(dot(ns, nd));
+            float cosine = fabs(dot(ns, nd)); // similarity of normals
             if (cosine < min_cosine)
                 return 200;
             return 0;
@@ -353,18 +353,17 @@ namespace kfusion
             int x = threadIdx.x + blockIdx.x * ComputeIcpHelper::Policy::CTA_SIZE_X;
             int y = threadIdx.y + blockIdx.y * ComputeIcpHelper::Policy::CTA_SIZE_Y;
 
-            float3 n, d, s;
-            int filtered = (x < helper.cols && y < helper.rows) ? helper.find_coresp (x, y, n, d, s) : 1;
+            float3 n, d, s; //缓存
+            int filtered = (x < helper.cols && y < helper.rows) ? helper.find_coresp (x, y, n, d, s) : 1; //d为前一帧对应点坐标，s为当前帧对应点坐标，返回0表示两者存在对应关系
             //if (x < helper.cols && y < helper.rows) mask(y, x) = filtered;
             // find correspondence : filtered == 0
             float row[7];
 
-            if (!filtered)
+            if (!filtered) //存在对应关系
             {
                 *(float3*)&row[0] = cross (s, n);
                 *(float3*)&row[3] = n;
                 row[6] = dot (n, d - s);
-                // printf("f:%f\n",row[6]);
             }
             else
                 row[0] = row[1] = row[2] = row[3] = row[4] = row[5] = row[6] = 0.f;
@@ -423,7 +422,33 @@ void kfusion::device::ComputeIcpHelper::operator()(const Depth& dprev, const Nor
     cudaSafeCall ( cudaMemcpyAsync(data, buffer.ptr(Policy::TOTAL), Policy::TOTAL * sizeof(float), cudaMemcpyDeviceToHost, s) );
     cudaSafeCall ( cudaGetLastError () );
 }
+// // 计算Ax=b 
+// void kfusion::device::ComputeIcpHelper::operator()(const Points& vprev, const Normals& nprev, DeviceArray2D<float>& buffer, float* data, cudaStream_t s)
+// {
+//     dprev_tex.filterMode = cudaFilterModePoint;
+//     nprev_tex.filterMode = cudaFilterModePoint;
+//     TextureBinder vprev_binder(vprev, vprev_tex);
+//     TextureBinder nprev_binder(nprev, nprev_tex);
 
+//     dim3 block(Policy::CTA_SIZE_X, Policy::CTA_SIZE_Y);
+//     dim3 grid(divUp ((int)cols, block.x), divUp ((int)rows, block.y));
+
+//     int partials_count = (int)(grid.x * grid.y);
+//     allocate_buffer(buffer, partials_count);
+
+//     icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer);
+//     cudaSafeCall ( cudaGetLastError () );
+
+//     int b = Policy::FINAL_REDUCE_CTA_SIZE;
+//     int g = Policy::TOTAL;
+//     icp_final_reduce_kernel<<<g, b, 0, s>>>(buffer, partials_count, buffer.ptr(Policy::TOTAL));
+//     cudaSafeCall ( cudaGetLastError () );
+
+//     cudaSafeCall ( cudaMemcpyAsync(data, buffer.ptr(Policy::TOTAL), Policy::TOTAL * sizeof(float), cudaMemcpyDeviceToHost, s) );
+//     cudaSafeCall ( cudaGetLastError () );
+// }
+
+//计算Ax = b，先获取矩阵，再通过矩阵乘法获取ATAx=ATb
 void kfusion::device::ComputeIcpHelper::operator()(const Points& vprev, const Normals& nprev, DeviceArray2D<float>& buffer, float* data, cudaStream_t s)
 {
     dprev_tex.filterMode = cudaFilterModePoint;

@@ -177,7 +177,7 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
 
     device::ComputeIcpHelper helper(dist_thres_, angle_thres_);
     affine = Affine3f::Identity();
-
+    //基于金字塔结构的姿态估计
     for(int level_index = LEVELS - 1; level_index >= 0; --level_index)
     {
         const device::Normals& n = (const device::Normals& )nprev[level_index];
