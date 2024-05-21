@@ -354,6 +354,7 @@ namespace kfusion
             int y = threadIdx.y + blockIdx.y * ComputeIcpHelper::Policy::CTA_SIZE_Y;
 
             float3 n, d, s; //缓存
+            // 只是按照投影方式寻找对应点，对应点不一定是对的！！！
             int filtered = (x < helper.cols && y < helper.rows) ? helper.find_coresp (x, y, n, d, s) : 1; //d为前一帧对应点坐标，s为当前帧对应点坐标，返回0表示两者存在对应关系
             //if (x < helper.cols && y < helper.rows) mask(y, x) = filtered;
             // find correspondence : filtered == 0
