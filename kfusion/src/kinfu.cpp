@@ -231,7 +231,10 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 
     return ++frame_counter_, true;
 }
-
+void kfusion::KinFu::getPoints(cv::Mat& points)
+{
+    prev_.points_pyr[0].download(points.ptr<void>(), points.step);
+}
 void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
 {
     const KinFuParams& p = params_;

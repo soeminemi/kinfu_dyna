@@ -41,13 +41,15 @@ struct KinFuApp
 
     void show_raycasted(KinFu& kinfu)
     {
-        const int mode = 3;
+        const int mode = 0;
         if (iteractive_mode_)
             kinfu.renderImage(view_device_, viz.getViewerPose(), mode);
         else
             kinfu.renderImage(view_device_, mode);
 
         view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
+        points_host_.create(view_device_.rows(), view_device_.cols(), CV_32FC4);
+        kinfu.getPoints(points_host_);
         view_device_.download(view_host_.ptr<void>(), view_host_.step);
         cv::imshow("Scene", view_host_);
     }
@@ -124,6 +126,7 @@ struct KinFuApp
     cv::viz::Viz3d viz;
 
     cv::Mat view_host_;
+    cv::Mat points_host_;
     cuda::Image view_device_;
     cuda::Depth depth_device_;
     cuda::DeviceArray<Point> cloud_buffer;
