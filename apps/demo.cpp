@@ -77,7 +77,7 @@ struct KinFuApp
         std::sort(depths.begin(), depths.end());
         std::sort(images.begin(), images.end());
 
-
+        pause_ = true;
         for (int i = 0; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
         {
             std::cout<<"frame: "<<i<<std::endl;

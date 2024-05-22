@@ -502,6 +502,38 @@ namespace kfusion
             out.w = 0;
             dst(y, x) = out;
         }
+
+        __global__ void render_image_kernel_smpl(const PtrStep<Point> points, const PtrStep<Normal> normals,
+                                            const Reprojector reproj, const float3 light_pose, PtrStepSz<uchar4> dst)
+        {
+            int x = threadIdx.x + blockIdx.x * blockDim.x;
+            int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+            if (x >= dst.cols || y >= dst.rows)
+                return;
+
+            float3 color;
+
+            float3 p = tr(points(y,x));
+
+            if (isnan(p.x))
+            {
+                // printf("1\n");
+                color = make_float3(0.5, 0, 0);
+            }
+            else
+            {
+                color = make_float3(0, 1.0, 0);
+                // printf("2\n");
+            }
+
+            uchar4 out;
+            out.x = static_cast<unsigned char>(__saturatef(color.x) * 255.f);
+            out.y = static_cast<unsigned char>(__saturatef(color.y) * 255.f);
+            out.z = static_cast<unsigned char>(__saturatef(color.z) * 255.f);
+            out.w = 0;
+            dst(y, x) = out;
+        }
     }
 }
 
@@ -519,7 +551,7 @@ void kfusion::device::renderImage(const Points& points, const Normals& normals, 
     dim3 block (32, 8);
     dim3 grid (divUp (points.cols(), block.x), divUp (points.rows(), block.y));
 
-    render_image_kernel<<<grid, block>>>((PtrStep<Point>)points, normals, reproj, light_pose, image);
+    render_image_kernel_smpl<<<grid, block>>>((PtrStep<Point>)points, normals, reproj, light_pose, image);
     cudaSafeCall ( cudaGetLastError () );
 }
 

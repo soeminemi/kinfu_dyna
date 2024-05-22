@@ -200,6 +200,7 @@ namespace kfusion
             float time_step;
             float3 gradient_delta;
             float3 voxel_size_inv;
+            int *pt_num;
 
             TsdfRaycaster(const TsdfVolume& volume, const Aff3f& aff, const Mat3f& Rinv, const Reprojector& _reproj);
 
@@ -327,6 +328,7 @@ namespace kfusion
 
                     if (tsdf_curr > 0.f && tsdf_next < 0.f)
                     {
+                        
                         float Ft   = interpolate(volume, curr * voxel_size_inv);
                         float Ftdt = interpolate(volume, next * voxel_size_inv);
 
@@ -337,6 +339,7 @@ namespace kfusion
 
                         if (!isnan(normal.x * normal.y * normal.z))
                         {
+                            atomicAdd(pt_num,1); //todo 
                             normal = Rinv * normal;
                             vertex = Rinv * (vertex - aff.t);
 
@@ -394,7 +397,6 @@ void kfusion::device::raycast(const TsdfVolume& volume, const Aff3f& aff, const 
 
     dim3 block(32, 8);
     dim3 grid (divUp (depth.cols(), block.x), divUp (depth.rows(), block.y));
-
     raycast_kernel<<<grid, block>>>(rc, (PtrStepSz<ushort>)depth, normals);
     cudaSafeCall (cudaGetLastError ());
 }
@@ -412,8 +414,12 @@ void kfusion::device::raycast(const TsdfVolume& volume, const Aff3f& aff, const 
 
     dim3 block(32, 8);
     dim3 grid (divUp (points.cols(), block.x), divUp (points.rows(), block.y));
-
+    int init_num = 0;
+    cudaMalloc(&(rc.pt_num), sizeof(int));
+    cudaMemcpy((rc.pt_num),&init_num, sizeof(int),cudaMemcpyHostToDevice);
     raycast_kernel<<<grid, block>>>(rc, (PtrStepSz<Point>)points, normals);
+    cudaMemcpy(&init_num,(rc.pt_num), sizeof(int),cudaMemcpyDeviceToHost);
+    printf("ptnum: %d\n",init_num);
     cudaSafeCall (cudaGetLastError ());
 }
 

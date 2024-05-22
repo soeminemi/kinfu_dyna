@@ -23,7 +23,7 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
 
     p.volume_dims = Vec3i::all(512);  //number of voxels
-    p.volume_size = Vec3f::all(1.f);  //meters
+    p.volume_size = Vec3f::all(3.f);  //meters
     p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.3f)); //设置初始帧相机所在的位置
 
     p.bilateral_sigma_depth = 0.04f;  //meter
@@ -178,7 +178,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         curr_.points_pyr.swap(prev_.points_pyr);
 #endif
         curr_.normals_pyr.swap(prev_.normals_pyr);
-        return ++frame_counter_, false;
+        return ++frame_counter_, true;
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
@@ -222,7 +222,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         for (int i = 1; i < LEVELS; ++i)
             resizeDepthNormals(prev_.depth_pyr[i-1], prev_.normals_pyr[i-1], prev_.depth_pyr[i], prev_.normals_pyr[i]);
 #else
-        volume_->raycast(poses_.back(), p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]);
+        volume_->raycast(poses_.back(), p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); // tsdf volume to points pyramid
         for (int i = 1; i < LEVELS; ++i)
             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
 #endif
@@ -242,7 +242,7 @@ void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
 #else
     #define PASS1 prev_.points_pyr
 #endif
-
+    std::cout<<"render image flag: "<<flag<<std::endl;
     if (flag < 1 || flag > 3)
         cuda::renderImage(PASS1[0], prev_.normals_pyr[0], params_.intr, params_.light_pose, image);
     else if (flag == 2)
@@ -251,7 +251,7 @@ void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
     {
         DeviceArray2D<RGB> i1(p.rows, p.cols, image.ptr(), image.step());
         DeviceArray2D<RGB> i2(p.rows, p.cols, image.ptr() + p.cols, image.step());
-
+        std::cout<<"render image"<<std::endl;
         cuda::renderImage(PASS1[0], prev_.normals_pyr[0], params_.intr, params_.light_pose, i1);
         cuda::renderTangentColors(prev_.normals_pyr[0], i2);
     }
