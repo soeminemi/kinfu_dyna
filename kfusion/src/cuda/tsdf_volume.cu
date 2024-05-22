@@ -89,6 +89,7 @@ namespace kfusion
                     // printf("%f,%f\n",Dp, __fsqrt_rn(dot(vc, vc)));
                     if (sdf >= -volume.trunc_dist)
                     {
+                        
                         float tsdf = fmin(1.f, sdf * tranc_dist_inv);
 
                         //read and unpack
@@ -101,6 +102,10 @@ namespace kfusion
                         //pack and write
                         gmem::StCs(pack_tsdf (tsdf_new, weight_new), vptr);
                     }
+                    // else
+                    // {
+                    //     printf("%f,%f\n",Dp, __fsqrt_rn(dot(vc, vc)));
+                    // }
                 }  // for(;;)
             }
         };

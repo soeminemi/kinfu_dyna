@@ -199,7 +199,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     }
 
     poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
-
+    std::cout<<poses_.back() .rotation()<<", "<<poses_.back() .translation()<<std::endl;
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Volume integration
 

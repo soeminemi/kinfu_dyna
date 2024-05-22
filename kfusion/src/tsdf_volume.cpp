@@ -88,6 +88,7 @@ void kfusion::cuda::TsdfVolume::integrate(const Dists& dists, const Affine3f& ca
     device::Aff3f aff = device_cast<device::Aff3f>(vol2cam);
 
     device::TsdfVolume volume(data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
+    printf("intr params: %f,%f,%f,%f\n",intr.fx, intr.fy, intr.cx, intr.cy);
     device::integrate(dists, volume, aff, proj);
 }
 
