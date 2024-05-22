@@ -47,6 +47,9 @@ void kfusion::cuda::TsdfVolume::setSize(const Vec3f& size)
 
 float kfusion::cuda::TsdfVolume::getTruncDist() const { return trunc_dist_; }
 
+void kfusion::cuda::TsdfVolume::setDepthScale(float depthScale){depth_scale_ = depthScale;}
+float kfusion::cuda::TsdfVolume::getDepthScale() const{return depth_scale_;}
+
 void kfusion::cuda::TsdfVolume::setTruncDist(float distance)
 {
     Vec3f vsz = getVoxelSize();

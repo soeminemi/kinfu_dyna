@@ -26,6 +26,9 @@ namespace kfusion
             float getTruncDist() const;
             void setTruncDist(float distance);
 
+            void setDepthScale(float depthScale);
+            float getDepthScale() const;
+
             int getMaxWeight() const;
             void setMaxWeight(int weight);
 
@@ -70,6 +73,7 @@ namespace kfusion
             Vec3i dims_;
             Vec3f size_;
             Affine3f pose_;
+            float depth_scale_;
 
             float gradient_delta_factor_;
             float raycast_step_factor_;

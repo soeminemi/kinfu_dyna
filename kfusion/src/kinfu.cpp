@@ -22,7 +22,7 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     p.rows = 780;  //pixels
     p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
 
-    p.volume_dims = Vec3i::all(512);  //number of voxels    
+    p.volume_dims = Vec3i::all(512);  //number of voxels
     p.volume_size = Vec3f::all(1.f);  //meters
     p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.3f)); //设置初始帧相机所在的位置
 
@@ -61,7 +61,7 @@ kfusion::KinFu::KinFu(const KinFuParams& params) : frame_counter_(0), params_(pa
     volume_->setPose(params_.volume_pose);
     volume_->setRaycastStepFactor(params_.raycast_step_factor);
     volume_->setGradientDeltaFactor(params_.gradient_delta_factor);
-
+    volume_->setDepthScale(params_.depth_scale);
     icp_ = cv::Ptr<cuda::ProjectiveICP>(new cuda::ProjectiveICP());
     icp_->setDistThreshold(params_.icp_dist_thres);
     icp_->setAngleThreshold(params_.icp_angle_thres);
