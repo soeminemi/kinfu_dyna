@@ -348,7 +348,7 @@ namespace kfusion
          STOR
         }
 
-        __global__ void icp_helper_kernel(const ComputeIcpHelper helper, PtrStep<float> partial_buf, int &valid_num)
+        __global__ void icp_helper_kernel(const ComputeIcpHelper helper, PtrStep<float> partial_buf, int *valid_nums)
         {
             int x = threadIdx.x + blockIdx.x * ComputeIcpHelper::Policy::CTA_SIZE_X;
             int y = threadIdx.y + blockIdx.y * ComputeIcpHelper::Policy::CTA_SIZE_Y;
@@ -362,11 +362,10 @@ namespace kfusion
 
             if (!filtered) //存在对应关系
             {
-                *(float3*)&row[0] = cross (s, n);
+                *(float3*)&row[0] = cross (s, n);  // 叉积，A矩阵及b并列，计算方式见点到面ICP算法
                 *(float3*)&row[3] = n;
                 row[6] = dot (n, d - s);
-                // valid_num = valid_num + 1;
-                // printf("valid: %d\n",valid_num);
+                // atomicAdd(valid_nums, 1); //计算对应点数量，调试用
             }
             else
                 row[0] = row[1] = row[2] = row[3] = row[4] = row[5] = row[6] = 0.f;
@@ -413,8 +412,9 @@ void kfusion::device::ComputeIcpHelper::operator()(const Depth& dprev, const Nor
 
     int partials_count = (int)(grid.x * grid.y);
     allocate_buffer(buffer, partials_count);
-    valid_num = 0;
-    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer,valid_num);
+    int *valid_nums;
+    cudaMalloc(&valid_nums, sizeof(int));
+    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer,valid_nums);
     cudaSafeCall ( cudaGetLastError () );
 
     int b = Policy::FINAL_REDUCE_CTA_SIZE;
@@ -464,10 +464,16 @@ void kfusion::device::ComputeIcpHelper::operator()(const Points& vprev, const No
 
     int partials_count = (int)(grid.x * grid.y);
     allocate_buffer(buffer, partials_count);
-    valid_num = 0;
-    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer,valid_num);
+    int *valid_nums;
+    int init_sum = 0;
+    cudaMalloc(&valid_nums, sizeof(int));
+    cudaMemcpy(valid_nums, &init_sum, sizeof(int), cudaMemcpyHostToDevice);
+    icp_helper_kernel<<<grid, block, 0, s>>>(*this, buffer,valid_nums);
     cudaSafeCall ( cudaGetLastError () );
-
+    int result;
+    cudaMemcpy(&result, valid_nums, sizeof(int), cudaMemcpyDeviceToHost);
+    // printf("valid_nums: %d\n",result);
+    cudaFree(valid_nums);
     int b = Policy::FINAL_REDUCE_CTA_SIZE;
     int g = Policy::TOTAL;
     icp_final_reduce_kernel<<<g, b, 0, s>>>(buffer, partials_count, buffer.ptr(Policy::TOTAL));
