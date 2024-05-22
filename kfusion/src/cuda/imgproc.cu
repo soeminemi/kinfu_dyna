@@ -531,7 +531,7 @@ namespace kfusion
             out.x = static_cast<unsigned char>(__saturatef(color.x) * 255.f);
             out.y = static_cast<unsigned char>(__saturatef(color.y) * 255.f);
             out.z = static_cast<unsigned char>(__saturatef(color.z) * 255.f);
-            out.w = 0;
+            out.w = 0.5;
             dst(y, x) = out;
         }
     }
