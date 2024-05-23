@@ -1,12 +1,14 @@
 #ifndef HEADER_SAVEPLY
 #define HEADER_SAVEPLY
 #include <string>
+#include <opencv2/opencv.hpp>
+#include <fstream>
 using namespace std;
 //save points to ply
-void saveToPly(std::vector<Eigen::Vector3d> &vertices, string name)
+void saveToPly(std::vector<cv::Vec4f> &vertices, std::string name)
 {
     cout<<"saving the point cloud to the file"<<endl;
-    ofstream fscan("../results/"+name);
+    ofstream fscan(name);
     fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment Created by Wang Junnan"<<endl;
     fscan<<"element vertex "<<vertices.size()<<endl;
     fscan<<"property float x"<<endl<<"property float y"<<endl<<"property float z"<<endl;

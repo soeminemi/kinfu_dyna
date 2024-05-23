@@ -339,7 +339,7 @@ namespace kfusion
 
                         if (!isnan(normal.x * normal.y * normal.z))
                         {
-                            atomicAdd(pt_num,1); //todo 
+                            // atomicAdd(pt_num,1); //todo 
                             normal = Rinv * normal;
                             vertex = Rinv * (vertex - aff.t);
 

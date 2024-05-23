@@ -365,7 +365,7 @@ namespace kfusion
                 *(float3*)&row[0] = cross (s, n);  // 叉积，A矩阵及b并列，计算方式见点到面ICP算法
                 *(float3*)&row[3] = n;
                 row[6] = dot (n, d - s);
-                atomicAdd(valid_nums, 1); //计算对应点数量，调试用
+                // atomicAdd(valid_nums, 1); //计算对应点数量，调试用
             }
             else
             {
@@ -479,7 +479,7 @@ void kfusion::device::ComputeIcpHelper::operator()(const Points& vprev, const No
     cudaSafeCall ( cudaGetLastError () );
     int result;
     cudaMemcpy(&result, valid_nums, sizeof(int), cudaMemcpyDeviceToHost);
-    printf("valid_nums: %d\n",result);
+    // printf("valid_nums: %d\n",result);
     cudaFree(valid_nums);
     int b = Policy::FINAL_REDUCE_CTA_SIZE;
     int g = Policy::TOTAL;

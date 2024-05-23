@@ -10,12 +10,13 @@ color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
 depths = []
 images=[]
 if __name__ == "__main__":
+    sample_num = 350
     o3d.t.io.RealSenseSensor.list_devices()
     rscam = o3d.t.io.RealSenseSensor()
     rscam.start_capture()
     cam_param = rscam.get_metadata()
     print(cam_param)
-    for fid in range(350):
+    for fid in range(sample_num):
         print("frame:",fid)
         rgbd_frame = rscam.capture_frame()
         depths.append( rgbd_frame.depth.to_legacy())
@@ -27,7 +28,7 @@ if __name__ == "__main__":
         cv2.waitKey(1)
     print("saving to disk")
     path = "/home/john/Projects/dynamicfusion/data/desk1"
-    for fid in range(150):
+    for fid in range(sample_num):
         o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
         o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
     rscam.stop_capture()

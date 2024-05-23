@@ -265,7 +265,7 @@ namespace kfusion
                 float xl = (x - c.x) * finv.x;
                 float yl = (y - c.y) * finv.y;
                 float lambda = sqrtf (xl * xl + yl * yl + 1);
-                dists(y, x) = __float2half_rn(0.25*depth(y, x) * lambda * 0.001f); //meters， store as half
+                dists(y, x) = __float2half_rn(depth(y, x) * lambda * 0.001f); //meters， store as half
             }
         }
     }
@@ -551,7 +551,7 @@ void kfusion::device::renderImage(const Points& points, const Normals& normals, 
     dim3 block (32, 8);
     dim3 grid (divUp (points.cols(), block.x), divUp (points.rows(), block.y));
 
-    render_image_kernel_smpl<<<grid, block>>>((PtrStep<Point>)points, normals, reproj, light_pose, image);
+    render_image_kernel<<<grid, block>>>((PtrStep<Point>)points, normals, reproj, light_pose, image);
     cudaSafeCall ( cudaGetLastError () );
 }
 

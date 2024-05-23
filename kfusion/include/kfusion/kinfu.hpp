@@ -78,7 +78,7 @@ namespace kfusion
         void renderImage(cuda::Image& image, const Affine3f& pose, int flags = 0);
 
         void getPoints(cv::Mat& points);
-        void toPly();
+        void toPly(cv::Mat& points, std::string spath);
 
         Affine3f getCameraPose (int time = -1) const;
     private:

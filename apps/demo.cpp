@@ -9,6 +9,7 @@ using namespace kfusion;
 
 struct KinFuApp
 {
+    int frame_idx = 0;
     static void KeyboardCallback(const cv::viz::KeyboardEvent& event, void* pthis)
     {
         KinFuApp& kinfu = *static_cast<KinFuApp*>(pthis);
@@ -35,7 +36,7 @@ struct KinFuApp
     {
         cv::Mat display;
         //cv::normalize(depth, display, 0, 255, cv::NORM_MINMAX, CV_8U);
-        depth.convertTo(display, CV_8U, 255.0/4000);
+        depth.convertTo(display, CV_8U, 255.0/65535);
         cv::imshow("Depth", display);
     }
 
@@ -50,6 +51,9 @@ struct KinFuApp
         view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
         points_host_.create(view_device_.rows(), view_device_.cols(), CV_32FC4);
         kinfu.getPoints(points_host_);
+        std::stringstream ss;
+        ss<<"./results/rst"<<frame_idx<<".ply";
+        kinfu.toPly(points_host_,ss.str());
         view_device_.download(view_host_.ptr<void>(), view_host_.step);
         cv::imshow("Scene", view_host_);
     }
@@ -73,19 +77,21 @@ struct KinFuApp
         std::vector<cv::String> depths;             // store paths,
         std::vector<cv::String> images;             // store paths,
 
-        cv::glob("./data/test/depth", depths);
-        cv::glob("./data/test/color", images);
+        cv::glob("./data/desk1/depth", depths);
+        cv::glob("./data/desk1/color", images);
 
         std::sort(depths.begin(), depths.end());
         std::sort(images.begin(), images.end());
 
-        pause_ = true;
+        pause_ = false;
         for (int i = 0; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
-        {
+        { 
+            frame_idx = i;
             std::cout<<"frame: "<<i<<std::endl;
             // bool has_frame = capture_.grab(depth, image);``
             image = cv::imread(images[i], cv::IMREAD_COLOR);
             depth = cv::imread(depths[i], cv::IMREAD_ANYDEPTH);
+            depth = depth /4;
             depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
             // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
             {
@@ -96,7 +102,7 @@ struct KinFuApp
             if (has_image)
                 show_raycasted(kinfu);
 
-            show_depth(depth);
+            // show_depth(depth);
             //cv::imshow("Image", image);
 
             if (!iteractive_mode_)

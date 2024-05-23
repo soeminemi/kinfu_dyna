@@ -1,6 +1,6 @@
 #include "precomp.hpp"
 #include "internal.hpp"
-
+#include "io/saveply.hpp"
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
@@ -23,8 +23,8 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
 
     p.volume_dims = Vec3i::all(512);  //number of voxels
-    p.volume_size = Vec3f::all(3.f);  //meters
-    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.3f)); //设置初始帧相机所在的位置
+    p.volume_size = Vec3f::all(1.f);  //meters
+    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.7f)); //设置初始帧相机所在的位置
 
     p.bilateral_sigma_depth = 0.04f;  //meter
     p.bilateral_sigma_spatial = 4.5; //pixels
@@ -234,6 +234,25 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 void kfusion::KinFu::getPoints(cv::Mat& points)
 {
     prev_.points_pyr[0].download(points.ptr<void>(), points.step);
+}
+void kfusion::KinFu::toPly(cv::Mat& points, std::string spath)
+{
+    std::vector<cv::Vec4f> pts;
+    pts.reserve(points.rows*points.cols);
+    for (size_t i = 0; i < points.rows; i++)
+    {
+        for (size_t j = 0; j < points.cols; j++)
+        {
+            cv::Vec4f pt = points.at<cv::Vec4f>(i,j);
+            if(!isnan(pt[0]))
+            {
+                // cv::Vec3f pt = cv::Vec3f(pts[0],pts[1],pts[2]);
+                pts.push_back(pt);
+            }
+        }
+    }
+    saveToPly(pts, spath);
+    
 }
 void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
 {
