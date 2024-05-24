@@ -4,7 +4,7 @@
 #include <opencv2/viz/vizcore.hpp>
 #include <kfusion/kinfu.hpp>
 #include <io/capture.hpp>
-
+// #include "kfusion/marchingcubes.hpp"
 using namespace kfusion;
 
 struct KinFuApp
@@ -125,6 +125,19 @@ struct KinFuApp
             // viz.spinOnce(3, true);
             std::cout<<"finish frame"<<std::endl;
         }
+        //save final cloud to file
+        cuda::DeviceArray<Point> cloud = kinfu.tsdf().fetchCloud(cloud_buffer);
+        kinfu.tsdf().fetchNormals(cloud,normal_buffer);
+        //
+        cv::Mat cloud_host(1, (int)cloud.size(), CV_32FC4);
+        cloud.download(cloud_host.ptr<Point>());
+        //
+        cv::Mat normal_host(1, (int)cloud.size(), CV_32FC4);
+        normal_buffer.download(normal_host.ptr<Point>());
+        //save to file
+        std::stringstream ss;
+        ss<<"./data/final.ply";
+        kinfu.toPly(cloud_host, normal_host, ss.str());
         return true;
     }
 
@@ -139,6 +152,7 @@ struct KinFuApp
     cuda::Image view_device_;
     cuda::Depth depth_device_;
     cuda::DeviceArray<Point> cloud_buffer;
+    cuda::DeviceArray<Normal> normal_buffer;
 };
 
 

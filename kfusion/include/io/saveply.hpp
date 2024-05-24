@@ -5,7 +5,7 @@
 #include <fstream>
 using namespace std;
 //save points to ply
-void saveToPly(std::vector<cv::Vec4f> &vertices, std::string name)
+void saveToPly(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &normals,std::string name)
 {
     cout<<"saving the point cloud to the file"<<endl;
     ofstream fscan(name);

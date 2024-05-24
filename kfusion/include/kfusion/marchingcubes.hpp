@@ -36,7 +36,9 @@
  */
 
 #pragma once
-#include <cuda/device_array.hpp>
+#include <kfusion/cuda/device_array.hpp>
+#include "types.hpp"
+#include "internal.hpp"
 namespace kfusion
 {
   namespace cuda
@@ -58,11 +60,11 @@ namespace kfusion
       };
     
       /** \brief Point type. */
-      using PointType = pcl::PointXYZ;
+      using PointType = kfusion::Point;
       
       /** \brief Smart pointer. */
-      using Ptr = shared_ptr<MarchingCubes>;
-      using ConstPtr = shared_ptr<const MarchingCubes>;
+      using Ptr = std::shared_ptr<MarchingCubes>;
+      using ConstPtr = std::shared_ptr<const MarchingCubes>;
 
       /** \brief Default constructor */
       MarchingCubes();
