@@ -21,10 +21,10 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     p.cols = 1280;  //pixels
     p.rows = 780;  //pixels
     p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
-
+    
     p.volume_dims = Vec3i::all(512);  //number of voxels
-    p.volume_size = Vec3f::all(1.f);  //meters
-    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.7f)); //设置初始帧相机所在的位置
+    p.volume_size = Vec3f::all(1.8f);  //meters
+    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 1.2f)); //设置初始帧相机所在的位置
 
     p.bilateral_sigma_depth = 0.04f;  //meter
     p.bilateral_sigma_spatial = 4.5; //pixels

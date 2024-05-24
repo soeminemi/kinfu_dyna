@@ -50,10 +50,10 @@ struct KinFuApp
 
         view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
         points_host_.create(view_device_.rows(), view_device_.cols(), CV_32FC4);
-        kinfu.getPoints(points_host_);
-        std::stringstream ss;
-        ss<<"./results/rst"<<frame_idx<<".ply";
-        kinfu.toPly(points_host_,ss.str());
+        // kinfu.getPoints(points_host_);
+        // std::stringstream ss;
+        // ss<<"./results/rst"<<frame_idx<<".ply";
+        // kinfu.toPly(points_host_,ss.str());
         view_device_.download(view_host_.ptr<void>(), view_host_.step);
         cv::imshow("Scene", view_host_);
     }
@@ -83,7 +83,7 @@ struct KinFuApp
         std::sort(depths.begin(), depths.end());
         std::sort(images.begin(), images.end());
 
-        pause_ = false;
+        pause_ = true;
         for (int i = 0; i < depths.size() && !exit_ && !viz.wasStopped(); ++i)
         { 
             frame_idx = i;
@@ -92,6 +92,8 @@ struct KinFuApp
             image = cv::imread(images[i], cv::IMREAD_COLOR);
             depth = cv::imread(depths[i], cv::IMREAD_ANYDEPTH);
             depth = depth /4;
+            cv::Rect maskroi(0,0,200,720);
+            depth(maskroi) = 0;
             depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
             // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
             {
@@ -103,7 +105,7 @@ struct KinFuApp
                 show_raycasted(kinfu);
 
             // show_depth(depth);
-            //cv::imshow("Image", image);
+            cv::imshow("Image", image);
 
             if (!iteractive_mode_)
                 viz.setViewerPose(kinfu.getCameraPose());
@@ -114,12 +116,13 @@ struct KinFuApp
             {
             case 't': case 'T' : take_cloud(kinfu); break;
             case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
+            case 's':pause_ = false;break;
             case 27: exit_ = true; break;
             case 'p': pause_ = !pause_; break;
             }
 
             //exit_ = exit_ || i > 100;
-            viz.spinOnce(3, true);
+            // viz.spinOnce(3, true);
             std::cout<<"finish frame"<<std::endl;
         }
         return true;
