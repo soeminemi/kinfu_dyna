@@ -281,7 +281,7 @@ void WarpField::buildKDTree()
     for(size_t i = 0; i < nodes_->size(); i++)
         cloud.pts[i] = nodes_->at(i).vertex;
     index_->buildIndex();
-}
+}`
 
 const cv::Mat WarpField::getNodesAsMat() const
 {

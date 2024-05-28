@@ -98,5 +98,7 @@ namespace kfusion
 
         cv::Ptr<cuda::TsdfVolume> volume_;
         cv::Ptr<cuda::ProjectiveICP> icp_;
+
+        // WarpField wpf;
     };
 }

@@ -32,6 +32,7 @@ struct DynamicFusionDataEnergy
         delete[] weights_;
         delete[] knn_indices_;
     }
+    // 计算warp对应的loss
     template <typename T>
     bool operator()(T const * const * epsilon_, T* residuals) const
     {
@@ -53,8 +54,7 @@ struct DynamicFusionDataEnergy
 
 //            total_translation[0] += (T(temp[0]) +  eps_t[0]);
 //            total_translation[1] += (T(temp[1]) +  eps_t[1]);
-//            total_translation[2] += (T(temp[2]) +  eps_t[2]);
-//
+//            total_translation[2] += (T(temp[2]) +  eps_t[2]);//
             total_translation[0] += (T(temp[0]) +  eps_t[0]) * T(weights_[i]);
             total_translation[1] += (T(temp[1]) +  eps_t[1]) * T(weights_[i]);
             total_translation[2] += (T(temp[2]) +  eps_t[2]) * T(weights_[i]);
