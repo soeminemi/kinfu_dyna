@@ -81,6 +81,8 @@ namespace kfusion
         void toPly(cv::Mat& points, cv::Mat &normals, std::string spath);
 
         Affine3f getCameraPose (int time = -1) const;
+
+        WarpField &getWarp();
     private:
         void allocate_buffers();
 
@@ -98,7 +100,6 @@ namespace kfusion
 
         cv::Ptr<cuda::TsdfVolume> volume_;
         cv::Ptr<cuda::ProjectiveICP> icp_;
-
-        // WarpField wpf;
+        cv::Ptr<WarpField> warp_;
     };
 }

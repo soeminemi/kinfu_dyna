@@ -141,7 +141,6 @@ DeviceArray<Point> kfusion::cuda::TsdfVolume::fetchCloud(DeviceArray<Point>& clo
     device::Vec3i dims = device_cast<device::Vec3i>(dims_);
     device::Vec3f vsz  = device_cast<device::Vec3f>(getVoxelSize());
     device::Aff3f aff  = device_cast<device::Aff3f>(pose_);
-
     device::TsdfVolume volume((device::TsdfVolume::elem_type*)data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
     size_t size = extractCloud(volume, aff, b);
 
@@ -160,4 +159,13 @@ void kfusion::cuda::TsdfVolume::fetchNormals(const DeviceArray<Point>& cloud, De
 
     device::TsdfVolume volume((device::TsdfVolume::elem_type*)data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
     device::extractNormals(volume, c, aff, Rinv, gradient_delta_factor_, (float4*)normals.ptr());
+}
+
+void kfusion::cuda::TsdfVolume::computePoints()
+{
+    *cloud_ = fetchCloud(cloud_buffer_);
+    cv::Mat cloud_host(1, (int)cloud_->size(), CV_32FC4);
+    cloud_->download(cloud_host.ptr<Point>());
+    std::cout<<"cloud downloaded"<<std::endl;
+    // return cloud_host;
 }

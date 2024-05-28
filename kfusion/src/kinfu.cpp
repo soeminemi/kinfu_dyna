@@ -136,6 +136,7 @@ void kfusion::KinFu::reset()
     poses_.reserve(30000);
     poses_.push_back(Affine3f::Identity());
     volume_->clear();
+    warp_->clear();
 }
 
 kfusion::Affine3f kfusion::KinFu::getCameraPose (int time) const
@@ -144,7 +145,10 @@ kfusion::Affine3f kfusion::KinFu::getCameraPose (int time) const
         time = (int)poses_.size () - 1;
     return poses_[time];
 }
-
+kfusion::WarpField &kfusion::KinFu::getWarp()
+{
+    return *warp_;
+}
 bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion::cuda::Image& /*image*/)
 {
     const KinFuParams& p = params_;
@@ -178,6 +182,9 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         curr_.points_pyr.swap(prev_.points_pyr);
 #endif
         curr_.normals_pyr.swap(prev_.normals_pyr);
+        //initialize the warp field 
+        volume_->computePoints();
+        // warp_->init(frame_init);
         return ++frame_counter_, true;
     }
 

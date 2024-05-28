@@ -54,7 +54,7 @@ namespace kfusion
 
             DeviceArray<Point> fetchCloud(DeviceArray<Point>& cloud_buffer) const;
             void fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals) const;
-
+            void computePoints();
             struct Entry
             {
                 typedef unsigned short half;
@@ -77,6 +77,10 @@ namespace kfusion
 
             float gradient_delta_factor_;
             float raycast_step_factor_;
+
+            cuda::DeviceArray<Point> cloud_buffer_;
+            cuda::DeviceArray<Point> *cloud_;
+            cv::Mat *cloud_host_;
         };
     }
 }

@@ -2,7 +2,7 @@ include_directories(${CMAKE_SOURCE_DIR}/kfusion/include)
 
 file(GLOB srcs *.cpp *.hpp)
 add_executable(demo ${srcs})
-target_link_libraries(demo ${OpenCV_LIBS} kfusion -lceres)
+target_link_libraries(demo ${OpenCV_LIBS} kfusion -lceres -lglog)
 
 set_target_properties(demo PROPERTIES
     DEBUG_POSTFIX "d"

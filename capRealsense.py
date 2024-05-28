@@ -10,7 +10,7 @@ color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
 depths = []
 images=[]
 if __name__ == "__main__":
-    sample_num = 1050
+    sample_num = 500
     o3d.t.io.RealSenseSensor.list_devices()
     rscam = o3d.t.io.RealSenseSensor()
     rscam.start_capture()
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         cv2.waitKey(1)
     print("saving to disk")
     # path = "/home/john/Projects/dynamicfusion/data/desk1"
-    path = "./data/desk1/"
+    path = "./data/rotperson/"
     for fid in range(sample_num):
         o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
         o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
