@@ -10,7 +10,7 @@ color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
 depths = []
 images=[]
 if __name__ == "__main__":
-    sample_num = 500
+    sample_num = 1000
     o3d.t.io.RealSenseSensor.list_devices()
     rscam = o3d.t.io.RealSenseSensor()
     rscam.start_capture()

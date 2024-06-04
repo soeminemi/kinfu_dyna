@@ -7,7 +7,7 @@
 #include <kfusion/utils/knn_point_cloud.hpp>
 #include <kfusion/cuda/tsdf_volume.hpp>
 
-#define KNN_NEIGHBOURS 8
+#define KNN_NEIGHBOURS 8 //when optimize the parameters ， we only need KNN_NEIGHBOURS to be 1
 namespace kfusion
 {
     typedef nanoflann::KDTreeSingleIndexAdaptor<
@@ -32,19 +32,21 @@ namespace kfusion
      * \var node::weight
      * Equivalent to dg_w
      */
+
     struct deformation_node
     {
         Vec3f vertex;
         kfusion::utils::DualQuaternion<float> transform;
         float weight = 0;
     }; 
+    
     class WarpField
     {
     public:
         WarpField();
         ~WarpField();
         //初始化warp filed, 如何扩展？
-        void init(const cv::Mat& first_frame); 
+        void init(const cv::Mat& first_frame);
         void init(const std::vector<Vec3f>& first_frame);
         //calculate the energy of the warp field
         void energy(const cuda::Cloud &frame,
@@ -59,6 +61,7 @@ namespace kfusion
                           const std::vector<Vec3f> &canonical_normals,
                           const std::vector<Vec3f> &live_vertices,
                           const std::vector<Vec3f> &live_normals);
+                          
         void energy_reg(const std::vector<std::pair<kfusion::utils::DualQuaternion<float>,
                 kfusion::utils::DualQuaternion<float>>> &edges);
 
