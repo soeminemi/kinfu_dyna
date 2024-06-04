@@ -165,8 +165,15 @@ void kfusion::cuda::TsdfVolume::fetchNormals(const DeviceArray<Point>& cloud, De
     device::extractNormals(volume, c, aff, Rinv, gradient_delta_factor_, (float4*)normals.ptr());
 }
 
+float kfusion::cuda::TsdfVolume::weighting(const std::vector<float>& dist_sqr, int k) const
+{
+    float distances = 0;
+    for(auto distance : dist_sqr)
+        distances += sqrt(distance);
+    return distances / k;
+}
 
-void kfusion::cuda::TsdfVolume::surface_fusion(const WarpField& warp_field,
+void kfusion::cuda::TsdfVolume::surface_fusion(WarpField& warp_field,
                                                std::vector<Vec3f> warped,
                                                std::vector<Vec3f> canonical,
                                                cuda::Depth& depth,
@@ -242,3 +249,16 @@ void kfusion::cuda::TsdfVolume::computePoints(cv::Mat &cloud_host)
     return ;
 }
 
+void kfusion::cuda::TsdfVolume::compute_points()
+{
+    cloud_ = fetchCloud(cloud_buffer_);
+    *cloud_host_ = cv::Mat(1, (int)cloud_.size(), CV_32FC4);
+    cloud_.download(cloud_host_->ptr<Point>());
+}
+
+void kfusion::cuda::TsdfVolume::compute_normals()
+{
+    fetchNormals(cloud_, normal_buffer_);
+    *normal_host_ = cv::Mat(1, (int)cloud_.size(), CV_32FC4);
+    normal_buffer_.download(normal_host_->ptr<Normal>());
+}

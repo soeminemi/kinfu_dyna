@@ -5,9 +5,9 @@
 
 namespace kfusion
 {
+    class WarpField;
     namespace cuda
     {
-        class WarpField;
         class KF_EXPORTS TsdfVolume
         {
         public:
@@ -50,7 +50,7 @@ namespace kfusion
             std::vector<float> psdf(const std::vector<Vec3f>& warped, Dists& depth_img, const Intr& intr);
 //            float psdf(const std::vector<Vec3f>& warped, Dists& dists, const Intr& intr);
             float weighting(const std::vector<float>& dist_sqr, int k) const;
-            void surface_fusion(const WarpField& warp_field,
+            void surface_fusion(WarpField& warp_field,
                                 std::vector<Vec3f> warped,
                                 std::vector<Vec3f> canonical,
                                 cuda::Depth &depth,
@@ -68,6 +68,9 @@ namespace kfusion
             DeviceArray<Point> fetchCloud(DeviceArray<Point>& cloud_buffer) const;
             void fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals) const;
             void computePoints(cv::Mat &init_frame);
+            void compute_points();
+            void compute_normals();
+
             struct Entry
             {
                 typedef unsigned short half;
@@ -92,8 +95,10 @@ namespace kfusion
             float raycast_step_factor_;
 
             cuda::DeviceArray<Point> cloud_buffer_;
+            cuda::DeviceArray<Point> normal_buffer_;
             cuda::DeviceArray<Point> cloud_;
             cv::Mat *cloud_host_;
+            cv::Mat *normal_host_;
         };
     }
 }

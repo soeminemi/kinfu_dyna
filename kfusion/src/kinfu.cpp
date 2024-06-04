@@ -218,16 +218,20 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     std::cout<<poses_.back() .rotation()<<", "<<poses_.back() .translation()<<std::endl;
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Volume integration
-
+    auto d = curr_.depth_pyr[0];
+    auto pts = curr_.points_pyr[0];
+    auto n = curr_.normals_pyr[0];
+    std::cout<<"dynamic fusion to normal space"<<std::endl;
+    dynamicfusion(d, pts, n);
     // We do not integrate volume if camera does not move.
-    float rnorm = (float)cv::norm(affine.rvec());
-    float tnorm = (float)cv::norm(affine.translation());
-    bool integrate = (rnorm + tnorm)/2 >= p.tsdf_min_camera_movement;
-    if (integrate)
-    {
-        //ScopeTime time("tsdf");
-        volume_->integrate(dists_, poses_.back(), p.intr);
-    }
+    // float rnorm = (float)cv::norm(affine.rvec());
+    // float tnorm = (float)cv::norm(affine.translation());
+    // bool integrate = (rnorm + tnorm)/2 >= p.tsdf_min_camera_movement;
+    // if (integrate)
+    // {
+    //     //ScopeTime time("tsdf");
+    //     volume_->integrate(dists_, poses_.back(), p.intr);
+    // }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Ray casting
