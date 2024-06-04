@@ -149,6 +149,8 @@ kfusion::WarpField &kfusion::KinFu::getWarp()
 {
     return *warp_;
 }
+
+// main procedure of dynamic fusion
 bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion::cuda::Image& /*image*/)
 {
     const KinFuParams& p = params_;
@@ -183,8 +185,8 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 #endif
         curr_.normals_pyr.swap(prev_.normals_pyr);
         //initialize the warp field 
-        volume_->computePoints();
-        // warp_->init(frame_init);
+        cv::Mat frame_init = volume_->computePoints();
+        warp_->init(frame_init);
         return ++frame_counter_, true;
     }
 

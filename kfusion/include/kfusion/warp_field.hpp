@@ -59,6 +59,7 @@ namespace kfusion
                           const std::vector<Vec3f> &canonical_normals,
                           const std::vector<Vec3f> &live_vertices,
                           const std::vector<Vec3f> &live_normals);
+                          
         void energy_reg(const std::vector<std::pair<kfusion::utils::DualQuaternion<float>,
                 kfusion::utils::DualQuaternion<float>>> &edges);
 

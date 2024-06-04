@@ -131,8 +131,9 @@ void kfusion::cuda::TsdfVolume::raycast(const Affine3f& camera_pose, const Intr&
 
 DeviceArray<Point> kfusion::cuda::TsdfVolume::fetchCloud(DeviceArray<Point>& cloud_buffer) const
 {
-    enum { DEFAULT_CLOUD_BUFFER_SIZE = 10 * 1000 * 1000 };
-
+    std::cout<<"fetchCloud"<<std::endl;
+    // enum { DEFAULT_CLOUD_BUFFER_SIZE = 10 * 1000 * 1000 };
+    enum { DEFAULT_CLOUD_BUFFER_SIZE = 512 * 512 * 512 };
     if (cloud_buffer.empty ())
         cloud_buffer.create (DEFAULT_CLOUD_BUFFER_SIZE);
 
@@ -161,11 +162,11 @@ void kfusion::cuda::TsdfVolume::fetchNormals(const DeviceArray<Point>& cloud, De
     device::extractNormals(volume, c, aff, Rinv, gradient_delta_factor_, (float4*)normals.ptr());
 }
 
-void kfusion::cuda::TsdfVolume::computePoints()
+cv::Mat kfusion::cuda::TsdfVolume::computePoints()
 {
     *cloud_ = fetchCloud(cloud_buffer_);
     cv::Mat cloud_host(1, (int)cloud_->size(), CV_32FC4);
     cloud_->download(cloud_host.ptr<Point>());
     std::cout<<"cloud downloaded"<<std::endl;
-    // return cloud_host;
+    return cloud_host;
 }
