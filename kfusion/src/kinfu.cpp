@@ -54,7 +54,7 @@ kfusion::KinFu::KinFu(const KinFuParams& params) : frame_counter_(0), params_(pa
     CV_Assert(params.volume_dims[0] % 32 == 0);
 
     volume_ = cv::Ptr<cuda::TsdfVolume>(new cuda::TsdfVolume(params_.volume_dims));
-
+    warp_ = cv::Ptr<WarpField>(new WarpField());
     volume_->setTruncDist(params_.tsdf_trunc_dist);
     volume_->setMaxWeight(params_.tsdf_max_weight);
     volume_->setSize(params_.volume_size);
@@ -145,6 +145,11 @@ kfusion::Affine3f kfusion::KinFu::getCameraPose (int time) const
         time = (int)poses_.size () - 1;
     return poses_[time];
 }
+const kfusion::WarpField& kfusion::KinFu::getWarp() const
+{
+    return *warp_; 
+}
+
 kfusion::WarpField &kfusion::KinFu::getWarp()
 {
     return *warp_;
@@ -185,7 +190,9 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 #endif
         curr_.normals_pyr.swap(prev_.normals_pyr);
         //initialize the warp field 
-        cv::Mat frame_init = volume_->computePoints();
+        cv::Mat frame_init;
+        volume_->computePoints(frame_init);
+        std::cout<<"start init warp nodes: "<<frame_init.rows<<", "<<frame_init.cols<<std::endl;
         warp_->init(frame_init);
         return ++frame_counter_, true;
     }
@@ -269,6 +276,70 @@ void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
     saveToPly(pts, nls, spath);
     std::cout<<"point number of final cloud: "<<ptnum<<std::endl;
     
+}
+/**
+ * \brief 将当前深度图和当前fusion的结果进行融合，计算动态warp
+ * \param image
+ * \param flag
+ */
+void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals)
+{
+    //1. 获取当前liveframe的相机pose下，fusion结果的成像图，得到点云及对应的法线
+    cuda::Cloud cloud;
+    cuda::Normals normals;
+    cloud.create(depth.rows(), depth.cols());
+    normals.create(depth.rows(), depth.cols());
+    auto camera_pose = poses_.back();
+    tsdf().raycast(camera_pose, params_.intr, cloud, normals);
+    // 将点云从显存拷贝到内存上
+    cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
+    cloud.download(cloud_host.ptr<Point>(), cloud_host.step);
+    std::vector<Vec3f> canonical(cloud_host.rows * cloud_host.cols);
+    auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD);
+    for (int i = 0; i < cloud_host.rows; i++)
+        for (int j = 0; j < cloud_host.cols; j++) {
+            auto point = cloud_host.at<Point>(i, j);
+            canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
+            canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
+        }
+
+
+    live_frame.download(cloud_host.ptr<Point>(), cloud_host.step);
+    std::vector<Vec3f> live(cloud_host.rows * cloud_host.cols);
+    for (int i = 0; i < cloud_host.rows; i++)
+        for (int j = 0; j < cloud_host.cols; j++) {
+            auto point = cloud_host.at<Point>(i, j);
+            live[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
+        }
+
+    cv::Mat normal_host(cloud_host.rows, cloud_host.cols, CV_32FC4);
+    normals.download(normal_host.ptr<Normal>(), normal_host.step);
+
+    std::vector<Vec3f> canonical_normals(normal_host.rows * normal_host.cols);
+    for (int i = 0; i < normal_host.rows; i++)
+        for (int j = 0; j < normal_host.cols; j++) {
+            auto point = normal_host.at<Normal>(i, j);
+            canonical_normals[i * normal_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
+        }
+
+    std::vector<Vec3f> canonical_visible(canonical);
+
+    getWarp().warp(canonical, canonical_normals);
+    std::cout<<"estimate dynamic warp"<<std::endl;
+    getWarp().energy_data(canonical, canonical_normals, live, canonical_normals);
+    // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
+    std::cout<<"warped"<<std::endl;
+    getWarp().warp(canonical, canonical_normals);
+//    //ScopeTime time("fusion");
+    tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, camera_pose, params_.intr);
+
+    cv::Mat depth_cloud(depth.rows(),depth.cols(), CV_16U);
+    depth.download(depth_cloud.ptr<void>(), depth_cloud.step);
+    cv::Mat display;
+    depth_cloud.convertTo(display, CV_8U, 255.0/4000);
+    cv::imshow("Depth diff", display);
+    volume_->compute_points();
+    volume_->compute_normals();
 }
 void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
 {

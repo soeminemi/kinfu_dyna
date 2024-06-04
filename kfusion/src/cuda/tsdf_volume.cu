@@ -111,6 +111,30 @@ namespace kfusion
         };
 
         __global__ void integrate_kernel( const TsdfIntegrator integrator, TsdfVolume volume) { integrator(volume); };
+        
+        __global__ void project_kernel(const Projector proj, PtrStep<Point> points, Dists depth, int rows, int cols)
+        {
+
+            int x = threadIdx.x + blockIdx.x * blockDim.x;
+            int y = threadIdx.y + blockIdx.y * blockDim.y;
+            float qnan = numeric_limits<float>::quiet_NaN ();
+            if (x < cols || y < rows) {
+                Point pt = points(y, x);
+                if(isnan(pt.x) || isnan(pt.y) || isnan(pt.z))
+                    return;
+                float3 point = make_float3(pt.x, pt.y, pt.z);
+                float2 coo = proj(point);
+                if (coo.x < 0 || coo.y < 0 || coo.y >= rows || coo.x >= cols)
+                {
+                    points(y, x) = make_float4(qnan, qnan, qnan, 0.f);
+                    return;
+                }
+
+                float Dp = tex2D(dists_tex, coo.x, coo.y);
+                depth(coo.y, coo.x) = 0;
+                points(y, x) = make_float4(coo.x * Dp, coo.y * Dp, Dp, 0.f);
+            }
+        }
     }
 }
 
@@ -136,6 +160,23 @@ void kfusion::device::integrate(const Dists& dists, TsdfVolume& volume, const Af
     cudaSafeCall ( cudaDeviceSynchronize() );
 }
 
+
+//TODO: rename as now projecting + removing from depth
+// void kfusion::device::project_and_remove(const PtrStepSz<ushort>& dists, Points &vertices, const Projector &proj)
+void kfusion::device::project_and_remove(const Dists& dists, Points &vertices, const Projector &proj)
+{
+    dists_tex.filterMode = cudaFilterModePoint;
+    dists_tex.addressMode[0] = cudaAddressModeBorder;
+    dists_tex.addressMode[1] = cudaAddressModeBorder;
+    dists_tex.addressMode[2] = cudaAddressModeBorder;
+    TextureBinder binder(dists, dists_tex, cudaCreateChannelDescHalf()); (void)binder;
+
+    dim3 block(32, 8);
+    dim3 grid(divUp(vertices.cols(), block.x), divUp(vertices.rows(), block.y));
+
+    project_kernel <<<grid, block>>>(proj, vertices, dists, dists.rows, dists.cols);
+    cudaSafeCall ( cudaGetLastError () );
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Volume ray casting
 

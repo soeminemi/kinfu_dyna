@@ -39,25 +39,27 @@ WarpField::~WarpField()
  */
 void WarpField::init(const cv::Mat& first_frame)
 {
+    // note that nodes_ should be initialized first!!
     nodes_->resize(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
 
-//    FIXME:: this is a test, remove later
-    voxel_size = 1;
+// //    FIXME:: this is a test, remove later
+//     voxel_size = 1;
     int step = 50;
-    std::cout << "voxel size init mat: " << voxel_size << ","<<first_frame.cols<<" * "<< first_frame.rows<<std::endl;
     for(size_t i = 0; i < first_frame.rows; i+=step)
+    {
         for(size_t j = 0; j < first_frame.cols; j+=step)
         {
             auto point = first_frame.at<Point>(i,j);
             if(!std::isnan(point.x))
             {
                 nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
-                nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z);
+                nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
                 nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
             }
         }
+    }
     buildKDTree();
 }
 

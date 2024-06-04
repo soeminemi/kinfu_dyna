@@ -113,7 +113,7 @@ namespace kfusion
         //tsdf volume functions
         void clear_volume(TsdfVolume volume);
         void integrate(const Dists& depth, TsdfVolume& volume, const Aff3f& aff, const Projector& proj);
-
+        void project_and_remove(const Dists& dists, Points &vertices, const Projector &proj);
         void raycast(const TsdfVolume& volume, const Aff3f& aff, const Mat3f& Rinv,
                      const Reprojector& reproj, Depth& depth, Normals& normals, float step_factor, float delta_factor);
 

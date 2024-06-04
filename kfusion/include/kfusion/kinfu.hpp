@@ -70,6 +70,9 @@ namespace kfusion
         const cuda::ProjectiveICP& icp() const;
         cuda::ProjectiveICP& icp();
 
+        const WarpField& getWarp() const;
+        WarpField &getWarp();
+
         void reset();
 
         bool operator()(const cuda::Depth& dpeth, const cuda::Image& image = cuda::Image());
@@ -79,10 +82,11 @@ namespace kfusion
 
         void getPoints(cv::Mat& points);
         void toPly(cv::Mat& points, cv::Mat &normals, std::string spath);
-
+        void dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals);
         Affine3f getCameraPose (int time = -1) const;
 
-        WarpField &getWarp();
+        
+        
     private:
         void allocate_buffers();
 

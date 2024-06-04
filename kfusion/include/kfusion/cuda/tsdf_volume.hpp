@@ -1,11 +1,13 @@
 #pragma once
 
 #include <kfusion/types.hpp>
+#include <kfusion/utils/dual_quaternion.hpp>
 
 namespace kfusion
 {
     namespace cuda
     {
+        class WarpField;
         class KF_EXPORTS TsdfVolume
         {
         public:
@@ -43,7 +45,18 @@ namespace kfusion
 
             Vec3i getGridOrigin() const;
             void setGridOrigin(const Vec3i& origin);
-
+            
+            //--- For dynamic fusion
+            std::vector<float> psdf(const std::vector<Vec3f>& warped, Dists& depth_img, const Intr& intr);
+//            float psdf(const std::vector<Vec3f>& warped, Dists& dists, const Intr& intr);
+            float weighting(const std::vector<float>& dist_sqr, int k) const;
+            void surface_fusion(const WarpField& warp_field,
+                                std::vector<Vec3f> warped,
+                                std::vector<Vec3f> canonical,
+                                cuda::Depth &depth,
+                                const Affine3f& camera_pose,
+                                const Intr& intr);
+            //--- END For dynamic fusion
             virtual void clear();
             virtual void applyAffine(const Affine3f& affine);
             virtual void integrate(const Dists& dists, const Affine3f& camera_pose, const Intr& intr);
@@ -54,7 +67,7 @@ namespace kfusion
 
             DeviceArray<Point> fetchCloud(DeviceArray<Point>& cloud_buffer) const;
             void fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals) const;
-            cv::Mat computePoints();
+            void computePoints(cv::Mat &init_frame);
             struct Entry
             {
                 typedef unsigned short half;
@@ -79,7 +92,7 @@ namespace kfusion
             float raycast_step_factor_;
 
             cuda::DeviceArray<Point> cloud_buffer_;
-            cuda::DeviceArray<Point> *cloud_;
+            cuda::DeviceArray<Point> cloud_;
             cv::Mat *cloud_host_;
         };
     }

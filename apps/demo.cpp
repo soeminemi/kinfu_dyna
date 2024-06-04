@@ -92,8 +92,22 @@ struct KinFuApp
             image = cv::imread(images[i], cv::IMREAD_COLOR);
             depth = cv::imread(depths[i], cv::IMREAD_ANYDEPTH);
             depth = depth /4;
-            cv::Rect maskroi(0,0,200,720);
-            depth(maskroi) = 0;
+            ////////////////////////START//////////////////////////
+            // user specified code, for test to filter the point cloud
+            for (size_t i = 0; i < depth.rows; i++)
+            {
+                for (size_t j = 0; j < depth.cols; j++)
+                {
+                    if(depth.at<ushort>(i,j)>1500)
+                    {
+                        depth.at<ushort>(i,j) = 0;
+                    }
+                }
+                
+            }
+            // cv::Rect maskroi(0,0,200,720);
+            // depth(maskroi) = 0;
+            ////////////////////////END//////////////////////////
             depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
             // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
             {
