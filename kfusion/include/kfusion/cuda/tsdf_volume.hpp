@@ -54,7 +54,7 @@ namespace kfusion
 
             DeviceArray<Point> fetchCloud(DeviceArray<Point>& cloud_buffer) const;
             void fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals) const;
-            void computePoints();
+            cv::Mat computePoints();
             struct Entry
             {
                 typedef unsigned short half;
