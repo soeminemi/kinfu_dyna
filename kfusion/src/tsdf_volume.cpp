@@ -70,6 +70,12 @@ void kfusion::cuda::TsdfVolume::applyAffine(const Affine3f& affine) { pose_ = af
 
 void kfusion::cuda::TsdfVolume::clear()
 { 
+    cloud_buffer_ = new cuda::DeviceArray<Point>();
+    cloud_ = new cuda::DeviceArray<Point>();
+    normal_buffer_ = new cuda::DeviceArray<Normal>();
+    cloud_host_ = new cv::Mat();
+    normal_host_ = new cv::Mat();
+
     device::Vec3i dims = device_cast<device::Vec3i>(dims_);
     device::Vec3f vsz  = device_cast<device::Vec3f>(getVoxelSize());
 
@@ -131,7 +137,6 @@ void kfusion::cuda::TsdfVolume::raycast(const Affine3f& camera_pose, const Intr&
 
 DeviceArray<Point> kfusion::cuda::TsdfVolume::fetchCloud(DeviceArray<Point>& cloud_buffer) const
 {
-    std::cout<<"fetchCloud"<<std::endl;
     enum { DEFAULT_CLOUD_BUFFER_SIZE = 10 * 1000 * 1000 };
     // enum { DEFAULT_CLOUD_BUFFER_SIZE = 512 * 512 * 512 };
     if (cloud_buffer.empty ())
@@ -241,24 +246,28 @@ std::vector<float> kfusion::cuda::TsdfVolume::psdf(const std::vector<Vec3f>& war
 
 void kfusion::cuda::TsdfVolume::computePoints(cv::Mat &cloud_host)
 {
-    cloud_ = fetchCloud(cloud_buffer_);
-    cloud_host = cv::Mat::zeros(1, (int)cloud_.size(), CV_32FC4);
-    std::cout<<"start to download cloud"<<std::endl;
-    cloud_.download(cloud_host.ptr<Point>());
-    std::cout<<"cloud downloaded"<<std::endl;
+    *cloud_ = fetchCloud(*cloud_buffer_);
+    cloud_host = cv::Mat::zeros(1, (int)cloud_->size(), CV_32FC4);
+    cloud_->download(cloud_host.ptr<Point>());
     return ;
 }
 
 void kfusion::cuda::TsdfVolume::compute_points()
 {
-    cloud_ = fetchCloud(cloud_buffer_);
-    *cloud_host_ = cv::Mat(1, (int)cloud_.size(), CV_32FC4);
-    cloud_.download(cloud_host_->ptr<Point>());
+    *cloud_ = fetchCloud(*cloud_buffer_);
+    *cloud_host_ = (cv::Mat(1, (int)cloud_->size(), CV_32FC4));
+    cloud_->download(cloud_host_->ptr<Point>());
 }
 
 void kfusion::cuda::TsdfVolume::compute_normals()
 {
-    fetchNormals(cloud_, normal_buffer_);
-    *normal_host_ = cv::Mat(1, (int)cloud_.size(), CV_32FC4);
-    normal_buffer_.download(normal_host_->ptr<Normal>());
+    fetchNormals(*cloud_, *normal_buffer_);
+    *normal_host_ = cv::Mat(1, (int)cloud_->size(), CV_32FC4);
+    normal_buffer_->download(normal_host_->ptr<Normal>());
+}
+
+void kfusion::cuda::TsdfVolume::get_points(cv::Mat &points_mat)
+{
+    points_mat = cv::Mat(1, (int)cloud_->size(), CV_32FC4);
+    normal_buffer_->download(points_mat.ptr<Point>());
 }

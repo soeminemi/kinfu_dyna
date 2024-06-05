@@ -335,15 +335,21 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     std::cout<<"warped"<<std::endl;
     getWarp().warp(canonical, canonical_normals);
 //    //ScopeTime time("fusion");
+    std::cout<<"dynamic surface fusion"<<std::endl;
     tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, camera_pose, params_.intr);
-
+    std::cout<<"download depth cloud"<<std::endl;
     cv::Mat depth_cloud(depth.rows(),depth.cols(), CV_16U);
     depth.download(depth_cloud.ptr<void>(), depth_cloud.step);
     cv::Mat display;
     depth_cloud.convertTo(display, CV_8U, 255.0/4000);
     cv::imshow("Depth diff", display);
     volume_->compute_points();
+    cv::Mat points, normals_t;
+    volume_->get_points(points);
     volume_->compute_normals();
+    
+    toPly(points, normals_t,"./results/s.ply");
+    
 }
 void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
 {

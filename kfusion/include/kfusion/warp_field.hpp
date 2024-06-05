@@ -7,7 +7,7 @@
 #include <kfusion/utils/knn_point_cloud.hpp>
 #include <kfusion/cuda/tsdf_volume.hpp>
 
-#define KNN_NEIGHBOURS 8 //when optimize the parameters ， we only need KNN_NEIGHBOURS to be 1
+#define KNN_NEIGHBOURS 1 //when optimize the parameters ， we only need KNN_NEIGHBOURS to be 1
 namespace kfusion
 {
     typedef nanoflann::KDTreeSingleIndexAdaptor<

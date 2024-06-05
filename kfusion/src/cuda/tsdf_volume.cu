@@ -498,7 +498,7 @@ namespace kfusion
         __device__ int output_count;
         __device__ unsigned int blocks_done = 0;
 
-
+        // scan the whole volume to extract the pointcloud
         struct FullScan6
         {
             enum

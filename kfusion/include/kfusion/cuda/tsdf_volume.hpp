@@ -70,6 +70,7 @@ namespace kfusion
             void computePoints(cv::Mat &init_frame);
             void compute_points();
             void compute_normals();
+            void get_points(cv::Mat &points_mat);
 
             struct Entry
             {
@@ -94,9 +95,9 @@ namespace kfusion
             float gradient_delta_factor_;
             float raycast_step_factor_;
 
-            cuda::DeviceArray<Point> cloud_buffer_;
-            cuda::DeviceArray<Point> normal_buffer_;
-            cuda::DeviceArray<Point> cloud_;
+            cuda::DeviceArray<Point> *cloud_buffer_;
+            cuda::DeviceArray<Point> *normal_buffer_;
+            cuda::DeviceArray<Point> *cloud_;
             cv::Mat *cloud_host_;
             cv::Mat *normal_host_;
         };
