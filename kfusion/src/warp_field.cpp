@@ -40,18 +40,18 @@ void WarpField::expand_nodesflag(const int x, const int y, const int z, const in
 {
     int start_x, end_x, start_y, end_y, start_z, end_z;
     start_x = std::max(x-exp_len,0);
-    end_x = std::min(x+exp_len, vdim_z - 1);
+    end_x = std::min(x+exp_len, vdim_x - 1);
     start_y = std::max(y-exp_len, 0);
     end_y = std::min(y+exp_len, vdim_y - 1);
     start_z = std::max(z-exp_len, 0);
     end_z = std::min(z+exp_len, vdim_z - 1);
+    std::cout<<start_x<<", "<<end_x<<", "<<start_y<<", "<<end_y<<", "<<start_z<<", "<<end_z<<std::endl;
     for (size_t i = start_x; i < end_x; i++)
     {
-        for (size_t j = 0; j < end_y; j++)
+        for (size_t j = start_y; j < end_y; j++)
         {
-            for (size_t k = 0; k < end_z; k++)
+            for (size_t k = start_z; k < end_z; k++)
             {
-                x + y*vdim_x + z*vdim_y*vdim_x;
                 volume_flag[i + j * vdim_x + k * vdim_x*vdim_y] = 1;
             }
         }
@@ -70,21 +70,26 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims)
     vdim_x = vdims[0];
     vdim_y = vdims[1];
     vdim_z = vdims[2];
-    volume_flag = new int(vsize);
+    volume_flag = new int[vsize];
     for(int i = 0;i<vsize;i++)
+    {
         volume_flag[i] = 0;
+    }
     
     int exp_len = 20;
     
     // note that nodes_ should be initialized first!!
-    nodes_->resize(first_frame.cols * first_frame.rows);
+    // nodes_->resize(first_frame.cols * first_frame.rows);
+    nodes_->reserve(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
     exp_len = 0.05/voxel_size;
 // //    FIXME:: this is a test, remove later
 //     voxel_size = 1;
-    std::cout<<"start to init nodes"<<std::endl;
+    std::cout<<"start to init nodes, expand length: "<<exp_len<<std::endl;
     int step = 1;
+    int node_num = 0;
+    int not_node_num = 0;
     for(size_t i = 0; i < first_frame.rows; i+=step)
     {
         for(size_t j = 0; j < first_frame.cols; j+=step)
@@ -95,15 +100,29 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims)
             {
                 if(get_volume_flag(point.x, point.y, point.z) ==  false)
                 {
-                    nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
-                    nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
-                    nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
+                    deformation_node tnode;
+                    tnode.transform = utils::DualQuaternion<float>();
+                    tnode.vertex = Vec3f(point.x,point.y,point.z);
+                    tnode.weight = 3 * voxel_size;
+                    nodes_->push_back(tnode);
+                    // nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
+                    // nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
+                    // nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
+                    // !!!!!
+                    // need to transform point to volume coordinates
                     expand_nodesflag(point.x, point.y, point.z, exp_len);
+                    node_num ++;
+                }
+                else
+                {
+                    not_node_num++;
+                    // std::cout<<"not node"<<std::endl;
                 }
             }
         }
     }
     buildKDTree();
+    std::cout<<node_num<<", "<<not_node_num<<std::endl;
 }
 
 /**
