@@ -46,7 +46,7 @@ namespace kfusion
         WarpField();
         ~WarpField();
         //初始化warp filed, 如何扩展？
-        void init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims);
+        void init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, Affine3f &aff_inv);
         void update_deform_node(); // expand the nodes if necessary
         void init(const std::vector<Vec3f>& first_frame);
         //calculate the energy of the warp field

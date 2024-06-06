@@ -193,7 +193,9 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
         std::cout<<"start init warp nodes: "<<frame_init.rows<<", "<<frame_init.cols<<std::endl;
-        warp_->init(frame_init, params_.volume_dims);
+        auto aff = volume_->getPose();
+        aff = aff.inv();
+        warp_->init(frame_init, params_.volume_dims, aff);
         return ++frame_counter_, true;
     }
 
