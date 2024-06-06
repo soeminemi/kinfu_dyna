@@ -32,31 +32,74 @@ WarpField::~WarpField()
     delete index_;
 }
 
+bool WarpField::get_volume_flag(const int &x, const int &y, const int &z)
+{
+    return volume_flag[x + y * vdim_x + z * vdim_x*vdim_y] > 0;
+}
+void WarpField::expand_nodesflag(const int x, const int y, const int z, const int exp_len)
+{
+    int start_x, end_x, start_y, end_y, start_z, end_z;
+    start_x = std::max(x-exp_len,0);
+    end_x = std::min(x+exp_len, vdim_z - 1);
+    start_y = std::max(y-exp_len, 0);
+    end_y = std::min(y+exp_len, vdim_y - 1);
+    start_z = std::max(z-exp_len, 0);
+    end_z = std::min(z+exp_len, vdim_z - 1);
+    for (size_t i = start_x; i < end_x; i++)
+    {
+        for (size_t j = 0; j < end_y; j++)
+        {
+            for (size_t k = 0; k < end_z; k++)
+            {
+                x + y*vdim_x + z*vdim_y*vdim_x;
+                volume_flag[i + j * vdim_x + k * vdim_x*vdim_y] = 1;
+            }
+        }
+    }
+}
+
 /**
  *
  * @param first_frame
  * @param normals
  */
-void WarpField::init(const cv::Mat& first_frame)
+void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims)
 {
+    std::cout<<"start to init volume flag"<<std::endl;
+    int vsize = vdims[0]*vdims[1]*vdims[2];
+    vdim_x = vdims[0];
+    vdim_y = vdims[1];
+    vdim_z = vdims[2];
+    volume_flag = new int(vsize);
+    for(int i = 0;i<vsize;i++)
+        volume_flag[i] = 0;
+    
+    int exp_len = 20;
+    
     // note that nodes_ should be initialized first!!
     nodes_->resize(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
-
+    exp_len = 0.05/voxel_size;
 // //    FIXME:: this is a test, remove later
 //     voxel_size = 1;
-    int step = 50;
+    std::cout<<"start to init nodes"<<std::endl;
+    int step = 1;
     for(size_t i = 0; i < first_frame.rows; i+=step)
     {
         for(size_t j = 0; j < first_frame.cols; j+=step)
         {
             auto point = first_frame.at<Point>(i,j);
-            if(!std::isnan(point.x))
+            
+            if(!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z))
             {
-                nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
-                nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
-                nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
+                if(get_volume_flag(point.x, point.y, point.z) ==  false)
+                {
+                    nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
+                    nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
+                    nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
+                    expand_nodesflag(point.x, point.y, point.z, exp_len);
+                }
             }
         }
     }

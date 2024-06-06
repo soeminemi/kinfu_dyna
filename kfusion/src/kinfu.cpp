@@ -193,7 +193,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
         std::cout<<"start init warp nodes: "<<frame_init.rows<<", "<<frame_init.cols<<std::endl;
-        warp_->init(frame_init);
+        warp_->init(frame_init, params_.volume_dims);
         return ++frame_counter_, true;
     }
 
@@ -215,7 +215,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     }
 
     poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
-    std::cout<<poses_.back() .rotation()<<", "<<poses_.back() .translation()<<std::endl;
+    // std::cout<<poses_.back() .rotation()<<", "<<poses_.back() .translation()<<std::endl;
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Volume integration
     auto d = curr_.depth_pyr[0];

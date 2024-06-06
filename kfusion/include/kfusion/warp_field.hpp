@@ -46,7 +46,7 @@ namespace kfusion
         WarpField();
         ~WarpField();
         //初始化warp filed, 如何扩展？
-        void init(const cv::Mat& first_frame);
+        void init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims);
         void update_deform_node(); // expand the nodes if necessary
         void init(const std::vector<Vec3f>& first_frame);
         //calculate the energy of the warp field
@@ -84,11 +84,17 @@ namespace kfusion
         std::vector<float>* getDistSquared() const;
         std::vector<size_t>* getRetIndex() const;
         void buildKDTree();
+        void expand_nodesflag(const int x, const int y, const int z, const int exp_len);
+        bool get_volume_flag(const int &x, const int &y, const int &z);
 
     private:
         std::vector<deformation_node>* nodes_;
         kd_tree_t* index_;
         Affine3f warp_to_live_;
+        int *volume_flag;
+        int vdim_x;
+        int vdim_y;
+        int vdim_z;
     };
 }
 #endif //KFUSION_WARP_FIELD_HPP
