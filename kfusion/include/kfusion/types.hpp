@@ -3,7 +3,7 @@
 #include <kfusion/cuda/device_array.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/affine.hpp>
-#include <opencv2/viz/vizcore.hpp>
+// #include <opencv2/viz/vizcore.hpp>
 #include <iosfwd>
 
 struct CUevent_st;

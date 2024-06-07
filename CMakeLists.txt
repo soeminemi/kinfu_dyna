@@ -16,7 +16,7 @@ include(cmake/Targets.cmake)
 
 
 # ---[ find dependencies
-find_package(OpenCV REQUIRED COMPONENTS core viz highgui)
+find_package(OpenCV REQUIRED COMPONENTS core highgui)
 find_package(CUDA REQUIRED)
 find_package(OpenNI REQUIRED)
 find_package(Ceres REQUIRED)

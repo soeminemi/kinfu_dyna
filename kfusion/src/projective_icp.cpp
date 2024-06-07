@@ -154,10 +154,10 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
             //checking nullspace
             double det = cv::determinant(A);
 
-            if (fabs (det) < 1e-15 || cv::viz::isNan(det))
+            if (fabs (det) < 1e-15 || std::isnan(det))
             {
                 cout<< "det = " << det << endl;
-                if (cv::viz::isNan(det)) cout << "qnan" << endl;
+                if (std::isnan(det)) cout << "qnan" << endl;
                 return false;
             }
 
@@ -200,10 +200,10 @@ bool kfusion::cuda::ProjectiveICP::estimateTransform(Affine3f& affine, const Int
             //checking nullspace
             double det = cv::determinant(A);
 
-            if (fabs (det) < 1e-15 || cv::viz::isNan (det))
+            if (fabs (det) < 1e-15 || std::isnan (det))
             {
                 cout<<"det = "<<det<<endl;
-                if (cv::viz::isNan (det)) cout << "qnan" << endl;
+                if (std::isnan (det)) cout << "qnan" << endl;
                 return false;
             }
 
