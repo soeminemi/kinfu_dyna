@@ -121,13 +121,11 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
                 else
                 {
                     not_node_num++;
-                    // std::cout<<"not node"<<std::endl;
                 }
             }
         }
     }
     buildKDTree();
-    std::cout<<node_num<<", "<<not_node_num<<std::endl;
 }
 
 /**
