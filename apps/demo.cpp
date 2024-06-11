@@ -159,21 +159,22 @@ public:
             // viz.spinOnce(3, true);
             std::cout<<"finish frame"<<std::endl;
         }
+        //save final cloud to file
+        cuda::DeviceArray<Point> cloud = kinfu.tsdf().fetchCloud(cloud_buffer);
+        kinfu.tsdf().fetchNormals(cloud,normal_buffer);
+        //
+        cv::Mat cloud_host(1, (int)cloud.size(), CV_32FC4);
+        cloud.download(cloud_host.ptr<Point>());
+        //
+        cv::Mat normal_host(1, (int)cloud.size(), CV_32FC4);
+        normal_buffer.download(normal_host.ptr<Point>());
+        //save to file
+        std::stringstream ss;
+        ss<<pfile;
+        kinfu.toPly(cloud_host, normal_host, ss.str());
         //start measurement
         func(readFileIntoString((char *)pfile.c_str()));
-        // //save final cloud to file
-        // cuda::DeviceArray<Point> cloud = kinfu.tsdf().fetchCloud(cloud_buffer);
-        // kinfu.tsdf().fetchNormals(cloud,normal_buffer);
-        // //
-        // cv::Mat cloud_host(1, (int)cloud.size(), CV_32FC4);
-        // cloud.download(cloud_host.ptr<Point>());
-        // //
-        // cv::Mat normal_host(1, (int)cloud.size(), CV_32FC4);
-        // normal_buffer.download(normal_host.ptr<Point>());
-        // //save to file
-        // std::stringstream ss;
-        // ss<<"./data/final.ply";
-        // kinfu.toPly(cloud_host, normal_host, ss.str());
+        
         return true;
     }
 
