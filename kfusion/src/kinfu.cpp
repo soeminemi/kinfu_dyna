@@ -281,7 +281,6 @@ void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
     }
     saveToPly(pts, nls, spath);
     std::cout<<"point number of final cloud: "<<ptnum<<std::endl;
-    
 }
 /**
  * \brief 将当前深度图和当前fusion的结果进行融合，计算动态warp
@@ -290,26 +289,31 @@ void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
  */
 void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals)
 {
+    // depth live_frame以及current_normals为当前获取的深度图以及对应的点云及每个点的法向量
     //1. 获取当前liveframe的相机pose下，fusion结果的成像图，得到点云及对应的法线
     cuda::Cloud cloud;
     cuda::Normals normals;
     cloud.create(depth.rows(), depth.cols());
     normals.create(depth.rows(), depth.cols());
     auto camera_pose = poses_.back();
+    // 投影到当前相机视角下的canonical空间点云
     tsdf().raycast(camera_pose, params_.intr, cloud, normals);
     // 将点云从显存拷贝到内存上
     cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
     cloud.download(cloud_host.ptr<Point>(), cloud_host.step);
+    // 拷贝到内存，相机视角下的canonical cloud
     std::vector<Vec3f> canonical(cloud_host.rows * cloud_host.cols);
     auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD);
+    // To initial pose
     for (int i = 0; i < cloud_host.rows; i++)
+    {
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
+            // canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
         }
-
-
+    }
+    // 当前帧的cloud
     live_frame.download(cloud_host.ptr<Point>(), cloud_host.step);
     std::vector<Vec3f> live(cloud_host.rows * cloud_host.cols);
     for (int i = 0; i < cloud_host.rows; i++)
@@ -329,7 +333,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         }
 
     std::vector<Vec3f> canonical_visible(canonical);
-
+    //从canonical 到canonical_normals
     getWarp().warp(canonical, canonical_normals);
     std::cout<<"estimate dynamic warp"<<std::endl;
     getWarp().energy_data(canonical, canonical_normals, live, canonical_normals);
@@ -350,7 +354,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     volume_->get_points(points);
     volume_->compute_normals();
     
-    toPly(points, normals_t,"./results/s.ply");
+    // toPly(points, normals_t,"./results/s.ply");
     
 }
 void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
