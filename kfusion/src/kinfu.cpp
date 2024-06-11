@@ -290,6 +290,7 @@ void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
 void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals)
 {
     // depth live_frame以及current_normals为当前获取的深度图以及对应的点云及每个点的法向量
+    // current_normals没有使用，计算loss时使用canonical的法向量
     //1. 获取当前liveframe的相机pose下，fusion结果的成像图，得到点云及对应的法线
     cuda::Cloud cloud;
     cuda::Normals normals;
@@ -325,6 +326,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     cv::Mat normal_host(cloud_host.rows, cloud_host.cols, CV_32FC4);
     normals.download(normal_host.ptr<Normal>(), normal_host.step);
 
+    // canonical normals 并没有和cloud一样从当前相机视角变换到初始视角，怎么回事？
     std::vector<Vec3f> canonical_normals(normal_host.rows * normal_host.cols);
     for (int i = 0; i < normal_host.rows; i++)
         for (int j = 0; j < normal_host.cols; j++) {

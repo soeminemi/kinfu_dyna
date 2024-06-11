@@ -184,7 +184,7 @@ void WarpField::energy(const cuda::Cloud &frame,
 void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                             const std::vector<Vec3f> &canonical_normals,
                             const std::vector<Vec3f> &live_vertices,
-                            const std::vector<Vec3f> &live_normals
+                            const std::vector<Vec3f> &live_normals //live normals are not used in optimization
 )
 {
     std::cout<<"node size: "<<nodes_->size()<<std::endl;
