@@ -88,6 +88,7 @@ public:
     {
         std::cout<<"init body measure"<<std::endl;
         init_bodymeasuer();
+        cout<<"body initialized"<<endl;
         KinFu& kinfu = *kinfu_;
         cv::Mat depth, image;
         double time_ms = 0;
@@ -96,8 +97,8 @@ public:
         std::vector<cv::String> depths;             // store paths,
         std::vector<cv::String> images;             // store paths,
 
-        cv::glob("./data/rotperson/depth", depths);
-        cv::glob("./data/rotperson/color", images);
+        cv::glob("./data_kinfu/rotperson/depth", depths);
+        cv::glob("./data_kinfu/rotperson/color", images);
 
         std::sort(depths.begin(), depths.end());
         std::sort(images.begin(), images.end());
