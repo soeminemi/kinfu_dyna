@@ -249,6 +249,7 @@ void WarpField::energy_reg(const std::vector<std::pair<kfusion::utils::DualQuate
 void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals) const
 {
     int i = 0;
+    std::cout<<"warp to live: "<<warp_to_live_<<std::endl;
     for (auto& point : points)
     {
         if(std::isnan(point[0]) || std::isnan(normals[i][0]))

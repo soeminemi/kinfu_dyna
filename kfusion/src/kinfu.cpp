@@ -296,7 +296,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     cloud.create(depth.rows(), depth.cols());
     normals.create(depth.rows(), depth.cols());
     auto camera_pose = poses_.back();
-    // 投影到当前相机视角下的canonical空间点云
+    // 投影到当前相机视角下的canonical空间点云,通过光线追踪得到当前相机pose下的cloud和normals
     tsdf().raycast(camera_pose, params_.intr, cloud, normals);
     // 将点云从显存拷贝到内存上
     cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
@@ -310,7 +310,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            // canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
+            canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
         }
     }
     // 当前帧的cloud
