@@ -43,28 +43,32 @@ struct DynamicFusionDataEnergy
 
         for(int i = 0; i < KNN_NEIGHBOURS; i++)
         {
-            auto quat = nodes->at(knn_indices_[i]).transform;
-            cv::Vec3f vert;
-            quat.getTranslation(vert);
+            // auto quat = nodes->at(knn_indices_[i]).transform;
+            // //---not used-----
+            // cv::Vec3f vert;
+            // quat.getTranslation(vert); //当前node的平移
 
-            T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]};
+            T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移，和node对应的平移不是一样的吗？
 
-            float temp[3];
-            quat.getTranslation(temp[0], temp[1], temp[2]);
+            // float temp[3];
+            // quat.getTranslation(temp[0], temp[1], temp[2]);
 
 //            total_translation[0] += (T(temp[0]) +  eps_t[0]);
 //            total_translation[1] += (T(temp[1]) +  eps_t[1]);
-//            total_translation[2] += (T(temp[2]) +  eps_t[2]);//
-            total_translation[0] += (T(temp[0]) +  eps_t[0]) * T(weights_[i]);
-            total_translation[1] += (T(temp[1]) +  eps_t[1]) * T(weights_[i]);
-            total_translation[2] += (T(temp[2]) +  eps_t[2]) * T(weights_[i]);
+//            total_translation[2] += (T(temp[2]) +  eps_t[2]);
+//
+            // total_translation[0] += (T(temp[0]) +  eps_t[0]) * T(weights_[i]);
+            // total_translation[1] += (T(temp[1]) +  eps_t[1]) * T(weights_[i]);
+            // total_translation[2] += (T(temp[2]) +  eps_t[2]) * T(weights_[i]);
 
+            total_translation[0] += (eps_t[0]) * T(weights_[i]);
+            total_translation[1] += (eps_t[1]) * T(weights_[i]);
+            total_translation[2] += (eps_t[2]) * T(weights_[i]);
         }
-
+        
         residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
         residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
         residuals[2] = T(live_vertex_[2] - canonical_vertex_[2]) - total_translation[2];
-
         return true;
     }
 
@@ -89,7 +93,7 @@ struct DynamicFusionDataEnergy
 
     // Factory to hide the construction of the CostFunction object from
     // the client code.
-//      TODO: this will only have one residual at the end, remember to change
+    // TODO: this will only have one residual at the end, remember to change
     static ceres::CostFunction* Create(const cv::Vec3f& live_vertex,
                                        const cv::Vec3f& live_normal,
                                        const cv::Vec3f& canonical_vertex,
@@ -160,18 +164,16 @@ class WarpProblem {
 public:
     explicit WarpProblem(kfusion::WarpField *warp) : warpField_(warp)
     {
+        //初始化warp对应的parameters
         parameters_ = new double[warpField_->getNodes()->size() * 6];
         for(int i = 0; i < warp->getNodes()->size() * 6; i+=6)
         {
             auto transform = warp->getNodes()->at(i / 6).transform;
-
             float x,y,z;
-
             transform.getTranslation(x,y,z);
             parameters_[i] = x;
             parameters_[i+1] = y;
             parameters_[i+2] = z;
-
             transform.getRotation().getRodrigues(x,y,z);
             parameters_[i+3] = x;
             parameters_[i+4] = y;
@@ -207,7 +209,6 @@ public:
         return parameters_;
     }
 
-
     void updateWarp()
     {
         for(int i = 0; i < warpField_->getNodes()->size() * 6; i+=6)
@@ -216,7 +217,6 @@ public:
             warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
         }
     }
-
 
 private:
     double *parameters_;
