@@ -22,14 +22,24 @@ void saveToPly(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &normals
 
 void saveToPly(std::vector<cv::Vec3f> &vertices, std::vector<cv::Vec3f> &normals,std::string name)
 {
+    int num = 0;
+    for(auto &v:vertices)
+    {
+        if(!std::isnan(v[0]))
+        {
+            num++;
+        }
+    }
     cout<<"saving the point cloud to the file"<<endl;
     ofstream fscan(name);
     fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment Created by Wang Junnan"<<endl;
-    fscan<<"element vertex "<<vertices.size()<<endl;
+    fscan<<"element vertex "<<num<<endl;
     fscan<<"property float x"<<endl<<"property float y"<<endl<<"property float z"<<endl;
     fscan<<"end_header"<<endl;
 
     for(int i=0;i<vertices.size();i++){
+        if(std::isnan(vertices[i][0]))
+            continue;
         fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<endl;
     }
     fscan.close();

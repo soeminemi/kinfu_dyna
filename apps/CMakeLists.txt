@@ -11,7 +11,7 @@ ${Ceres_INCLUDE_DIRS}
 file(GLOB srcs *.cpp *.hpp)
 add_executable(demo ${srcs})
 message(${PCL_LIBRARIES} )
-target_link_libraries(demo ${OpenCV_LIBS} ${PCL_LIBRARIES} kfusion -lceres -lglog -lbody3D -lcurl -lopenjp2)
+target_link_libraries(demo ${OpenCV_LIBS} ${PCL_LIBRARIES} kfusion -lceres -lglog -lbody3D -lcurl -lopenjp2 -ljsoncpp)
 
 set_target_properties(demo PROPERTIES
     DEBUG_POSTFIX "d"
