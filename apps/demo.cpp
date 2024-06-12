@@ -38,7 +38,7 @@ public:
     //         kinfu.iteractive_mode_ = !kinfu.iteractive_mode_;
     // }
 
-    KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(false)
+    KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(true)
     {
         KinFuParams params = KinFuParams::default_params();
         kinfu_ = KinFu::Ptr( new KinFu(params) );
@@ -104,8 +104,10 @@ public:
         std::sort(images.begin(), images.end());
 
         pause_ = true;
-        for (int i = 0; i < depths.size() && !exit_ ; ++i)
+        for (int i = 300; i < depths.size() && !exit_ ; ++i)
         { 
+            if(i>350)
+                exit_ = true;
             frame_idx = i;
             std::cout<<"frame: "<<i<<std::endl;
             // bool has_frame = capture_.grab(depth, image);``

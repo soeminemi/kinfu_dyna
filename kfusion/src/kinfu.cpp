@@ -311,7 +311,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
+            // canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
         }
     }
     // 当前帧的cloud
