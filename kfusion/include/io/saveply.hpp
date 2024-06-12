@@ -19,4 +19,19 @@ void saveToPly(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &normals
     }
     fscan.close();
 }
+
+void saveToPly(std::vector<cv::Vec3f> &vertices, std::vector<cv::Vec3f> &normals,std::string name)
+{
+    cout<<"saving the point cloud to the file"<<endl;
+    ofstream fscan(name);
+    fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment Created by Wang Junnan"<<endl;
+    fscan<<"element vertex "<<vertices.size()<<endl;
+    fscan<<"property float x"<<endl<<"property float y"<<endl<<"property float z"<<endl;
+    fscan<<"end_header"<<endl;
+
+    for(int i=0;i<vertices.size();i++){
+        fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<endl;
+    }
+    fscan.close();
+}
 #endif

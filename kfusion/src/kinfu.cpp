@@ -338,6 +338,9 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     //从canonical 到canonical_normals
     getWarp().warp(canonical, canonical_normals);
     std::cout<<"estimate dynamic warp"<<std::endl;
+    //save for debuging
+    saveToPly(canonical, canonical_normals, "canonical.ply");
+    saveToPly(live, canonical_normals, "live.ply");
     getWarp().energy_data(canonical, canonical_normals, live, canonical_normals);
     // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
     std::cout<<"warped"<<std::endl;

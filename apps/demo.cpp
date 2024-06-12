@@ -561,7 +561,7 @@ public:
     void init_bodymeasuer()
     {
         bm.setPathPre("./data/body_measure/");
-        cloud_filtered = std::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBNormal> >(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        // cloud_filtered = std::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBNormal> >(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         pfile = "./examples/final.ply";
         meshFittorMale.setGender("male");
         meshFittorFemale.setGender("female");

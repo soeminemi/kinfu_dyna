@@ -64,6 +64,7 @@ struct DynamicFusionDataEnergy
             total_translation[0] += (eps_t[0]) * T(weights_[i]);
             total_translation[1] += (eps_t[1]) * T(weights_[i]);
             total_translation[2] += (eps_t[2]) * T(weights_[i]);
+            //损失函数和论文并不一致，没有使用点到面的距离
         }
         
         residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
