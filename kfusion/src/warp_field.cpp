@@ -254,7 +254,7 @@ void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals) co
     {
         if(std::isnan(point[0]) || std::isnan(normals[i][0]))
             continue;
-        utils::DualQuaternion<float> dqb = DQB(point);
+        utils::DualQuaternion<float> dqb = DQB(point); 
         dqb.transform(point);
         point = warp_to_live_ * point;
 
