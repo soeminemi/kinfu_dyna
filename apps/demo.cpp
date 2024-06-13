@@ -22,7 +22,7 @@
 #include <jsoncpp/json/json.h>
 
 using namespace kfusion;
-
+// #define COMBIN_MS //if body measurement is combined
 class KinFuApp
 {
 public:
@@ -86,9 +86,11 @@ public:
 
     bool execute()
     {
+        #ifdef COMBIN_MS
         std::cout<<"init body measure"<<std::endl;
         init_bodymeasuer();
         cout<<"body initialized"<<endl;
+        #endif
         KinFu& kinfu = *kinfu_;
         cv::Mat depth, image;
         double time_ms = 0;
@@ -170,12 +172,15 @@ public:
         //
         cv::Mat normal_host(1, (int)cloud.size(), CV_32FC4);
         normal_buffer.download(normal_host.ptr<Point>());
-        //save to file
+        
+        #ifdef COMBIN_MS
+        //save to file for measurement
         std::stringstream ss;
         ss<<pfile;
         kinfu.toPly(cloud_host, normal_host, ss.str());
         //start measurement
         func(readFileIntoString((char *)pfile.c_str()));
+        #endif
         
         return true;
     }
@@ -192,6 +197,8 @@ public:
     cuda::Depth depth_device_;
     cuda::DeviceArray<Point> cloud_buffer;
     cuda::DeviceArray<Normal> normal_buffer;
+
+    #ifdef COMBIN_MS
     BodyMeasurer bm;
     fitMesh *meshFittor;
     fitMesh meshFittorMale;
@@ -575,6 +582,7 @@ public:
         cout<<"female model loaded"<<endl;
         meshFittor = &meshFittorFemale;
     }
+    #endif
 };
 
 
