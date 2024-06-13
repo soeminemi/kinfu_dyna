@@ -192,10 +192,13 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         //initialize the warp field 
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
+        toPly(frame_init, frame_init, "frame_init.ply");
         std::cout<<"start init warp nodes: "<<frame_init.rows<<", "<<frame_init.cols<<std::endl;
         auto aff = volume_->getPose();
         aff = aff.inv();
         warp_->init(frame_init, params_.volume_dims, aff);
+        auto init_nodes = warp_->getNodesAsMat();
+        toPly(init_nodes, init_nodes, "init_nodes.ply");
         return ++frame_counter_, true;
     }
 
@@ -311,7 +314,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            // canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
+            // canonical[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j]; //no need to the initial pose!!!???
         }
     }
     // 当前帧的cloud

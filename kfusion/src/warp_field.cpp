@@ -103,19 +103,20 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
                 pt_vol.x = int(pt_vol.x/voxel_size-0.5f);
                 pt_vol.y = int(pt_vol.y/voxel_size-0.5f);
                 pt_vol.z = int(pt_vol.z/voxel_size-0.5f);
-                if(get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z) ==  false)
+                // if(get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z) ==  false)
+                if(true)
                 {
                     deformation_node tnode;
                     tnode.transform = utils::DualQuaternion<float>();
                     tnode.vertex = Vec3f(point.x,point.y,point.z);
-                    tnode.weight = 3 * voxel_size; //???
+                    tnode.weight = 3 * voxel_size; //???, only weights to set the area affected
                     nodes_->push_back(tnode);
                     // nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
                     // nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
                     // nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
                     // !!!!!
                     // need to transform point to volume coordinates
-                    expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len);
+                    // expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len);
                     node_num ++;
                 }
                 else
@@ -356,8 +357,9 @@ const cv::Mat WarpField::getNodesAsMat() const
     cv::Mat matrix(1, nodes_->size(), CV_32FC3);
     for(int i = 0; i < nodes_->size(); i++)
     {
-        nodes_->at(i).transform.getTranslation(matrix.at<cv::Vec3f>(i));
-        matrix.at<cv::Vec3f>(i) += nodes_->at(i).vertex;
+        // nodes_->at(i).transform.getTranslation(matrix.at<cv::Vec3f>(i));
+        // matrix.at<cv::Vec3f>(i) += nodes_->at(i).vertex;
+        matrix.at<cv::Vec3f>(i) = nodes_->at(i).vertex;
     }
     return matrix;
 }
