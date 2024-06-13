@@ -171,10 +171,12 @@ public:
         {
             auto transform = warp->getNodes()->at(i / 6).transform;
             float x,y,z;
+            //平移
             transform.getTranslation(x,y,z);
             parameters_[i] = x;
             parameters_[i+1] = y;
             parameters_[i+2] = z;
+            //旋转
             transform.getRotation().getRodrigues(x,y,z);
             parameters_[i+3] = x;
             parameters_[i+4] = y;
@@ -214,8 +216,10 @@ public:
     {
         for(int i = 0; i < warpField_->getNodes()->size() * 6; i+=6)
         {
-            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i],parameters_[i+1],parameters_[i+2]);
-            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
+            // warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i],parameters_[i+1],parameters_[i+2]);
+            // warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
+            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i],parameters_[i+1],parameters_[i+2]);
+            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
         }
     }
 
