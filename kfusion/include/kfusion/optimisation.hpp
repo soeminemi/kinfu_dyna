@@ -48,8 +48,7 @@ struct DynamicFusionDataEnergy
             // cv::Vec3f vert;
             // quat.getTranslation(vert); //当前node的平移
 
-            // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移，和node对应的平移不是一样的吗？
-            T eps_t[3] = {epsilon_[i][0], epsilon_[i][1], epsilon_[i][2]}; //参数对应的平移，和node对应的平移不是一样的吗？
+            T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移，和node对应的平移不是一样的吗？
 
             // float temp[3];
             // quat.getTranslation(temp[0], temp[1], temp[2]);
@@ -166,19 +165,29 @@ class WarpProblem {
 public:
     explicit WarpProblem(kfusion::WarpField *warp) : warpField_(warp)
     {
-        //初始化warp对应的parameters
+        //初始化warp对应的parameters, 0,1,2表示旋转，x,y,z表示旋转轴的方向，其模表示旋转的角度，3，4，5表示平移
         parameters_ = new double[warpField_->getNodes()->size() * 6];
         for(int i = 0; i < warp->getNodes()->size() * 6; i+=6)
         {
             auto transform = warp->getNodes()->at(i / 6).transform;
             float x,y,z;
-            //平移
-            transform.getTranslation(x,y,z);
+            // //平移
+            // transform.getTranslation(x,y,z);
+            // parameters_[i] = x;
+            // parameters_[i+1] = y;
+            // parameters_[i+2] = z;
+            // //旋转
+            // transform.getRotation().getRodrigues(x,y,z);
+            // parameters_[i+3] = x;
+            // parameters_[i+4] = y;
+            // parameters_[i+5] = z;
+            // 旋转
+            transform.getRotation().getRodrigues(x,y,z);
             parameters_[i] = x;
             parameters_[i+1] = y;
             parameters_[i+2] = z;
-            //旋转
-            transform.getRotation().getRodrigues(x,y,z);
+            // 平移
+            transform.getTranslation(x,y,z);
             parameters_[i+3] = x;
             parameters_[i+4] = y;
             parameters_[i+5] = z;
@@ -217,10 +226,8 @@ public:
     {
         for(int i = 0; i < warpField_->getNodes()->size() * 6; i+=6)
         {
-            // warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i],parameters_[i+1],parameters_[i+2]);
-            // warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
-            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i],parameters_[i+1],parameters_[i+2]);
-            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
+            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i],parameters_[i+1],parameters_[i+2]);
+            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
         }
     }
 
