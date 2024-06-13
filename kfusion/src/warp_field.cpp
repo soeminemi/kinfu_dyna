@@ -65,7 +65,7 @@ void WarpField::expand_nodesflag(const int x, const int y, const int z, const in
  */
 void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv::Affine3f &aff_inv)
 {
-    std::cout<<"start to init volume flag"<<std::endl;
+    std::cout<<"start to init volume flag: "<<first_frame.cols<<", "<<first_frame.rows<<std::endl;
     int vsize = vdims[0]*vdims[1]*vdims[2];
     vdim_x = vdims[0];
     vdim_y = vdims[1];
@@ -83,7 +83,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
     nodes_->reserve(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
-    exp_len = 0.05/voxel_size;
+    exp_len = 0.015/voxel_size;
 // //    FIXME:: this is a test, remove later
 //     voxel_size = 1;
     std::cout<<"start to init nodes, expand length: "<<exp_len<<std::endl;
@@ -95,16 +95,13 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
         for(size_t j = 0; j < first_frame.cols; j+=step)
         {
             auto point = first_frame.at<Point>(i,j);
-           
-            
             if(!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z))
             {
                 auto pt_vol = aff_inv * point;
                 pt_vol.x = int(pt_vol.x/voxel_size-0.5f);
                 pt_vol.y = int(pt_vol.y/voxel_size-0.5f);
                 pt_vol.z = int(pt_vol.z/voxel_size-0.5f);
-                // if(get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z) ==  false)
-                if(true)
+                if(get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z) ==  false)
                 {
                     deformation_node tnode;
                     tnode.transform = utils::DualQuaternion<float>();
@@ -116,7 +113,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
                     // nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
                     // !!!!!
                     // need to transform point to volume coordinates
-                    // expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len);
+                    expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len);
                     node_num ++;
                 }
                 else
@@ -250,7 +247,6 @@ void WarpField::energy_reg(const std::vector<std::pair<kfusion::utils::DualQuate
 void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals) const
 {
     int i = 0;
-    std::cout<<"warp to live: "<<warp_to_live_.translation()<<","<<warp_to_live_.rotation()<<std::endl;
     for (auto& point : points)
     {
         if(std::isnan(point[0]) || std::isnan(normals[i][0]))

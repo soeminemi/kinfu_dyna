@@ -82,6 +82,7 @@ namespace kfusion
 
         void getPoints(cv::Mat& points);
         void toPly(cv::Mat& points, cv::Mat &normals, std::string spath);
+        void toPlyVec3(cv::Mat& points, cv::Mat &normals, std::string spath);
         void dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals);
         Affine3f getCameraPose (int time = -1) const;
 

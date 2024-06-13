@@ -192,13 +192,11 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         //initialize the warp field 
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
-        toPly(frame_init, frame_init, "frame_init.ply");
-        std::cout<<"start init warp nodes: "<<frame_init.rows<<", "<<frame_init.cols<<std::endl;
         auto aff = volume_->getPose();
         aff = aff.inv();
         warp_->init(frame_init, params_.volume_dims, aff);
         auto init_nodes = warp_->getNodesAsMat();
-        toPly(init_nodes, init_nodes, "init_nodes.ply");
+        toPlyVec3(init_nodes, init_nodes, "init_nodes.ply");
         return ++frame_counter_, true;
     }
 
@@ -226,7 +224,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     auto d = curr_.depth_pyr[0];
     auto pts = curr_.points_pyr[0];
     auto n = curr_.normals_pyr[0];
-    std::cout<<"dynamic fusion to normal space"<<std::endl;
+    std::cout<<"dynamic fusion to canonical space"<<std::endl;
     dynamicfusion(d, pts, n);
     // We do not integrate volume if camera does not move.
     // float rnorm = (float)cv::norm(affine.rvec());
@@ -260,6 +258,7 @@ void kfusion::KinFu::getPoints(cv::Mat& points)
 {
     prev_.points_pyr[0].download(points.ptr<void>(), points.step);
 }
+
 void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
 {
     int ptnum = 0;
@@ -273,6 +272,32 @@ void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
         {
             cv::Vec4f pt = points.at<cv::Vec4f>(i,j);
             cv::Vec4f nl = points.at<cv::Vec4f>(i,j);
+            if(!isnan(pt[0]))
+            {
+                // cv::Vec3f pt = cv::Vec3f(pts[0],pts[1],pts[2]);
+                pts.push_back(pt);
+                nls.push_back(nl);
+                ptnum ++;
+            }
+        }
+    }
+    saveToPly(pts, nls, spath);
+    std::cout<<"point number of final cloud: "<<ptnum<<std::endl;
+}
+
+void kfusion::KinFu::toPlyVec3(cv::Mat& points, cv::Mat &normals, std::string spath)
+{
+    int ptnum = 0;
+    std::vector<cv::Vec3f> pts;
+    std::vector<cv::Vec3f> nls;
+    pts.reserve(points.rows*points.cols);
+    nls.reserve(points.rows*points.cols);
+    for (size_t i = 0; i < points.rows; i++)
+    {
+        for (size_t j = 0; j < points.cols; j++)
+        {
+            cv::Vec3f pt = points.at<cv::Vec3f>(i,j);
+            cv::Vec3f nl = points.at<cv::Vec3f>(i,j);
             if(!isnan(pt[0]))
             {
                 // cv::Vec3f pt = cv::Vec3f(pts[0],pts[1],pts[2]);
@@ -341,9 +366,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     //从canonical 到canonical_normals
     saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
     getWarp().warp(canonical, canonical_normals);
-    cv::Mat node_mat;
-    node_mat = getWarp().getNodesAsMat();
-    toPly(node_mat,node_mat, "warp_node.ply");
+
     std::cout<<"estimate dynamic warp"<<std::endl;
     //save for debuging
     saveToPly(canonical, canonical_normals, "canonical_aftwarp.ply");
