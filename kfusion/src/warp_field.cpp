@@ -228,8 +228,9 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << std::endl;
     warpProblem.updateWarp();
-    for(auto node : nodes_)
+    for (size_t i = 0; i < nodes_->size; i++)
     {
+        auto node = nodes_->at(i);
         std::cout<<node.transform<<std::endl;
     }
 }
