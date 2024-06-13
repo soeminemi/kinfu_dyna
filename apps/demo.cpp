@@ -108,11 +108,11 @@ public:
         pause_ = true;
         for (int i = 300; i < depths.size() && !exit_ ; ++i)
         { 
-            if(i>350)
+            if(i>320)
                 exit_ = true;
             frame_idx = i;
             std::cout<<"frame: "<<i<<std::endl;
-            // bool has_frame = capture_.grab(depth, image);``
+            // bool has_frame = capture_.grab(depth, image);
             image = cv::imread(images[i], cv::IMREAD_COLOR);
             depth = cv::imread(depths[i], cv::IMREAD_ANYDEPTH);
             depth = depth /4;
