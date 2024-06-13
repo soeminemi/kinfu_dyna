@@ -48,7 +48,8 @@ struct DynamicFusionDataEnergy
             // cv::Vec3f vert;
             // quat.getTranslation(vert); //当前node的平移
 
-            T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移，和node对应的平移不是一样的吗？
+            // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移，和node对应的平移不是一样的吗？
+            T eps_t[3] = {epsilon_[i][0], epsilon_[i][1], epsilon_[i][2]}; //参数对应的平移，和node对应的平移不是一样的吗？
 
             // float temp[3];
             // quat.getTranslation(temp[0], temp[1], temp[2]);
