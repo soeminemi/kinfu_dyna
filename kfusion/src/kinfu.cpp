@@ -339,8 +339,8 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
     getWarp().warp(canonical, canonical_normals);
     cv::Mat node_mat;
-    node_mat = getWarp()->getNodesAsMat();
-    toPly(node_mat,canonical_normals, "warp_node.ply");
+    node_mat = getWarp().getNodesAsMat();
+    toPly(node_mat,node_mat, "warp_node.ply");
     std::cout<<"estimate dynamic warp"<<std::endl;
     //save for debuging
     saveToPly(canonical, canonical_normals, "canonical_aftwarp.ply");
