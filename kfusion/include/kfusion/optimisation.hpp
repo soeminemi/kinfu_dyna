@@ -62,9 +62,9 @@ struct DynamicFusionDataEnergy
             // total_translation[1] += (T(temp[1]) +  eps_t[1]) * T(weights_[i]);
             // total_translation[2] += (T(temp[2]) +  eps_t[2]) * T(weights_[i]);
 
-            total_translation[0] += (eps_t[0]) * T(weights_[i]);
-            total_translation[1] += (eps_t[1]) * T(weights_[i]);
-            total_translation[2] += (eps_t[2]) * T(weights_[i]);
+            total_translation[0] += (epsilon_[i][0]) * T(weights_[i]);
+            total_translation[1] += (epsilon_[i][1]) * T(weights_[i]);
+            total_translation[2] += (epsilon_[i][2]) * T(weights_[i]);
             //损失函数和论文并不一致，没有使用点到面的距离
         }
         
