@@ -106,9 +106,9 @@ public:
         std::sort(images.begin(), images.end());
 
         pause_ = true;
-        for (int i = 300; i < depths.size() && !exit_ ; ++i)
+        for (int i = 0; i < depths.size() && !exit_ ; ++i)
         { 
-            if(i>320)
+            if(i>20)
                 exit_ = true;
             frame_idx = i;
             std::cout<<"frame: "<<i<<std::endl;
@@ -122,7 +122,7 @@ public:
             {
                 for (size_t j = 0; j < depth.cols; j++)
                 {
-                    if(depth.at<ushort>(i,j)>1500)
+                    if(depth.at<ushort>(i,j)>2000)
                     {
                         depth.at<ushort>(i,j) = 0;
                     }

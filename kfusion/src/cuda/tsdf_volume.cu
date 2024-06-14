@@ -460,7 +460,6 @@ void kfusion::device::raycast(const TsdfVolume& volume, const Aff3f& aff, const 
     cudaMemcpy((rc.pt_num),&init_num, sizeof(int),cudaMemcpyHostToDevice);
     raycast_kernel<<<grid, block>>>(rc, (PtrStepSz<Point>)points, normals);
     cudaMemcpy(&init_num,(rc.pt_num), sizeof(int),cudaMemcpyDeviceToHost);
-    printf("ptnum: %d\n",init_num);
     cudaSafeCall (cudaGetLastError ());
 }
 
@@ -554,7 +553,6 @@ namespace kfusion
                         if (W != 0 && F != 1.f)
                         {
                             V.z = (z + 0.5f) * volume.voxel_size.z;
-
                             //process dx
                             if (x + 1 < volume.dims.x)
                             {

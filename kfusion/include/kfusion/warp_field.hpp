@@ -7,7 +7,7 @@
 #include <kfusion/utils/knn_point_cloud.hpp>
 #include <kfusion/cuda/tsdf_volume.hpp>
 
-#define KNN_NEIGHBOURS 1 //when optimize the parameters ， we only need KNN_NEIGHBOURS to be 1
+#define KNN_NEIGHBOURS 4 //when optimize the parameters ， we only need KNN_NEIGHBOURS to be 1
 namespace kfusion
 {
     typedef nanoflann::KDTreeSingleIndexAdaptor<
@@ -47,7 +47,7 @@ namespace kfusion
         ~WarpField();
         //初始化warp filed, 如何扩展？
         void init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, Affine3f &aff_inv);
-        void update_deform_node(); // expand the nodes if necessary
+        void update_deform_node(const cv::Mat& canonical_frame,cv::Affine3f &aff_inv); // expand the nodes if necessary
         void init(const std::vector<Vec3f>& first_frame);
         //calculate the energy of the warp field
         void energy(const cuda::Cloud &frame,
@@ -66,9 +66,9 @@ namespace kfusion
         void energy_reg(const std::vector<std::pair<kfusion::utils::DualQuaternion<float>,
                 kfusion::utils::DualQuaternion<float>>> &edges);
 
-        void warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals) const;
+        void warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bool flag_debug = false) ;
 
-        utils::DualQuaternion<float> DQB(const Vec3f& vertex) const;
+        utils::DualQuaternion<float> DQB(const Vec3f& vertex);
 
         void getWeightsAndUpdateKNN(const Vec3f& vertex, float weights[KNN_NEIGHBOURS]) const;
 
@@ -95,6 +95,9 @@ namespace kfusion
         int vdim_x;
         int vdim_y;
         int vdim_z;
+        int exp_len_;
+    public:
+        bool flag_exp;
     };
 }
 #endif //KFUSION_WARP_FIELD_HPP

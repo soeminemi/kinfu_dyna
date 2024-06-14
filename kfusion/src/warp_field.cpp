@@ -36,6 +36,7 @@ bool WarpField::get_volume_flag(const int &x, const int &y, const int &z)
 {
     return volume_flag[x + y * vdim_x + z * vdim_x*vdim_y] > 0;
 }
+
 void WarpField::expand_nodesflag(const int x, const int y, const int z, const int exp_len)
 {
     int start_x, end_x, start_y, end_y, start_z, end_z;
@@ -45,12 +46,12 @@ void WarpField::expand_nodesflag(const int x, const int y, const int z, const in
     end_y = std::min(y+exp_len, vdim_y - 1);
     start_z = std::max(z-exp_len, 0);
     end_z = std::min(z+exp_len, vdim_z - 1);
-    std::cout<<start_x<<", "<<end_x<<", "<<start_y<<", "<<end_y<<", "<<start_z<<", "<<end_z<<std::endl;
-    for (size_t i = start_x; i < end_x; i++)
+    // std::cout<<"expand: "<<exp_len<<", "<<x<<", "<<y<<", "<<z<<", vdim:"<<vdim_x<<", "<<vdim_y<<", "<<vdim_z<<std::endl;
+    for (size_t i = start_x; i <= end_x; i++)
     {
-        for (size_t j = start_y; j < end_y; j++)
+        for (size_t j = start_y; j <= end_y; j++)
         {
-            for (size_t k = start_z; k < end_z; k++)
+            for (size_t k = start_z; k <= end_z; k++)
             {
                 volume_flag[i + j * vdim_x + k * vdim_x*vdim_y] = 1;
             }
@@ -76,17 +77,17 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
         volume_flag[i] = 0;
     }
     
-    int exp_len = 20;
+    exp_len_ = 20;
     
     // note that nodes_ should be initialized first!!
     // nodes_->resize(first_frame.cols * first_frame.rows);
     nodes_->reserve(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
-    exp_len = 0.015/voxel_size;
+    exp_len_ = 0.015/voxel_size;
 // //    FIXME:: this is a test, remove later
 //     voxel_size = 1;
-    std::cout<<"start to init nodes, expand length: "<<exp_len<<std::endl;
+    std::cout<<"start to init nodes, expand length: "<<exp_len_<<std::endl;
     int step = 1;
     int node_num = 0;
     int not_node_num = 0;
@@ -113,7 +114,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
                     // nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
                     // !!!!!
                     // need to transform point to volume coordinates
-                    expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len);
+                    expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len_);
                     node_num ++;
                 }
                 else
@@ -125,7 +126,55 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
     }
     buildKDTree();
 }
-
+/**
+ * canonical_frame
+*/
+void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f &aff_inv) // expand the nodes if necessary
+{
+    std::cout<<"start to expand the nodes, expand length: "<<exp_len_<<std::endl;
+    int step = 1;
+    int node_num = 0;
+    int not_node_num = 0;
+    auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
+                      kfusion::KinFuParams::default_params().volume_dims[0];
+    for(size_t i = 0; i < canonical_frame.rows; i+=step)
+    {
+        for(size_t j = 0; j < canonical_frame.cols; j+=step)
+        {
+            auto point = canonical_frame.at<Point>(i,j);
+            if(!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z))
+            {
+                auto pt_vol = aff_inv * point;
+                pt_vol.x = int(pt_vol.x/voxel_size-0.5f);
+                pt_vol.y = int(pt_vol.y/voxel_size-0.5f);
+                pt_vol.z = int(pt_vol.z/voxel_size-0.5f);
+                if(get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z) ==  false)
+                {
+                    deformation_node tnode;
+                    tnode.transform = utils::DualQuaternion<float>();
+                    tnode.vertex = Vec3f(point.x,point.y,point.z);
+                    tnode.weight = 3 * voxel_size; //???, only weights to set the area affected
+                    nodes_->push_back(tnode);
+                    // nodes_->at(i*canonical_frame.cols+j).transform = utils::DualQuaternion<float>();
+                    // nodes_->at(i*canonical_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
+                    // nodes_->at(i*canonical_frame.cols+j).weight = 3 * voxel_size;
+                    // !!!!!
+                    // need to transform point to volume coordinates
+                    expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len_);
+                    // std::cout<<"add node: "<<pt_vol.x<<","<< pt_vol.y<<", "<<pt_vol.z<<": "<<point.x<<","<<point.y<<","<<point.z<<", expflag: "<<get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z)<<std::endl;
+                    std::cout<<"add node: "<<point.x<<","<<point.y<<","<<point.z<<std::endl;
+                    node_num ++;
+                }
+                else
+                {
+                    not_node_num++;
+                }
+            }
+        }
+    }
+    buildKDTree();
+    std::cout<<"add new node number: "<<node_num<<std::endl;
+}
 /**
  *
  * @param first_frame
@@ -200,6 +249,9 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
            std::isnan(live_vertices[i][1]) ||
            std::isnan(live_vertices[i][2]))
             continue;
+        // filter out error correspondence
+        if(fabs(canonical_vertices[i][2]-live_vertices[i][2])>0.1)
+            continue;
         getWeightsAndUpdateKNN(canonical_vertices[i], weights);
 
 //        FIXME: could just pass ret_index
@@ -228,11 +280,11 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << std::endl;
     warpProblem.updateWarp();
-    for (size_t i = 0; i < nodes_->size(); i++)
-    {
-        auto node = nodes_->at(i);
-        std::cout<<node.transform<<std::endl;
-    }
+    // for (size_t i = 0; i < nodes_->size(); i++)
+    // {
+    //     auto node = nodes_->at(i);
+    //     std::cout<<node.transform<<std::endl;
+    // }
 }
 /**
  * \brief
@@ -250,20 +302,30 @@ void WarpField::energy_reg(const std::vector<std::pair<kfusion::utils::DualQuate
  * @param points
  * @param normals
  */
-void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals) const
+void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bool flag_debug) 
 {
-    int i = 0;
+    flag_exp = false;
+    int i = -1;
     for (auto& point : points)
     {
-        if(std::isnan(point[0]) || std::isnan(normals[i][0]))
+        i++;
+        if(std::isnan(point[0]) /*|| std::isnan(normals[i][0])*/)
             continue;
+        if(flag_debug)
+            std::cout<<"dqb pt: "<<i<<","<<point[0]<<","<<point[1]<<", "<<point[2]<<std::endl;
         utils::DualQuaternion<float> dqb = DQB(point); 
+        if(flag_debug)
+            std::cout<<"++dqb point: "<<point<<","<<dqb<<std::endl;
         dqb.transform(point);
-        point = warp_to_live_ * point;
+        if(flag_debug)
+            std::cout<<"--dqb point: "<<point<<","<<dqb<<std::endl;
 
+        point = warp_to_live_ * point;
+        if(std::isnan(normals[i][0]))
+            continue;
         dqb.transform(normals[i]);
         normals[i] = warp_to_live_ * normals[i];
-        i++;
+        
     }
 }
 
@@ -273,14 +335,24 @@ void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals) co
  * \param weight
  * \return
  */
-utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex) const
+utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex) 
 {
     float weights[KNN_NEIGHBOURS];
     getWeightsAndUpdateKNN(vertex, weights);
     utils::Quaternion<float> translation_sum(0,0,0,0);
     utils::Quaternion<float> rotation_sum(0,0,0,0);
+    if(weights[0]==0)
+    {
+        auto &vt = nodes_->at(ret_index_[0]).vertex;
+        std::cout<<"err knn: "<<vertex[0]<<","<<vertex[1]<<", "<<vertex[2]<<"--"<<vt[0]<<","<<vt[1]<<", "<<vt[2]<<std::endl;
+    }
     for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
     {
+        if(KNN_NEIGHBOURS == 1)
+        {
+            weights[0] = 1;
+            flag_exp = true;
+        }
         translation_sum += weights[i] * nodes_->at(ret_index_[i]).transform.getTranslation();
         rotation_sum += weights[i] * nodes_->at(ret_index_[i]).transform.getRotation();
     }
@@ -348,6 +420,7 @@ std::vector<deformation_node>* WarpField::getNodes()
 void WarpField::buildKDTree()
 {
     //    Build kd-tree with current warp nodes.
+    cloud.pts.clear();
     cloud.pts.resize(nodes_->size());
     for(size_t i = 0; i < nodes_->size(); i++)
         cloud.pts[i] = nodes_->at(i).vertex;
