@@ -375,7 +375,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     // saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
     // std::cout<<"warp mark 1"<<std::endl;
     // 显示当前的warp参数，目前结果来看，存在优化错误，warp的translation明显错误
-    warp_->warp(canonical, canonical_normals,true);
+    warp_->warp(canonical, canonical_normals,false);
     
     //determine if node update needed
     if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
