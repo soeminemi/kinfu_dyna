@@ -153,7 +153,7 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
                     deformation_node tnode;
                     tnode.transform = utils::DualQuaternion<float>();
                     tnode.vertex = Vec3f(point.x,point.y,point.z);
-                    tnode.weight = 3 * voxel_size; //???, only weights to set the area affected
+                    tnode.weight = 3 * voxel_size; //设置node的影响范围
                     nodes_->push_back(tnode);
                     // nodes_->at(i*canonical_frame.cols+j).transform = utils::DualQuaternion<float>();
                     // nodes_->at(i*canonical_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
@@ -162,7 +162,7 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
                     // need to transform point to volume coordinates
                     expand_nodesflag(pt_vol.x, pt_vol.y, pt_vol.z, exp_len_);
                     // std::cout<<"add node: "<<pt_vol.x<<","<< pt_vol.y<<", "<<pt_vol.z<<": "<<point.x<<","<<point.y<<","<<point.z<<", expflag: "<<get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z)<<std::endl;
-                    std::cout<<"add node: "<<point.x<<","<<point.y<<","<<point.z<<std::endl;
+                    // std::cout<<"add node: "<<point.x<<","<<point.y<<","<<point.z<<std::endl;
                     node_num ++;
                 }
                 else

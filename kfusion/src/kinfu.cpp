@@ -247,6 +247,9 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             resizeDepthNormals(prev_.depth_pyr[i-1], prev_.normals_pyr[i-1], prev_.depth_pyr[i], prev_.normals_pyr[i]);
 #else
         volume_->raycast(poses_.back(), p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); // tsdf volume to points pyramid
+        //warp 到当前的形状, 先刚性变换到当前视角再warp还是先warp再刚性变换？这个应该是有区别的
+        warp_->warp(prev_.points_pyr[0],prev_.normals_pyr[0]);
+        //
         for (int i = 1; i < LEVELS; ++i)
             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
 #endif
@@ -336,7 +339,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     std::vector<Vec3f> canonical_orig(cloud_host.rows * cloud_host.cols);
     auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD);
 
-    // To initial pose
+    // To initial pose,canonical_orig用于后续优化后的psdf
     for (int i = 0; i < cloud_host.rows; i++)
     {
         for (int j = 0; j < cloud_host.cols; j++) {
@@ -346,7 +349,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         }
     }
 
-    // 当前帧的cloud
+    // 当前帧的cloud，当前camerapose下的当前点云
     live_frame.download(cloud_host.ptr<Point>(), cloud_host.step);
     std::vector<Vec3f> live(cloud_host.rows * cloud_host.cols);
     for (int i = 0; i < cloud_host.rows; i++)
@@ -355,6 +358,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
             live[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
         }
 
+    //canonical normals, under current cam pose
     cv::Mat normal_host(cloud_host.rows, cloud_host.cols, CV_32FC4);
     normals.download(normal_host.ptr<Normal>(), normal_host.step);
 
@@ -368,27 +372,30 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
 
     std::vector<Vec3f> canonical_visible(canonical);
     //从canonical 到canonical_normals
-    saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
-    std::cout<<"warp mark 1"<<std::endl;
+    // saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
+    // std::cout<<"warp mark 1"<<std::endl;
+    // 显示当前的warp参数，目前结果来看，存在优化错误，warp的translation明显错误
     warp_->warp(canonical, canonical_normals,true);
     
     //determine if node update needed
-    if(warp_->flag_exp)
+    if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
     {
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
         auto aff = volume_->getPose();
         aff = aff.inv();
         warp_->update_deform_node(frame_init, aff);
+        //存扩展后的nodes
+        auto nd = warp_->getNodesAsMat();
+        toPlyVec3(nd,nd,"cur_nodes.ply");
     }
-    auto nd = warp_->getNodesAsMat();
-    toPlyVec3(nd,nd,"cur_nodes.ply");
     //save for debuging
     saveToPly(canonical, canonical_normals, "canonical_aftwarp.ply");
-    // saveToPly(live, canonical_normals, "live.ply");
+    saveToPly(live, canonical_normals, "live.ply");
+    //优化warpfield
     warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
     // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
-    std::cout<<"warp mark 2"<<std::endl;
+    
     warp_->warp(canonical_orig, canonical_normals);
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;
@@ -404,8 +411,6 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     volume_->get_points(points);
     volume_->compute_normals();
     std::cout<<"END of dynamic fusion"<<std::endl;
-    // toPly(points, normals_t,"./results/s.ply");
-    
 }
 void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
 {
