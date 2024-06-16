@@ -260,8 +260,8 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
             continue;
         }
 //        FIXME: could just pass ret_index
-        // for(int j = 0; j < KNN_NEIGHBOURS; j++)
-        //     indices[j] = ret_index_[j];
+        for(int j = 0; j < KNN_NEIGHBOURS; j++)
+            indices[j] = ret_index_[j];
 
         ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(live_vertices[i],
                                                                              live_normals[i],
@@ -269,8 +269,8 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                                                                              canonical_normals[i],
                                                                              this,
                                                                              weights,
-                                                                             ret_index_);
-        problem.AddResidualBlock(cost_function,  NULL /* squared loss */, warpProblem.mutable_epsilon(ret_index_));
+                                                                             indices);
+        problem.AddResidualBlock(cost_function,  NULL /* squared loss */, warpProblem.mutable_epsilon(indices));
 
     }
     //基于ceres求解warpField
