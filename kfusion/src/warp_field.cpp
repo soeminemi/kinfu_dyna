@@ -234,7 +234,7 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                             const std::vector<Vec3f> &live_normals //live normals are not used in optimization
 )
 {
-    std::cout<<"node size: "<<nodes_->size()<<std::endl;
+    // std::cout<<"node size: "<<nodes_->size()<<std::endl;
     ceres::Problem problem;
     float weights[KNN_NEIGHBOURS];
     unsigned long indices[KNN_NEIGHBOURS];
@@ -250,13 +250,18 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
            std::isnan(live_vertices[i][2]))
             continue;
         // filter out error correspondence
+        std::cout<<canonical_vertices[i][0]<<","<<live_vertices[i][0]<<".."<<canonical_vertices[i][1]<<","<<live_vertices[i][1]<<std::endl;
         if(fabs(canonical_vertices[i][2]-live_vertices[i][2])>0.1)
             continue;
         getWeightsAndUpdateKNN(canonical_vertices[i], weights);
-
+        // 当前点距离node过远，不考虑用于node的位置优化
+        if(weights[0]==0)
+        {
+            continue;
+        }
 //        FIXME: could just pass ret_index
-        for(int j = 0; j < KNN_NEIGHBOURS; j++)
-            indices[j] = ret_index_[j];
+        // for(int j = 0; j < KNN_NEIGHBOURS; j++)
+        //     indices[j] = ret_index_[j];
 
         ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(live_vertices[i],
                                                                              live_normals[i],
@@ -264,8 +269,8 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                                                                              canonical_normals[i],
                                                                              this,
                                                                              weights,
-                                                                             indices);
-        problem.AddResidualBlock(cost_function,  NULL /* squared loss */, warpProblem.mutable_epsilon(indices));
+                                                                             ret_index_);
+        problem.AddResidualBlock(cost_function,  NULL /* squared loss */, warpProblem.mutable_epsilon(ret_index_));
 
     }
     //基于ceres求解warpField

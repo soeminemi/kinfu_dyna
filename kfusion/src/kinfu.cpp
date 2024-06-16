@@ -345,7 +345,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            canonical_orig[i * cloud_host.cols + j] = canonical[i * cloud_host.cols + j]; //no need to the initial pose!!!???
+            canonical_orig[i * cloud_host.cols + j] = canonical[i * cloud_host.cols + j];
         }
     }
 
@@ -353,29 +353,33 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     live_frame.download(cloud_host.ptr<Point>(), cloud_host.step);
     std::vector<Vec3f> live(cloud_host.rows * cloud_host.cols);
     for (int i = 0; i < cloud_host.rows; i++)
+    {
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             live[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
         }
+    }
 
     //canonical normals, under current cam pose
     cv::Mat normal_host(cloud_host.rows, cloud_host.cols, CV_32FC4);
     normals.download(normal_host.ptr<Normal>(), normal_host.step);
 
-    // canonical normals 并没有和cloud一样从当前相机视角变换到初始视角，怎么回事？
+    // canonical normals, 都在当前相机视角下进行优化
     std::vector<Vec3f> canonical_normals(normal_host.rows * normal_host.cols);
     for (int i = 0; i < normal_host.rows; i++)
+    {
         for (int j = 0; j < normal_host.cols; j++) {
             auto point = normal_host.at<Normal>(i, j);
             canonical_normals[i * normal_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
         }
+    }
 
     std::vector<Vec3f> canonical_visible(canonical);
     //从canonical 到canonical_normals
     // saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
     // std::cout<<"warp mark 1"<<std::endl;
     // 显示当前的warp参数，目前结果来看，存在优化错误，warp的translation明显错误
-    warp_->warp(canonical, canonical_normals,false);
+    warp_->warp(canonical, canonical_normals, false);
     
     //determine if node update needed
     if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
