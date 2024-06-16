@@ -250,9 +250,10 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
            std::isnan(live_vertices[i][2]))
             continue;
         // filter out error correspondence
-        std::cout<<canonical_vertices[i][0]<<","<<live_vertices[i][0]<<".."<<canonical_vertices[i][1]<<","<<live_vertices[i][1]<<std::endl;
+       
         if(fabs(canonical_vertices[i][2]-live_vertices[i][2])>0.1)
             continue;
+        std::cout<<canonical_vertices[i][0]<<","<<live_vertices[i][0]<<".."<<canonical_vertices[i][1]<<","<<live_vertices[i][1]<<std::endl;
         getWeightsAndUpdateKNN(canonical_vertices[i], weights);
         // 当前点距离node过远，不考虑用于node的位置优化
         if(weights[0]==0)
