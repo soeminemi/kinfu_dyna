@@ -312,7 +312,31 @@ void kfusion::KinFu::toPlyVec3(cv::Mat& points, cv::Mat &normals, std::string sp
         }
     }
     saveToPly(pts, nls, spath);
-    std::cout<<"point number of final cloud: "<<ptnum<<std::endl;
+}
+
+void kfusion::KinFu::toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::string spath, uint8 r, uint8 g, uint8 b)
+{
+    int ptnum = 0;
+    std::vector<cv::Vec3f> pts;
+    std::vector<cv::Vec3f> nls;
+    pts.reserve(points.rows*points.cols);
+    nls.reserve(points.rows*points.cols);
+    for (size_t i = 0; i < points.rows; i++)
+    {
+        for (size_t j = 0; j < points.cols; j++)
+        {
+            cv::Vec3f pt = points.at<cv::Vec3f>(i,j);
+            cv::Vec3f nl = points.at<cv::Vec3f>(i,j);
+            if(!isnan(pt[0]))
+            {
+                // cv::Vec3f pt = cv::Vec3f(pts[0],pts[1],pts[2]);
+                pts.push_back(pt);
+                nls.push_back(nl);
+                ptnum ++;
+            }
+        }
+    }
+    saveToPly(pts, nls, spath,r,g,b);
 }
 /**
  * \brief 将当前深度图和当前fusion的结果进行融合，计算动态warp
@@ -339,7 +363,12 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     std::vector<Vec3f> canonical_orig(cloud_host.rows * cloud_host.cols);
     auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD);
 
-    //dynamicfusion
+    //dynamicfusion的主要过程
+    // 1. 基于raycast得到当前相机视角下的点云 canonical
+    // 2. 当前视角下的深度相机获取的点云 live
+    // 3. 以上两者存在点对点的对应关系吗？canonical经过warp后的点云才和live存在点到点对应关系，但需要重新raycast才能得到
+    // 4. 将对应点转换回到初始相机坐标系下，在同一个坐标系下估计warp的值
+    // 5. 基于warp和pose，将live fuse到volume中去
 
     // To initial pose,canonical_orig用于后续优化后的psdf
     for (int i = 0; i < cloud_host.rows; i++)
@@ -347,6 +376,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
+            //
             canonical_orig[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
         }
     }
