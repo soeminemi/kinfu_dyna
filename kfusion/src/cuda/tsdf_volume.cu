@@ -132,6 +132,7 @@ namespace kfusion
 
                 float Dp = tex2D(dists_tex, coo.x, coo.y);
                 depth(coo.y, coo.x) = 0;
+                // printf("%f,%f, %f\n",coo.x*Dp, coo.y*Dp, Dp);
                 points(y, x) = make_float4(coo.x * Dp, coo.y * Dp, Dp, 0.f);
             }
         }
@@ -163,6 +164,7 @@ void kfusion::device::integrate(const Dists& dists, TsdfVolume& volume, const Af
 
 //TODO: rename as now projecting + removing from depth
 // void kfusion::device::project_and_remove(const PtrStepSz<ushort>& dists, Points &vertices, const Projector &proj)
+// 函数的主要功能为将warp后的点云，投影到当前的深度图上，并为点云重新赋值z的值
 void kfusion::device::project_and_remove(const Dists& dists, Points &vertices, const Projector &proj)
 {
     dists_tex.filterMode = cudaFilterModePoint;

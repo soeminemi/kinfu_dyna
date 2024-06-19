@@ -179,12 +179,12 @@ float kfusion::cuda::TsdfVolume::weighting(const std::vector<float>& dist_sqr, i
     return distances / k;
 }
 
-void kfusion::cuda::TsdfVolume::surface_fusion(WarpField& warp_field,
-                                               std::vector<Vec3f> warped,
-                                               std::vector<Vec3f> canonical,
-                                               cuda::Depth& depth,
-                                               const Affine3f& camera_pose,
-                                               const Intr& intr)
+void kfusion::cuda::TsdfVolume::surface_fusion(WarpField& warp_field, 
+                                               std::vector<Vec3f> warped,       //canonical point cloud warped, in the initial pose
+                                               std::vector<Vec3f> canonical,    //可见的canonical点？当前campose下的canonical点云
+                                               cuda::Depth& depth,                  //当前帧的depth数据
+                                               const Affine3f& camera_pose,     // 当前相机的位姿
+                                               const Intr& intr)                        // 相机的内参
 {
     std::vector<float> ro = psdf(warped, depth, intr);
 
@@ -231,7 +231,8 @@ std::vector<float> kfusion::cuda::TsdfVolume::psdf(const std::vector<Vec3f>& war
         point_type[i].w = 0.f;
     }
     device::Points points;
-    points.upload(point_type, dists.cols());
+    // std::cout<<"psdf: "<<warped.size()<<","<<dists.rows()<<", "<<dists.cols()<<std::endl;
+    points.upload(point_type, dists.cols());   //copy data to GPU cols() is 1280
     device::project_and_remove(dists, points, proj);
     int size;
     points.download(point_type, size);

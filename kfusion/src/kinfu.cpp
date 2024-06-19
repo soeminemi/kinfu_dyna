@@ -314,7 +314,7 @@ void kfusion::KinFu::toPlyVec3(cv::Mat& points, cv::Mat &normals, std::string sp
     saveToPly(pts, nls, spath);
 }
 
-void kfusion::KinFu::toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::string spath, uint8 r, uint8 g, uint8 b)
+void kfusion::KinFu::toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::string spath, uint8_t r, uint8_t g, uint8_t b)
 {
     int ptnum = 0;
     std::vector<cv::Vec3f> pts;
@@ -336,7 +336,7 @@ void kfusion::KinFu::toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::stri
             }
         }
     }
-    saveToPly(pts, nls, spath,r,g,b);
+    saveToPlyColor(pts, nls, spath,r,g,b);
 }
 /**
  * \brief 将当前深度图和当前fusion的结果进行融合，计算动态warp
@@ -376,7 +376,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            //
+            //获取初始帧坐标系下的canonical点云坐标
             canonical_orig[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
         }
     }
