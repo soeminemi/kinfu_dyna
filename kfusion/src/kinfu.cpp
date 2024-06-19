@@ -339,13 +339,15 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     std::vector<Vec3f> canonical_orig(cloud_host.rows * cloud_host.cols);
     auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD);
 
+    //dynamicfusion
+
     // To initial pose,canonical_orig用于后续优化后的psdf
     for (int i = 0; i < cloud_host.rows; i++)
     {
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
             canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            canonical_orig[i * cloud_host.cols + j] = canonical[i * cloud_host.cols + j];
+            canonical_orig[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
         }
     }
 
