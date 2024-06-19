@@ -394,13 +394,14 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         toPlyVec3(nd,nd,"cur_nodes.ply");
     }
     //save for debuging
-    saveToPly(canonical, canonical_normals, "canonical_aftwarp.ply");
-    saveToPly(live, canonical_normals, "live.ply");
+    saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
+    saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
     //优化warpfield
     warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
     // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
     
     warp_->warp(canonical_orig, canonical_normals);
+    saveToPlyColor(canonical_orig, canonical_normals, "aft_opt.ply",0,0,255);
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;
     tsdf().surface_fusion(getWarp(), canonical_orig, canonical_visible, depth, camera_pose, params_.intr);

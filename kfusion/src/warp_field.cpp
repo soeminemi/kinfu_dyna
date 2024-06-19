@@ -347,7 +347,7 @@ utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex)
     getWeightsAndUpdateKNN(vertex, weights);
     utils::Quaternion<float> translation_sum(0,0,0,0);
     utils::Quaternion<float> rotation_sum(0,0,0,0);
-    if(weights[0]==0)
+    if(weights[0] == 0)
     {
         auto &vt = nodes_->at(ret_index_[0]).vertex;
         std::cout<<"err knn: "<<vertex[0]<<","<<vertex[1]<<", "<<vertex[2]<<"--"<<vt[0]<<","<<vt[1]<<", "<<vt[2]<<std::endl;
