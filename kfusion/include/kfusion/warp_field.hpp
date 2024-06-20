@@ -7,7 +7,7 @@
 #include <kfusion/utils/knn_point_cloud.hpp>
 #include <kfusion/cuda/tsdf_volume.hpp>
 
-#define KNN_NEIGHBOURS 1 //when optimize the parameters ， we only need KNN_NEIGHBOURS to be 1
+#define KNN_NEIGHBOURS 4 //when optimize the parameters ， we only need KNN_NEIGHBOURS to be 1
 namespace kfusion
 {
     typedef nanoflann::KDTreeSingleIndexAdaptor<
@@ -69,6 +69,8 @@ namespace kfusion
         void warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bool flag_debug = false) ;
 
         utils::DualQuaternion<float> DQB(const Vec3f& vertex);
+        void transform_to_live(Vec3f &point);
+        void rotate_to_live(Vec3f &normal);
 
         void getWeightsAndUpdateKNN(const Vec3f& vertex, float weights[KNN_NEIGHBOURS]) const;
 

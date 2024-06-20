@@ -249,12 +249,10 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
            std::isnan(live_vertices[i][1]) ||
            std::isnan(live_vertices[i][2]))
             continue;
-        // filter out error correspondence
-       
-        if(fabs(canonical_vertices[i][2]-live_vertices[i][2])>0.1)
-            continue;
-        std::cout<<canonical_vertices[i][0]<<","<<live_vertices[i][0]<<".."<<canonical_vertices[i][1]<<","<<live_vertices[i][1]<<std::endl;
+        
+        // find the correspondence from canonical to live, i-th canonical  is not correspond to i-th live
         getWeightsAndUpdateKNN(canonical_vertices[i], weights);
+        
         // 当前点距离node过远，不考虑用于node的位置优化
         if(weights[0]==0)
         {
@@ -262,7 +260,9 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         }
 //        FIXME: could just pass ret_index
         for(int j = 0; j < KNN_NEIGHBOURS; j++)
+        {
             indices[j] = ret_index_[j];
+        }
 
         ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(live_vertices[i],
                                                                              live_normals[i],
@@ -329,12 +329,20 @@ void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bo
         point = warp_to_live_ * point;
         if(std::isnan(normals[i][0]))
             continue;
-        dqb.transform(normals[i]);
-        normals[i] = warp_to_live_ * normals[i];
-        
+        dqb.rotate(normals[i]); //only rotate the normals
+        normals[i] = warp_to_live_.rotation() * normals[i]; // only rotate the normals
     }
 }
 
+void WarpField::transform_to_live(Vec3f &point)
+{
+    point = warp_to_live_ * point;
+}
+
+void WarpField::rotate_to_live(Vec3f &normal)
+{
+    normal = warp_to_live_.rotation() * normal;
+}
 /**
  * \brief
  * \param vertex
@@ -378,6 +386,7 @@ void WarpField::getWeightsAndUpdateKNN(const Vec3f& vertex, float weights[KNN_NE
     KNN(vertex);
     for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
         weights[i] = weighting(out_dist_sqr_[i], nodes_->at(ret_index_[i]).weight);
+    //the distance is sorted from small to large
 }
 
 /**

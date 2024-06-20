@@ -359,29 +359,33 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
     cloud.download(cloud_host.ptr<Point>(), cloud_host.step);
     // 拷贝到内存，相机视角下的canonical cloud
-    std::vector<Vec3f> canonical(cloud_host.rows * cloud_host.cols);
-    std::vector<Vec3f> canonical_orig(cloud_host.rows * cloud_host.cols);
-    auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD);
+    std::vector<Vec3f> canonical_cur(cloud_host.rows * cloud_host.cols); //canonical under current cam pose
+    std::vector<Vec3f> canonical(cloud_host.rows * cloud_host.cols);     //canonical under initial cam pose
+
+    auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose
 
     //dynamicfusion的主要过程
-    // 1. 基于raycast得到当前相机视角下的点云 canonical
+    // 1. 基于raycast得到当前相机视角下的点云 canonical_cur
     // 2. 当前视角下的深度相机获取的点云 live
     // 3. 以上两者存在点对点的对应关系吗？canonical经过warp后的点云才和live存在点到点对应关系，但需要重新raycast才能得到
     // 4. 将对应点转换回到初始相机坐标系下，在同一个坐标系下估计warp的值
     // 5. 基于warp和pose，将live fuse到volume中去
 
-    // To initial pose,canonical_orig用于后续优化后的psdf
+    // 1 To initial pose,canonical_orig用于后续优化后的psdf
     for (int i = 0; i < cloud_host.rows; i++)
     {
         for (int j = 0; j < cloud_host.cols; j++) {
             auto point = cloud_host.at<Point>(i, j);
-            canonical[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
+            canonical_cur[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
             //获取初始帧坐标系下的canonical点云坐标
-            canonical_orig[i * cloud_host.cols + j] = inverse_pose * canonical[i * cloud_host.cols + j];
+            canonical[i * cloud_host.cols + j] = inverse_pose * canonical_cur[i * cloud_host.cols + j];
+            // canonical_cur[i * cloud_host.cols + j] = inverse_pose * canonical_cur[i * cloud_host.cols + j];
         }
     }
 
-    // 当前帧的cloud，当前camerapose下的当前点云
+    warp_->setWarpToLive(camera_pose);
+
+    // 2 当前帧的cloud，当前camera pose下的当前点云
     live_frame.download(cloud_host.ptr<Point>(), cloud_host.step);
     std::vector<Vec3f> live(cloud_host.rows * cloud_host.cols);
     for (int i = 0; i < cloud_host.rows; i++)
@@ -397,21 +401,23 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     normals.download(normal_host.ptr<Normal>(), normal_host.step);
 
     // canonical normals, 都在当前相机视角下进行优化
-    std::vector<Vec3f> canonical_normals(normal_host.rows * normal_host.cols);
+    std::vector<Vec3f> canonical_normals_cur(normal_host.rows * normal_host.cols); // canonical normal under current cam pose
+    std::vector<Vec3f> canonical_normals(normal_host.rows * normal_host.cols);     // canonical normal under initial cam pose
     for (int i = 0; i < normal_host.rows; i++)
     {
         for (int j = 0; j < normal_host.cols; j++) {
             auto point = normal_host.at<Normal>(i, j);
-            canonical_normals[i * normal_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
+            canonical_normals_cur[i * normal_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
+            canonical_normals[i * normal_host.cols + j] = inverse_pose.rotation() * cv::Vec3f(point.x, point.y, point.z);// TODO no translation include 
         }
     }
 
     std::vector<Vec3f> canonical_visible(canonical);
     //从canonical 到canonical_normals
-    // saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
-    // std::cout<<"warp mark 1"<<std::endl;
+    saveToPly(canonical_cur, canonical_normals_cur, "canonical_beforwarp.ply");
     // 显示当前的warp参数，目前结果来看，存在优化错误，warp的translation明显错误
-    warp_->warp(canonical, canonical_normals, false);
+
+    // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
     
     //determine if node update needed
     if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
@@ -426,17 +432,18 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         toPlyVec3(nd,nd,"cur_nodes.ply");
     }
     //save for debuging
-    saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
+    // saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
     saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
+    // 3 get the correspondence between warped canonical and live frame
     //优化warpfield
     warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
     // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
     
-    warp_->warp(canonical_orig, canonical_normals);
-    saveToPlyColor(canonical_orig, canonical_normals, "aft_opt.ply",0,0,255);
+    warp_->warp(canonical, canonical_normals);
+    saveToPlyColor(canonical, canonical_normals, "aft_opt.ply",0,0,255);
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;
-    tsdf().surface_fusion(getWarp(), canonical_orig, canonical_visible, depth, camera_pose, params_.intr);
+    tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, camera_pose, params_.intr);
     std::cout<<"download depth cloud"<<std::endl;
     cv::Mat depth_cloud(depth.rows(),depth.cols(), CV_16U);
     depth.download(depth_cloud.ptr<void>(), depth_cloud.step);

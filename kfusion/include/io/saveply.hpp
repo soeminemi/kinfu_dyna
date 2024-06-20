@@ -4,7 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <fstream>
 using namespace std;
-// #define SAVE_PLY
+#define SAVE_PLY
 //save points to ply
 void saveToPly(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &normals,std::string name)
 {

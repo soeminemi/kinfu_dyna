@@ -31,15 +31,74 @@ struct DynamicFusionDataEnergy
     {
         delete[] weights_;
         delete[] knn_indices_;
-    }
-    // 计算warp对应的loss
+    } 
+    // 计算warp对应的loss original, for comparing
+//     template <typename T>
+//     bool operator()(T const * const * epsilon_, T* residuals) const
+//     {
+//         auto nodes = warpField_->getNodes();
+
+//         T total_translation[3] = {T(0), T(0), T(0)};
+//         float total_translation_float[3] = {0, 0, 0};
+
+//         for(int i = 0; i < KNN_NEIGHBOURS; i++)
+//         {
+//             // auto quat = nodes->at(knn_indices_[i]).transform;
+//             // //---not used-----
+//             // cv::Vec3f vert;
+//             // quat.getTranslation(vert); //当前node的平移
+
+//             // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移，和node对应的平移不是一样的吗？
+
+//             // float temp[3];
+//             // quat.getTranslation(temp[0], temp[1], temp[2]);
+
+// //            total_translation[0] += (T(temp[0]) +  eps_t[0]);
+// //            total_translation[1] += (T(temp[1]) +  eps_t[1]);
+// //            total_translation[2] += (T(temp[2]) +  eps_t[2]);
+// //
+//             // total_translation[0] += (T(temp[0]) +  eps_t[0]) * T(weights_[i]);
+//             // total_translation[1] += (T(temp[1]) +  eps_t[1]) * T(weights_[i]);
+//             // total_translation[2] += (T(temp[2]) +  eps_t[2]) * T(weights_[i]);
+
+//             total_translation[0] += (epsilon_[i][3]) * T(weights_[i]);
+//             total_translation[1] += (epsilon_[i][4]) * T(weights_[i]);
+//             total_translation[2] += (epsilon_[i][5]) * T(weights_[i]);
+//             //损失函数和论文并不一致，没有使用点到面的距离
+//         }
+        
+//         residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
+//         residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
+//         residuals[2] = T(live_vertex_[2] - canonical_vertex_[2]) - total_translation[2];
+//         return true;
+//     }
+
     template <typename T>
     bool operator()(T const * const * epsilon_, T* residuals) const
     {
+        //1. got DOB of the canonical vertex
+        //2. transform the canonical vertex
+        //3. find the correspondent live vertex
+        //4. calc the loss
         auto nodes = warpField_->getNodes();
 
         T total_translation[3] = {T(0), T(0), T(0)};
         float total_translation_float[3] = {0, 0, 0};
+
+        //1. calc DQB of canonical vertex// do not calc dqb in loss funciton, calc outside
+        kfusion::utils::Quaternion<float> translation_sum(0,0,0,0);
+        kfusion::utils::Quaternion<float> rotation_sum(0,0,0,0);
+        for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
+        {
+            translation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getTranslation();
+            rotation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getRotation();
+        }
+        rotation_sum.normalize();
+        auto dqb = kfusion::utils::DualQuaternion<float>(translation_sum, rotation_sum); //Got DQB of canonical vertex
+        //2. transform canonical vertex
+        auto tv = dqb.transform(canonical_vertex_);
+        warpField_->transform_to_live(tv);
+        //3. find the corresponding live vertex
 
         for(int i = 0; i < KNN_NEIGHBOURS; i++)
         {

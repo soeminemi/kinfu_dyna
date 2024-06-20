@@ -2,7 +2,7 @@
 #define DYNAMIC_FUSION_DUAL_QUATERNION_HPP
 #include<iostream>
 #include<kfusion/utils/quaternion.hpp>
-
+#include <kfusion/utils/dual_quaternion.hpp>
 //Adapted from https://github.com/Poofjunior/QPose
 /**
  * \brief a dual quaternion class for encoding transformations.
@@ -208,7 +208,19 @@ namespace kfusion {
                 rotation_.rotate(point);
                 point += translation;
             }
-
+            Vec3f transform(const Vec3f& point) // TODO: this should be a lot more generic
+            {
+                Vec3f translation, tp;
+                tp = point;
+                getTranslation(translation);
+                rotation_.rotate(tp);
+                tp += translation;
+                return tp;
+            }
+            void rotate(Vec3f &normal) //ADDED BY JOHN
+            {
+                rotation_.rotate(normal);
+            }
             void from_twist(const float &r0, const float &r1, const float &r2,
                             const float &x, const float &y, const float &z)
             {
