@@ -244,10 +244,11 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     {
         if(std::isnan(canonical_vertices[i][0]) ||
            std::isnan(canonical_vertices[i][1]) ||
-           std::isnan(canonical_vertices[i][2]) ||
-           std::isnan(live_vertices[i][0]) ||
-           std::isnan(live_vertices[i][1]) ||
-           std::isnan(live_vertices[i][2]))
+           std::isnan(canonical_vertices[i][2]) //||
+        //    std::isnan(live_vertices[i][0]) ||
+        //    std::isnan(live_vertices[i][1]) ||
+        //    std::isnan(live_vertices[i][2]))
+        )
             continue;
         
         // find the correspondence from canonical to live, i-th canonical  is not correspond to i-th live
@@ -264,8 +265,8 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
             indices[j] = ret_index_[j];
         }
 
-        ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(live_vertices[i],
-                                                                             live_normals[i],
+        ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(&live_vertices,
+                                                                             &live_normals,
                                                                              canonical_vertices[i],
                                                                              canonical_normals[i],
                                                                              this,
@@ -465,7 +466,11 @@ void WarpField::setWarpToLive(const Affine3f &pose)
 {
     warp_to_live_ = pose;
 }
-
+void WarpField::setProject(float fx, float fy, float cx, float cy)
+{
+     Project proj(fx, fy, cx, cy);
+     projector_ = proj;
+}
 std::vector<float>* WarpField::getDistSquared() const
 {
     return &out_dist_sqr_;
@@ -473,4 +478,26 @@ std::vector<float>* WarpField::getDistSquared() const
 std::vector<size_t>* WarpField::getRetIndex() const
 {
     return &ret_index_;
+}
+
+kfusion::Project::Project(float fx, float fy, float cx, float cy) : f(cv::Vec2f(fx, fy)), c(cv::Vec2f(cx, cy)) {}
+
+cv::Vec2f kfusion::Project::operator()(const cv::Vec3f& p) 
+{
+ cv::Vec2f coo;
+ coo[0] = p[0] * f[0] / p[2] + c[0];
+ coo[1] = p[1] * f[1] / p[2] + c[1];
+ return coo;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Reprojector host implementation
+
+kfusion::Reproject::Reproject(float fx, float fy, float cx, float cy) : finv(cv::Vec2f(1.f/fx, 1.f/fy)), c(cv::Vec2f(cx, cy)) {}
+
+cv::Vec3f kfusion::Reproject::operator()(int u, int v, float z)
+{
+ float x = z * (u - c[0]) * finv[0];
+ float y = z * (v - c[1]) * finv[1];
+ return cv::Vec3f(x, y, z);
 }

@@ -345,6 +345,9 @@ void kfusion::KinFu::toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::stri
  */
 void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals)
 {
+    warp_->setProject(params_.intr.fx,params_.intr.fy,params_.intr.cx,params_.intr.cy);
+    warp_->image_width = params_.cols;
+    warp_->image_height = params_.rows;
     // depth live_frame以及current_normals为当前获取的深度图以及对应的点云及每个点的法向量
     // current_normals没有使用，计算loss时使用canonical的法向量
     //1. 获取当前liveframe的相机pose下，fusion结果的成像图，得到点云及对应的法线
@@ -363,7 +366,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     std::vector<Vec3f> canonical(cloud_host.rows * cloud_host.cols);     //canonical under initial cam pose
 
     auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose
-
+    warp_->aff_inv = inverse_pose;
     //dynamicfusion的主要过程
     // 1. 基于raycast得到当前相机视角下的点云 canonical_cur
     // 2. 当前视角下的深度相机获取的点云 live
@@ -419,7 +422,15 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
 
     // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
     
-    //determine if node update needed
+    //save for debuging
+    // saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
+    saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
+    // 3 get the correspondence between warped canonical and live frame
+    //优化warpfield
+    warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
+    // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
+    
+    warp_->warp(canonical, canonical_normals);
     if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
     {
         cv::Mat frame_init;
@@ -431,15 +442,6 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         auto nd = warp_->getNodesAsMat();
         toPlyVec3(nd,nd,"cur_nodes.ply");
     }
-    //save for debuging
-    // saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
-    saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
-    // 3 get the correspondence between warped canonical and live frame
-    //优化warpfield
-    warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
-    // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
-    
-    warp_->warp(canonical, canonical_normals);
     saveToPlyColor(canonical, canonical_normals, "aft_opt.ply",0,0,255);
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;

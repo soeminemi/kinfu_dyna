@@ -6,8 +6,8 @@
 
 struct DynamicFusionDataEnergy
 {
-    DynamicFusionDataEnergy(const cv::Vec3f& live_vertex,
-                            const cv::Vec3f& live_normal,
+    DynamicFusionDataEnergy(const std::vector<cv::Vec3f>* live_vertex,
+                            const std::vector<cv::Vec3f>* live_normal,
                             const cv::Vec3f& canonical_vertex,
                             const cv::Vec3f& canonical_normal,
                             kfusion::WarpField *warpField,
@@ -99,36 +99,39 @@ struct DynamicFusionDataEnergy
         auto tv = dqb.transform(canonical_vertex_);
         warpField_->transform_to_live(tv);
         //3. find the corresponding live vertex
-
-        for(int i = 0; i < KNN_NEIGHBOURS; i++)
+        auto live_coo = warpField_->projector_(tv);
+        auto idx = round(live_coo[0]) + round(live_coo[1]) * warpField_->image_width;
+        if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
         {
-            // auto quat = nodes->at(knn_indices_[i]).transform;
-            // //---not used-----
-            // cv::Vec3f vert;
-            // quat.getTranslation(vert); //当前node的平移
-
-            // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移，和node对应的平移不是一样的吗？
-
-            // float temp[3];
-            // quat.getTranslation(temp[0], temp[1], temp[2]);
-
-//            total_translation[0] += (T(temp[0]) +  eps_t[0]);
-//            total_translation[1] += (T(temp[1]) +  eps_t[1]);
-//            total_translation[2] += (T(temp[2]) +  eps_t[2]);
-//
-            // total_translation[0] += (T(temp[0]) +  eps_t[0]) * T(weights_[i]);
-            // total_translation[1] += (T(temp[1]) +  eps_t[1]) * T(weights_[i]);
-            // total_translation[2] += (T(temp[2]) +  eps_t[2]) * T(weights_[i]);
-
-            total_translation[0] += (epsilon_[i][3]) * T(weights_[i]);
-            total_translation[1] += (epsilon_[i][4]) * T(weights_[i]);
-            total_translation[2] += (epsilon_[i][5]) * T(weights_[i]);
-            //损失函数和论文并不一致，没有使用点到面的距离
+            residuals[0] = T(0);
+            return true;
         }
-        
-        residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
-        residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
-        residuals[2] = T(live_vertex_[2] - canonical_vertex_[2]) - total_translation[2];
+        auto live_vt = (*live_vertex_)[idx];
+        if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
+        {
+            residuals[0] = T(0);
+            return true;
+        }
+        //4. 获得DQB，考虑到只优化一个，不用加权了
+        // T temp_rotation[9];
+//         for(int i = 0; i < /*KNN_NEIGHBOURS*/1; i++)
+//         {
+//             // T eular[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]};
+//             // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移
+//             // EulerAnglesToRotationMatrix(eular, temp_rotation);
+//         }
+        T eular[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]};
+        T eps_t[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的平移
+        // EulerAnglesToRotationMatrix(eular, temp_rotation);
+        T cano_v[3] = {T(canonical_vertex_[0]),T(canonical_vertex_[1]),T(canonical_vertex_[2])};
+        auto ipose_live_v = warpField_->aff_inv * live_vt; //transform to the initial pose 
+        T live_v[3] = {T(ipose_live_v[0]),T(ipose_live_v[1]),T(ipose_live_v[2])};
+        T cano_n[3] = {T(canonical_normal_[0]),T(canonical_normal_[1]),T(canonical_normal_[2])};
+
+        residuals[0] =cano_n[0] * (cano_v[0] + eps_t[0] -live_v[0]) + cano_n[1] * (cano_v[1]+ eps_t[1] -live_v[1]) + cano_n[2] * (cano_v[2]+ eps_t[2]-live_v[2]);
+        // residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
+        // residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
+        // residuals[2] = T(live_vertex_[2] - canonical_vertex_[2]) - total_translation[2];
         return true;
     }
 
@@ -154,8 +157,8 @@ struct DynamicFusionDataEnergy
     // Factory to hide the construction of the CostFunction object from
     // the client code.
     // TODO: this will only have one residual at the end, remember to change
-    static ceres::CostFunction* Create(const cv::Vec3f& live_vertex,
-                                       const cv::Vec3f& live_normal,
+    static ceres::CostFunction* Create(const std::vector<cv::Vec3f>* live_vertex,
+                                       const std::vector<cv::Vec3f>* live_normal,
                                        const cv::Vec3f& canonical_vertex,
                                        const cv::Vec3f& canonical_normal,
                                        kfusion::WarpField* warpField,
@@ -170,13 +173,13 @@ struct DynamicFusionDataEnergy
                                             warpField,
                                             weights,
                                             ret_index));
-        for(int i=0; i < KNN_NEIGHBOURS; i++)
+        for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(3);
+        cost_function->SetNumResiduals(1);
         return cost_function;
     }
-    const cv::Vec3f live_vertex_;
-    const cv::Vec3f live_normal_;
+    const std::vector<cv::Vec3f> *live_vertex_;
+    const std::vector<cv::Vec3f> *live_normal_;
     const cv::Vec3f canonical_vertex_;
     const cv::Vec3f canonical_normal_;
 
@@ -184,6 +187,8 @@ struct DynamicFusionDataEnergy
     unsigned long *knn_indices_;
 
     kfusion::WarpField *warpField_;
+
+    kfusion::utils::DualQuaternion<float> dqb_;
 };
 
 struct DynamicFusionRegEnergy
@@ -285,8 +290,10 @@ public:
     {
         for(int i = 0; i < warpField_->getNodes()->size() * 6; i+=6)
         {
+            //增量式更新
+            auto tr =  warpField_->getNodes()->at(i / 6).transform.getTranslation();
             warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i],parameters_[i+1],parameters_[i+2]);
-            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3],parameters_[i+4],parameters_[i+5]);
+            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3]+tr.x_,parameters_[i+4]+tr.y_,parameters_[i+5]+tr.z_);
         }
     }
 

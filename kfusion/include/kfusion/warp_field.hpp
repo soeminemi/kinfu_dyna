@@ -40,6 +40,23 @@ namespace kfusion
         float weight = 0;
     }; 
 
+//投影到图像
+    struct Project
+    {
+        cv::Vec2f f, c;
+        Project(){}
+        Project(float fx, float fy, float cx, float cy);
+        cv::Vec2f operator()(const cv::Vec3f& p) ;
+    };
+//从图像反投影
+    struct Reproject
+    {
+        Reproject() {}
+        Reproject(float fx, float fy, float cx, float cy);
+        cv::Vec2f finv, c;
+        cv::Vec3f operator()(int x, int y, float z) ;
+    };
+
     class WarpField
     {
     public:
@@ -88,6 +105,7 @@ namespace kfusion
         void buildKDTree();
         void expand_nodesflag(const int x, const int y, const int z, const int exp_len);
         bool get_volume_flag(const int &x, const int &y, const int &z);
+        void setProject(float fx, float fy, float cx, float cy);
 
     private:
         std::vector<deformation_node>* nodes_;
@@ -100,6 +118,10 @@ namespace kfusion
         int exp_len_;
     public:
         bool flag_exp;
+        Project projector_;
+        int image_width;
+        int image_height;
+        Affine3f aff_inv;
     };
 }
 #endif //KFUSION_WARP_FIELD_HPP
