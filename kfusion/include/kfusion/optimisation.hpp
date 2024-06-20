@@ -88,10 +88,19 @@ struct DynamicFusionDataEnergy
         //1. calc DQB of canonical vertex// do not calc dqb in loss funciton, calc outside
         kfusion::utils::Quaternion<float> translation_sum(0,0,0,0);
         kfusion::utils::Quaternion<float> rotation_sum(0,0,0,0);
-        for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
+        if(weights_[0] == 0)
         {
-            translation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getTranslation();
-            rotation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getRotation();
+            translation_sum += 1 * nodes->at(knn_indices_[0]).transform.getTranslation();
+            rotation_sum += 1 * nodes->at(knn_indices_[0]).transform.getRotation();
+        }
+        else
+        {
+            for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
+            {
+                
+                translation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getTranslation();
+                rotation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getRotation();
+            }
         }
         rotation_sum.normalize();
         auto dqb = kfusion::utils::DualQuaternion<float>(translation_sum, rotation_sum); //Got DQB of canonical vertex
@@ -218,9 +227,9 @@ struct DynamicFusionRegEnergy
     {
         auto cost_function = new ceres::DynamicAutoDiffCostFunction<DynamicFusionRegEnergy, 4>(
                 new DynamicFusionRegEnergy());
-        for(int i=0; i < KNN_NEIGHBOURS; i++)
+        for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(3);
+        cost_function->SetNumResiduals(1);
         return cost_function;
     }
 };
@@ -263,8 +272,8 @@ public:
     }
     std::vector<double*> mutable_epsilon(const unsigned long *index_list) const
     {
-        std::vector<double*> mutable_epsilon_(KNN_NEIGHBOURS);
-        for(int i = 0; i < KNN_NEIGHBOURS; i++)
+        std::vector<double*> mutable_epsilon_(/*KNN_NEIGHBOURS*/1);
+        for(int i = 0; i < 1/*KNN_NEIGHBOURS*/; i++)
             mutable_epsilon_[i] = &(parameters_[index_list[i] * 6]); // Blocks of 6
         return mutable_epsilon_;
     }

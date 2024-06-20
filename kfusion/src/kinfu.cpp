@@ -421,17 +421,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     // 显示当前的warp参数，目前结果来看，存在优化错误，warp的translation明显错误
 
     // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
-    
-    //save for debuging
-    // saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
-    saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
-    // 3 get the correspondence between warped canonical and live frame
-    //优化warpfield
-    warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
-    // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
-    
-    warp_->warp(canonical, canonical_normals);
-    if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
+    if(true) //当warp点云的时候出现距离node过远的点时，扩展当前点云
     {
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
@@ -442,6 +432,27 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         auto nd = warp_->getNodesAsMat();
         toPlyVec3(nd,nd,"cur_nodes.ply");
     }
+    //save for debuging
+    // saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
+    saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
+    // 3 get the correspondence between warped canonical and live frame
+    //优化warpfield
+    warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
+    // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
+    
+    std::cout<<"try to warp"<<std::endl;
+    warp_->warp(canonical, canonical_normals);
+    // if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
+    // {
+    //     cv::Mat frame_init;
+    //     volume_->computePoints(frame_init);
+    //     auto aff = volume_->getPose();
+    //     aff = aff.inv();
+    //     warp_->update_deform_node(frame_init, aff);
+    //     //存扩展后的nodes
+    //     auto nd = warp_->getNodesAsMat();
+    //     toPlyVec3(nd,nd,"cur_nodes.ply");
+    // }
     saveToPlyColor(canonical, canonical_normals, "aft_opt.ply",0,0,255);
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;

@@ -363,7 +363,7 @@ utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex)
     }
     for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
     {
-        if(KNN_NEIGHBOURS == 1)
+        if(weights[0] == 0)
         {
             weights[0] = 1;
             flag_exp = true;
