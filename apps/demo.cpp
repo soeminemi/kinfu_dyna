@@ -106,9 +106,9 @@ public:
         std::sort(images.begin(), images.end());
 
         pause_ = true;
-        for (int i = 0; i < depths.size() && !exit_ ; ++i)
+        for (int i = 60; i < depths.size() && !exit_ ; ++i)
         { 
-            if(i>20)
+            if(i>310)
                 exit_ = true;
             frame_idx = i;
             std::cout<<"frame: "<<i<<std::endl;

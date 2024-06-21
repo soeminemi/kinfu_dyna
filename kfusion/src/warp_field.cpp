@@ -84,7 +84,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
     nodes_->reserve(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
-    exp_len_ = 0.015/voxel_size;
+    exp_len_ = 0.025/voxel_size;
 // //    FIXME:: this is a test, remove later
 //     voxel_size = 1;
     std::cout<<"start to init nodes, expand length: "<<exp_len_<<std::endl;
@@ -240,7 +240,9 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     unsigned long indices[KNN_NEIGHBOURS];
 
     WarpProblem warpProblem(this);
-    for(int i = 0; i < live_vertices.size(); i++)
+    int tnum = 0;
+    total_err = 0;
+    for(int i = 0; i < canonical_vertices.size(); i++)
     {
         if(std::isnan(canonical_vertices[i][0]) ||
            std::isnan(canonical_vertices[i][1]) ||
@@ -264,7 +266,14 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         {
             indices[j] = ret_index_[j];
         }
-
+        // if(tnum>100 && tnum<150)
+            testCorrrespondence(&live_vertices,
+                            &live_normals,
+                            canonical_vertices[i],
+                            canonical_normals[i],
+                            this,
+                            weights,
+                            indices);
         ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(&live_vertices,
                                                                              &live_normals,
                                                                              canonical_vertices[i],
@@ -272,17 +281,19 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                                                                              this,
                                                                              weights,
                                                                              indices);
-        problem.AddResidualBlock(cost_function,  NULL /* squared loss */, warpProblem.mutable_epsilon(indices));
+        problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.01) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
 
+        tnum ++;
     }
+    std::cout<<"total error before opt: "<<total_err<<std::endl;
     //基于ceres求解warpField
     ceres::Solver::Options options;
 //    options.minimizer_type = ceres::TRUST_REGION;
     options.linear_solver_type = ceres::SPARSE_SCHUR;
     options.minimizer_progress_to_stdout = true;
-    options.max_num_iterations = 3;
+    options.max_num_iterations = 5;
     // options.num_linear_solver_threads = 8;
-    options.num_threads = 8;
+    options.num_threads = 32;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << std::endl;
@@ -292,6 +303,44 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     //     auto node = nodes_->at(i);
     //     std::cout<<node.transform<<std::endl;
     // }
+    // for test
+    tnum = 0;
+    total_err  = 0;
+    for(int i = 0; i < canonical_vertices.size(); i++)
+    {
+        if(std::isnan(canonical_vertices[i][0]) ||
+           std::isnan(canonical_vertices[i][1]) ||
+           std::isnan(canonical_vertices[i][2]) //||
+        //    std::isnan(live_vertices[i][0]) ||
+        //    std::isnan(live_vertices[i][1]) ||
+        //    std::isnan(live_vertices[i][2]))
+        )
+            continue;
+        
+        // find the correspondence from canonical to live, i-th canonical  is not correspond to i-th live
+        getWeightsAndUpdateKNN(canonical_vertices[i], weights);
+        
+        // 当前点距离node过远，不考虑用于node的位置优化
+        if(weights[0]==0)
+        {
+            continue;
+        }
+//        FIXME: could just pass ret_index
+        for(int j = 0; j < KNN_NEIGHBOURS; j++)
+        {
+            indices[j] = ret_index_[j];
+        }
+        // if(tnum>100 && tnum<150)
+            testCorrrespondence(&live_vertices,
+                            &live_normals,
+                            canonical_vertices[i],
+                            canonical_normals[i],
+                            this,
+                            weights,
+                            indices);
+        tnum ++;
+    }
+    std::cout<<"total error after opt: "<<total_err<<std::endl;
 }
 /**
  * \brief
@@ -303,7 +352,20 @@ void WarpField::energy_reg(const std::vector<std::pair<kfusion::utils::DualQuate
 
 }
 
-
+void WarpField::getWarpedNode(std::vector<Vec3f> &warp_nodes)
+{
+    warp_nodes.clear();
+    warp_nodes.reserve(nodes_->size());
+    for (auto &node : (*nodes_))
+    {
+        auto point = node.vertex;
+        if(std::isnan(point[0]) /*|| std::isnan(normals[i][0])*/)
+            continue;
+        utils::DualQuaternion<float> dqb = DQB(point); 
+        dqb.transform(point);
+        warp_nodes.push_back(point);
+    }
+}
 /**
  *
  * @param points
@@ -312,7 +374,9 @@ void WarpField::energy_reg(const std::vector<std::pair<kfusion::utils::DualQuate
 void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bool flag_debug) 
 {
     flag_exp = false;
+    fail_num = 0;
     int i = -1;
+    int total_num = 0;
     for (auto& point : points)
     {
         i++;
@@ -332,7 +396,9 @@ void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bo
             continue;
         dqb.rotate(normals[i]); //only rotate the normals
         normals[i] = warp_to_live_.rotation() * normals[i]; // only rotate the normals
+        total_num ++;
     }
+    std::cout<<"warp node fail number: "<<fail_num <<" / "<<total_num << std::endl;
 }
 
 void WarpField::transform_to_live(Vec3f &point)
@@ -356,15 +422,12 @@ utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex)
     getWeightsAndUpdateKNN(vertex, weights);
     utils::Quaternion<float> translation_sum(0,0,0,0);
     utils::Quaternion<float> rotation_sum(0,0,0,0);
-    if(weights[0] == 0)
-    {
-        auto &vt = nodes_->at(ret_index_[0]).vertex;
-        std::cout<<"err knn: "<<vertex[0]<<","<<vertex[1]<<", "<<vertex[2]<<"--"<<vt[0]<<","<<vt[1]<<", "<<vt[2]<<std::endl;
-    }
+
     for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
     {
-        if(weights[0] == 0)
+        if(weights[0] <= 0.001)
         {
+            fail_num ++;
             weights[0] = 1;
             flag_exp = true;
         }
@@ -471,6 +534,68 @@ void WarpField::setProject(float fx, float fy, float cx, float cy)
      Project proj(fx, fy, cx, cy);
      projector_ = proj;
 }
+
+
+
+
+
+
+
+bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
+                            const std::vector<cv::Vec3f>* live_normal_,
+                            const cv::Vec3f& canonical_vertex_,
+                            const cv::Vec3f& canonical_normal_,
+                            kfusion::WarpField *warpField_,
+                            const float weights_[KNN_NEIGHBOURS],
+                            const unsigned long knn_indices_[KNN_NEIGHBOURS])
+{
+    auto nodes = warpField_->getNodes();
+    //1. calc DQB of canonical vertex// do not calc dqb in loss funciton, calc outside
+    kfusion::utils::Quaternion<float> translation_sum(0,0,0,0);
+    kfusion::utils::Quaternion<float> rotation_sum(0,0,0,0);
+    if(weights_[0] <= 0.01)
+    {
+        translation_sum += 1 * nodes->at(knn_indices_[0]).transform.getTranslation();
+        rotation_sum += 1 * nodes->at(knn_indices_[0]).transform.getRotation();
+    }
+    else
+    {
+        for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
+        {
+            
+            translation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getTranslation();
+            rotation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getRotation();
+        }
+    }
+    rotation_sum.normalize();
+    auto dqb = kfusion::utils::DualQuaternion<float>(translation_sum, rotation_sum); //Got DQB of canonical vertex
+    //2. transform canonical vertex
+    auto tv = dqb.transform(canonical_vertex_);
+    auto warp_cv = tv;
+    auto warp_cn = dqb.rotate(canonical_normal_);
+    warpField_->transform_to_live(tv);
+    //3. find the corresponding live vertex
+    auto live_coo = warpField_->projector_(tv);
+    auto idx = round(live_coo[0]) + round(live_coo[1]) * warpField_->image_width;
+    if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
+    {
+        return true;
+    }
+    auto live_vt = (*live_vertex_)[idx];
+    if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
+    {
+        return true;
+    };
+    auto ipose_live_v = warpField_->aff_inv * live_vt;
+    // std::cout<<warp_cv<<", "<<ipose_live_v<<std::endl;
+    auto dv = (warp_cv - ipose_live_v);
+    auto loss = sqrt(dv.dot(dv));
+    total_err += loss;
+}
+
+
+
+
 std::vector<float>* WarpField::getDistSquared() const
 {
     return &out_dist_sqr_;

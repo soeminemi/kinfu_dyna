@@ -159,15 +159,18 @@ DeviceArray<Point> kfusion::cuda::TsdfVolume::fetchCloud(DeviceArray<Point>& clo
 
 void kfusion::cuda::TsdfVolume::fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals) const
 {
+    std::cout<<"fn called"<<std::endl;
     normals.create(cloud.size());
+    std::cout<<"mark 1"<<std::endl;
     DeviceArray<device::Point>& c = (DeviceArray<device::Point>&)cloud;
 
     device::Vec3i dims = device_cast<device::Vec3i>(dims_);
     device::Vec3f vsz  = device_cast<device::Vec3f>(getVoxelSize());
     device::Aff3f aff  = device_cast<device::Aff3f>(pose_);
     device::Mat3f Rinv = device_cast<device::Mat3f>(pose_.rotation().inv(cv::DECOMP_SVD));
-
+    std::cout<<"mark 2"<<std::endl;
     device::TsdfVolume volume((device::TsdfVolume::elem_type*)data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
+    std::cout<<"extract normals"<<std::endl;
     device::extractNormals(volume, c, aff, Rinv, gradient_delta_factor_, (float4*)normals.ptr());
 }
 
@@ -263,8 +266,11 @@ void kfusion::cuda::TsdfVolume::compute_points()
 
 void kfusion::cuda::TsdfVolume::compute_normals()
 {
+    std::cout<<"fetch normal"<<std::endl;
     fetchNormals(*cloud_, *normal_buffer_);
+    std::cout<<"assign normal host"<<std::endl;
     *normal_host_ = cv::Mat(1, (int)cloud_->size(), CV_32FC4);
+    std::cout<<"download normal"<<std::endl;
     normal_buffer_->download(normal_host_->ptr<Normal>());
 }
 

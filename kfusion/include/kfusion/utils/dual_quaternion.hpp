@@ -217,6 +217,12 @@ namespace kfusion {
                 tp += translation;
                 return tp;
             }
+            Vec3f rotate(const Vec3f &normal) //ADDED BY JOHN
+            {
+                auto rtn = normal;
+                rotation_.rotate(rtn);
+                return rtn;
+            }
             void rotate(Vec3f &normal) //ADDED BY JOHN
             {
                 rotation_.rotate(normal);

@@ -84,7 +84,7 @@ namespace kfusion
                 kfusion::utils::DualQuaternion<float>>> &edges);
 
         void warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bool flag_debug = false) ;
-
+        void getWarpedNode(std::vector<Vec3f> &warp_nodes);
         utils::DualQuaternion<float> DQB(const Vec3f& vertex);
         void transform_to_live(Vec3f &point);
         void rotate_to_live(Vec3f &normal);
@@ -107,6 +107,17 @@ namespace kfusion
         bool get_volume_flag(const int &x, const int &y, const int &z);
         void setProject(float fx, float fy, float cx, float cy);
 
+        // test correspondence
+        bool testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
+                            const std::vector<cv::Vec3f>* live_normal_,
+                            const cv::Vec3f& canonical_vertex_,
+                            const cv::Vec3f& canonical_normal_,
+                            kfusion::WarpField *warpField_,
+                            const float weights_[KNN_NEIGHBOURS],
+                            const unsigned long knn_indices_[KNN_NEIGHBOURS]);
+            
+    
+
     private:
         std::vector<deformation_node>* nodes_;
         kd_tree_t* index_;
@@ -116,7 +127,9 @@ namespace kfusion
         int vdim_y;
         int vdim_z;
         int exp_len_;
+        double total_err;
     public:
+        int fail_num;
         bool flag_exp;
         Project projector_;
         int image_width;

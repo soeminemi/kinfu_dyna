@@ -81,14 +81,10 @@ struct DynamicFusionDataEnergy
         //3. find the correspondent live vertex
         //4. calc the loss
         auto nodes = warpField_->getNodes();
-
-        T total_translation[3] = {T(0), T(0), T(0)};
-        float total_translation_float[3] = {0, 0, 0};
-
         //1. calc DQB of canonical vertex// do not calc dqb in loss funciton, calc outside
         kfusion::utils::Quaternion<float> translation_sum(0,0,0,0);
         kfusion::utils::Quaternion<float> rotation_sum(0,0,0,0);
-        if(weights_[0] == 0)
+        if(weights_[0] <= 0.01)
         {
             translation_sum += 1 * nodes->at(knn_indices_[0]).transform.getTranslation();
             rotation_sum += 1 * nodes->at(knn_indices_[0]).transform.getRotation();
@@ -106,6 +102,8 @@ struct DynamicFusionDataEnergy
         auto dqb = kfusion::utils::DualQuaternion<float>(translation_sum, rotation_sum); //Got DQB of canonical vertex
         //2. transform canonical vertex
         auto tv = dqb.transform(canonical_vertex_);
+        auto warp_cv = tv;
+        auto warp_cn = dqb.rotate(canonical_normal_);
         warpField_->transform_to_live(tv);
         //3. find the corresponding live vertex
         auto live_coo = warpField_->projector_(tv);
@@ -129,15 +127,21 @@ struct DynamicFusionDataEnergy
 //             // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移
 //             // EulerAnglesToRotationMatrix(eular, temp_rotation);
 //         }
-        T eular[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]};
+        T eular[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的Eular angle
         T eps_t[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的平移
         // EulerAnglesToRotationMatrix(eular, temp_rotation);
-        T cano_v[3] = {T(canonical_vertex_[0]),T(canonical_vertex_[1]),T(canonical_vertex_[2])};
+        T cano_v[3] = {T(warp_cv[0]),T(warp_cv[1]),T(warp_cv[2])};
         auto ipose_live_v = warpField_->aff_inv * live_vt; //transform to the initial pose 
         T live_v[3] = {T(ipose_live_v[0]),T(ipose_live_v[1]),T(ipose_live_v[2])};
-        T cano_n[3] = {T(canonical_normal_[0]),T(canonical_normal_[1]),T(canonical_normal_[2])};
-
-        residuals[0] =cano_n[0] * (cano_v[0] + eps_t[0] -live_v[0]) + cano_n[1] * (cano_v[1]+ eps_t[1] -live_v[1]) + cano_n[2] * (cano_v[2]+ eps_t[2]-live_v[2]);
+        T cano_n[3] = {T(warp_cn[0]),T(warp_cn[1]),T(warp_cn[2])};
+        // if(fabs(ipose_live_v[2]-canonical_vertex_[2])>0.1)
+        // {
+        //     residuals[0] = T(0.1);
+        // }
+        // else
+        {
+            residuals[0] =cano_n[0] * (cano_v[0] + eps_t[0] -live_v[0]) + cano_n[1] * (cano_v[1]+ eps_t[1] -live_v[1]) + cano_n[2] * (cano_v[2]+ eps_t[2]-live_v[2]);
+        }
         // residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
         // residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
         // residuals[2] = T(live_vertex_[2] - canonical_vertex_[2]) - total_translation[2];
@@ -254,16 +258,24 @@ public:
             // parameters_[i+3] = x;
             // parameters_[i+4] = y;
             // parameters_[i+5] = z;
+            // // 旋转
+            // transform.getRotation().getRodrigues(x,y,z);
+            // parameters_[i] = x;
+            // parameters_[i+1] = y;
+            // parameters_[i+2] = z;
+            // // 平移
+            // transform.getTranslation(x,y,z);
+            // parameters_[i+3] = x;
+            // parameters_[i+4] = y;
+            // parameters_[i+5] = z;
             // 旋转
-            transform.getRotation().getRodrigues(x,y,z);
-            parameters_[i] = x;
-            parameters_[i+1] = y;
-            parameters_[i+2] = z;
+            parameters_[i] = 0;
+            parameters_[i+1] = 0;
+            parameters_[i+2] = 0;
             // 平移
-            transform.getTranslation(x,y,z);
-            parameters_[i+3] = x;
-            parameters_[i+4] = y;
-            parameters_[i+5] = z;
+            parameters_[i+3] = 0;
+            parameters_[i+4] = 0;
+            parameters_[i+5] = 0;
         }
     };
 
@@ -300,9 +312,11 @@ public:
         for(int i = 0; i < warpField_->getNodes()->size() * 6; i+=6)
         {
             //增量式更新
-            auto tr =  warpField_->getNodes()->at(i / 6).transform.getTranslation();
-            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i],parameters_[i+1],parameters_[i+2]);
-            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3]+tr.x_,parameters_[i+4]+tr.y_,parameters_[i+5]+tr.z_);
+            float tx, ty, tz, ta, tb, tc;
+            warpField_->getNodes()->at(i / 6).transform.getTranslation(tx, ty, tz);
+            warpField_->getNodes()->at(i / 6).transform.getRotation().getRodrigues(ta,tb,tc);
+            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i] + ta, parameters_[i+1] + tb, parameters_[i+2] + tc);
+            warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3]+tx,parameters_[i+4]+ty,parameters_[i+5]+tz);
         }
     }
 

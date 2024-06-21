@@ -22,7 +22,7 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     p.rows = 780;  //pixels
     p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
     
-    p.volume_dims = Vec3i::all(512);  //number of voxels
+    p.volume_dims = Vec3i::all(256);  //number of voxels
     p.volume_size = Vec3f::all(1.8f);  //meters
     p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 1.2f)); //设置初始
 
@@ -348,25 +348,23 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     warp_->setProject(params_.intr.fx,params_.intr.fy,params_.intr.cx,params_.intr.cy);
     warp_->image_width = params_.cols;
     warp_->image_height = params_.rows;
-    // depth live_frame以及current_normals为当前获取的深度图以及对应的点云及每个点的法向量
-    // current_normals没有使用，计算loss时使用canonical的法向量
-    //1. 获取当前liveframe的相机pose下，fusion结果的成像图，得到点云及对应的法线
+    //1. prepare some vars
     cuda::Cloud cloud;
     cuda::Normals normals;
     cloud.create(depth.rows(), depth.cols());
     normals.create(depth.rows(), depth.cols());
+    cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
     auto camera_pose = poses_.back();
+    auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose
+    warp_->aff_inv = inverse_pose;
+    warp_->setWarpToLive(camera_pose);
     // 投影到当前相机视角下的canonical空间点云,通过光线追踪得到当前相机pose下的cloud和normals
     tsdf().raycast(camera_pose, params_.intr, cloud, normals);
-    // 将点云从显存拷贝到内存上
-    cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
     cloud.download(cloud_host.ptr<Point>(), cloud_host.step);
-    // 拷贝到内存，相机视角下的canonical cloud
+    
     std::vector<Vec3f> canonical_cur(cloud_host.rows * cloud_host.cols); //canonical under current cam pose
     std::vector<Vec3f> canonical(cloud_host.rows * cloud_host.cols);     //canonical under initial cam pose
 
-    auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose
-    warp_->aff_inv = inverse_pose;
     //dynamicfusion的主要过程
     // 1. 基于raycast得到当前相机视角下的点云 canonical_cur
     // 2. 当前视角下的深度相机获取的点云 live
@@ -374,7 +372,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     // 4. 将对应点转换回到初始相机坐标系下，在同一个坐标系下估计warp的值
     // 5. 基于warp和pose，将live fuse到volume中去
 
-    // 1 To initial pose,canonical_orig用于后续优化后的psdf
+    // 1. 
     for (int i = 0; i < cloud_host.rows; i++)
     {
         for (int j = 0; j < cloud_host.cols; j++) {
@@ -382,11 +380,8 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
             canonical_cur[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
             //获取初始帧坐标系下的canonical点云坐标
             canonical[i * cloud_host.cols + j] = inverse_pose * canonical_cur[i * cloud_host.cols + j];
-            // canonical_cur[i * cloud_host.cols + j] = inverse_pose * canonical_cur[i * cloud_host.cols + j];
         }
     }
-
-    warp_->setWarpToLive(camera_pose);
 
     // 2 当前帧的cloud，当前camera pose下的当前点云
     live_frame.download(cloud_host.ptr<Point>(), cloud_host.step);
@@ -416,32 +411,34 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     }
 
     std::vector<Vec3f> canonical_visible(canonical);
-    //从canonical 到canonical_normals
-    saveToPly(canonical_cur, canonical_normals_cur, "canonical_beforwarp.ply");
-    // 显示当前的warp参数，目前结果来看，存在优化错误，warp的translation明显错误
-
+    //
+    saveToPly(canonical_cur, canonical_normals_cur, "canonical_beforwarp_cur.ply");
+    saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
     // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
+    // expand the nodes
     if(true) //当warp点云的时候出现距离node过远的点时，扩展当前点云
     {
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
+        toPly(frame_init,frame_init, "expnode_pcl.ply");
         auto aff = volume_->getPose();
         aff = aff.inv();
         warp_->update_deform_node(frame_init, aff);
         //存扩展后的nodes
         auto nd = warp_->getNodesAsMat();
-        toPlyVec3(nd,nd,"cur_nodes.ply");
+        toPlyVec3Color(nd,nd,"cur_nodes.ply",255,0,0);
     }
-    //save for debuging
-    // saveToPlyColor(canonical, canonical_normals, "canonical_aftwarp.ply",255,0,0);
+
     saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
     // 3 get the correspondence between warped canonical and live frame
     //优化warpfield
     warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
     // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
-    
     std::cout<<"try to warp"<<std::endl;
     warp_->warp(canonical, canonical_normals);
+    std::vector<cv::Vec3f> wnodes;
+    warp_->getWarpedNode(wnodes);
+    saveToPlyColor(wnodes,wnodes,"warp_nodes.ply",0,255,0);
     // if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
     // {
     //     cv::Mat frame_init;
@@ -456,17 +453,21 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     saveToPlyColor(canonical, canonical_normals, "aft_opt.ply",0,0,255);
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;
-    tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, camera_pose, params_.intr);
+    //!!!!!!!
+    // tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, camera_pose, params_.intr);
     std::cout<<"download depth cloud"<<std::endl;
     cv::Mat depth_cloud(depth.rows(),depth.cols(), CV_16U);
     depth.download(depth_cloud.ptr<void>(), depth_cloud.step);
     cv::Mat display;
     depth_cloud.convertTo(display, CV_8U, 255.0/4000);
+    std::cout<<"show depth diff"<<std::endl;
     cv::imshow("Depth diff", display);
     volume_->compute_points();
     cv::Mat points, normals_t;
+    std::cout<<"get points"<<std::endl;
     volume_->get_points(points);
-    volume_->compute_normals();
+    std::cout<<"compute normals"<<std::endl;
+    // volume_->compute_normals();
     std::cout<<"END of dynamic fusion"<<std::endl;
 }
 void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
