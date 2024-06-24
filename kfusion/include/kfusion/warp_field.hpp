@@ -114,7 +114,9 @@ namespace kfusion
                             const cv::Vec3f& canonical_normal_,
                             kfusion::WarpField *warpField_,
                             const float weights_[KNN_NEIGHBOURS],
-                            const unsigned long knn_indices_[KNN_NEIGHBOURS]);
+                            const unsigned long knn_indices_[KNN_NEIGHBOURS],
+                            std::vector<Vec3f> & pts_live,
+                            std::vector<Vec3f> & pts_cano);
             
     
 
@@ -128,6 +130,7 @@ namespace kfusion
         int vdim_z;
         int exp_len_;
         double total_err;
+        double total_num;
     public:
         int fail_num;
         bool flag_exp;

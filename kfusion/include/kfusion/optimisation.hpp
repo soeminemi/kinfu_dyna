@@ -3,7 +3,8 @@
 #include "ceres/ceres.h"
 #include "ceres/rotation.h"
 #include <kfusion/warp_field.hpp>
-
+#include <kfusion/utils/dual_quaternion.hpp>
+#define THRES_CL 0.02
 struct DynamicFusionDataEnergy
 {
     DynamicFusionDataEnergy(const std::vector<cv::Vec3f>* live_vertex,
@@ -11,13 +12,16 @@ struct DynamicFusionDataEnergy
                             const cv::Vec3f& canonical_vertex,
                             const cv::Vec3f& canonical_normal,
                             kfusion::WarpField *warpField,
+                            kfusion::utils::DualQuaternion<float> dqb,
                             const float weights[KNN_NEIGHBOURS],
-                            const unsigned long knn_indices[KNN_NEIGHBOURS])
+                            const unsigned long knn_indices[KNN_NEIGHBOURS]
+                            )
             : live_vertex_(live_vertex),
               live_normal_(live_normal),
               canonical_vertex_(canonical_vertex),
               canonical_normal_(canonical_normal),
-              warpField_(warpField)
+              warpField_(warpField),
+              dqb_(dqb)
     {
         weights_ = new float[KNN_NEIGHBOURS];
         knn_indices_ = new unsigned long[KNN_NEIGHBOURS];
@@ -80,65 +84,66 @@ struct DynamicFusionDataEnergy
         //2. transform the canonical vertex
         //3. find the correspondent live vertex
         //4. calc the loss
-        auto nodes = warpField_->getNodes();
-        //1. calc DQB of canonical vertex// do not calc dqb in loss funciton, calc outside
-        kfusion::utils::Quaternion<float> translation_sum(0,0,0,0);
-        kfusion::utils::Quaternion<float> rotation_sum(0,0,0,0);
-        if(weights_[0] <= 0.01)
-        {
-            translation_sum += 1 * nodes->at(knn_indices_[0]).transform.getTranslation();
-            rotation_sum += 1 * nodes->at(knn_indices_[0]).transform.getRotation();
-        }
-        else
-        {
-            for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
-            {
+        // auto nodes = warpField_->getNodes();
+
+        // //1. calc DQB of canonical vertex// do not calc dqb in loss funciton, calc outside--Y
+        // kfusion::utils::Quaternion<float> translation_sum(0,0,0,0);
+        // kfusion::utils::Quaternion<float> rotation_sum(0,0,0,0);
+        // if(weights_[0] <= 0.01)
+        // {
+        //     translation_sum += 1 * nodes->at(knn_indices_[0]).transform.getTranslation();
+        //     rotation_sum += 1 * nodes->at(knn_indices_[0]).transform.getRotation();
+        // }
+        // else
+        // {
+        //     for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
+        //     {
                 
-                translation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getTranslation();
-                rotation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getRotation();
-            }
-        }
-        rotation_sum.normalize();
-        auto dqb = kfusion::utils::DualQuaternion<float>(translation_sum, rotation_sum); //Got DQB of canonical vertex
+        //         translation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getTranslation();
+        //         rotation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getRotation();
+        //     }
+        // }
+        // rotation_sum.normalize();
+        // auto dqb = kfusion::utils::DualQuaternion<float>(translation_sum, rotation_sum); //Got DQB of canonical vertex
         //2. transform canonical vertex
-        auto tv = dqb.transform(canonical_vertex_);
+        auto tv = dqb_.transform(canonical_vertex_);
         auto warp_cv = tv;
-        auto warp_cn = dqb.rotate(canonical_normal_);
+        auto warp_cn = dqb_.rotate(canonical_normal_);
         warpField_->transform_to_live(tv);
         //3. find the corresponding live vertex
         auto live_coo = warpField_->projector_(tv);
         auto idx = round(live_coo[0]) + round(live_coo[1]) * warpField_->image_width;
         if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
         {
-            residuals[0] = T(0);
+            residuals[0] = T(THRES_CL);
             return true;
         }
         auto live_vt = (*live_vertex_)[idx];
         if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
         {
-            residuals[0] = T(0);
+            residuals[0] = T(THRES_CL);
             return true;
         }
         //4. 获得DQB，考虑到只优化一个，不用加权了
-        // T temp_rotation[9];
+        T temp_rotation[9];
 //         for(int i = 0; i < /*KNN_NEIGHBOURS*/1; i++)
 //         {
 //             // T eular[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]};
 //             // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移
 //             // EulerAnglesToRotationMatrix(eular, temp_rotation);
 //         }
-        T eular[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的Eular angle
+        T eular[3] = {epsilon_[0][0], epsilon_[0][1], epsilon_[0][2]}; //参数对应的Eular angle
         T eps_t[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的平移
-        // EulerAnglesToRotationMatrix(eular, temp_rotation);
+        ceres::EulerAnglesToRotationMatrix(eular, 3, temp_rotation);
         T cano_v[3] = {T(warp_cv[0]),T(warp_cv[1]),T(warp_cv[2])};
         auto ipose_live_v = warpField_->aff_inv * live_vt; //transform to the initial pose 
         T live_v[3] = {T(ipose_live_v[0]),T(ipose_live_v[1]),T(ipose_live_v[2])};
         T cano_n[3] = {T(warp_cn[0]),T(warp_cn[1]),T(warp_cn[2])};
-        // if(fabs(ipose_live_v[2]-canonical_vertex_[2])>0.1)
-        // {
-        //     residuals[0] = T(0.1);
-        // }
-        // else
+        if(fabs(ipose_live_v[2]-canonical_vertex_[2])>THRES_CL)
+        {
+            residuals[0] = T(THRES_CL);
+        }
+        else
         {
             residuals[0] =cano_n[0] * (cano_v[0] + eps_t[0] -live_v[0]) + cano_n[1] * (cano_v[1]+ eps_t[1] -live_v[1]) + cano_n[2] * (cano_v[2]+ eps_t[2]-live_v[2]);
         }
@@ -176,7 +181,8 @@ struct DynamicFusionDataEnergy
                                        const cv::Vec3f& canonical_normal,
                                        kfusion::WarpField* warpField,
                                        const float weights[KNN_NEIGHBOURS],
-                                       const unsigned long ret_index[KNN_NEIGHBOURS])
+                                       const unsigned long ret_index[KNN_NEIGHBOURS],
+                                       const kfusion::utils::DualQuaternion<float> dqb)
     {
         auto cost_function = new ceres::DynamicAutoDiffCostFunction<DynamicFusionDataEnergy, 4>(
                 new DynamicFusionDataEnergy(live_vertex,
@@ -184,8 +190,10 @@ struct DynamicFusionDataEnergy
                                             canonical_vertex,
                                             canonical_normal,
                                             warpField,
+                                            dqb,
                                             weights,
-                                            ret_index));
+                                            ret_index
+                                            ));
         for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
         cost_function->SetNumResiduals(1);
@@ -211,6 +219,12 @@ struct DynamicFusionRegEnergy
     template <typename T>
     bool operator()(T const * const * epsilon_, T* residuals) const
     {
+        residuals[0] = epsilon_[0][0];
+        residuals[1] = epsilon_[0][1];
+        residuals[2] = epsilon_[0][2];
+        residuals[3] = epsilon_[0][3];
+        residuals[4] = epsilon_[0][4];
+        residuals[5] = epsilon_[0][5];
         return true;
     }
 
@@ -233,7 +247,7 @@ struct DynamicFusionRegEnergy
                 new DynamicFusionRegEnergy());
         for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(1);
+        cost_function->SetNumResiduals(6);
         return cost_function;
     }
 };
@@ -269,7 +283,7 @@ public:
             // parameters_[i+4] = y;
             // parameters_[i+5] = z;
             // 旋转
-            parameters_[i] = 0;
+            parameters_[i]   = 0;
             parameters_[i+1] = 0;
             parameters_[i+2] = 0;
             // 平移

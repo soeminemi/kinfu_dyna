@@ -208,7 +208,7 @@ namespace kfusion {
                 rotation_.rotate(point);
                 point += translation;
             }
-            Vec3f transform(const Vec3f& point) // TODO: this should be a lot more generic
+            Vec3f transform(const Vec3f& point) const// TODO: this should be a lot more generic
             {
                 Vec3f translation, tp;
                 tp = point;
@@ -217,7 +217,7 @@ namespace kfusion {
                 tp += translation;
                 return tp;
             }
-            Vec3f rotate(const Vec3f &normal) //ADDED BY JOHN
+            Vec3f rotate(const Vec3f &normal) const //ADDED BY JOHN
             {
                 auto rtn = normal;
                 rotation_.rotate(rtn);
