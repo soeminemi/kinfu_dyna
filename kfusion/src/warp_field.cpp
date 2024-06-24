@@ -490,12 +490,13 @@ utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex)
     // }
     // rotation_sum.normalize();
     // auto res = utils::DualQuaternion<float>(translation_sum, rotation_sum);
-    // return res;
-    utils::DualQuaternion<float> dqb = weights[0] * nodes_->at(ret_index_[i]).transform;
+
+    utils::DualQuaternion<float> dqb = weights[0] * nodes_->at(ret_index_[0]).transform;
     for (size_t i = 1; i < KNN_NEIGHBOURS; i++)
     {
         dqb += weights[i] * nodes_->at(ret_index_[i]).transform;
     }
+    // std::cout<<res<<"--"<<dqb.N()<<std::endl;
     return dqb.N();
 }
 
@@ -630,7 +631,7 @@ bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
     auto ipose_live_v = warpField_->aff_inv * live_vt;
     // std::cout<<warp_cv<<", "<<ipose_live_v<<std::endl;
     auto dv = (warp_cv - ipose_live_v);
-    if (fabs(dv[2])<=THRES_CL)
+    // if (fabs(dv[2])<=THRES_CL)
     {
         pts_live.push_back(ipose_live_v);
     }

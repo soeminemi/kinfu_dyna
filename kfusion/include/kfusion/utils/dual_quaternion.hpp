@@ -48,7 +48,7 @@ namespace kfusion {
 
                 translation_ = 0.5 * Quaternion<T>(0, x, y, z) * rotation_;
             }
-            DualQuaternion(T w, T x, T y, T z, T W, T x, T y, T z)
+            DualQuaternion(T w, T x, T y, T z, T W, T X, T Y, T Z)
             {
                 rotation_.w_ = w;
                 rotation_.x_ = x;
@@ -105,16 +105,16 @@ namespace kfusion {
                 encodeTranslation(x, y, z);
             }
             DualQuaternion<T> N() const {
-                const T qq = rotation_.norm() * rotation_.norm();
+                const T qq = rotation_.w_*rotation_.w_ + rotation_.x_*rotation_.x_ + rotation_.y_*rotation_.y_ + rotation_.z_*rotation_.z_;
                 const T qQ = rotation_.w_ * translation_.w_+rotation_.x_ * translation_.x_+rotation_.y_ * translation_.y_+rotation_.z_ * translation_.z_;
                 const T invqq = 1.0/qq;
                 const T invsq = 1.0/std::sqrt(qq);
                 const T alpha = qQ*invqq*invsq;
 
-                return DualQuaternion<T>(w*invsq, x*invsq, 
-                                        y*invsq, z*invsq,
-                                        W*invsq-w*alpha, X*invsq-x*alpha,
-                                        Y*invsq-y*alpha, Z*invsq-z*alpha);
+                return DualQuaternion<T>(rotation_.w_*invsq, rotation_.x_*invsq, 
+                                        rotation_.y_*invsq, rotation_.z_*invsq,
+                                        translation_.w_*invsq-rotation_.w_*alpha, translation_.x_*invsq-rotation_.x_*alpha,
+                                        translation_.y_*invsq-rotation_.y_*alpha, translation_.z_*invsq-rotation_.z_*alpha);
             }
             /**
              * \brief a reference-based method for acquiring the latest
@@ -169,6 +169,11 @@ namespace kfusion {
                 result.translation_ = translation_ + other.translation_;
                 return result;
             }
+            DualQuaternion& operator+=(const DualQuaternion& other) {
+                rotation_ += other.rotation_;
+                translation_ += other.translation_;
+                return *this;
+            }
 
             DualQuaternion operator-(const DualQuaternion &other)
             {
@@ -217,9 +222,14 @@ namespace kfusion {
                 return result;
             }
 
+            // inline DualQuaternion identity()
+            // {
+            //     return DualQuaternion(Quaternion<T>(0, 0, 0, 0),Quaternion<T>(0, 1, 0, 0));
+            // }
+
             inline DualQuaternion identity()
             {
-                return DualQuaternion(Quaternion<T>(0, 0, 0, 0),Quaternion<T>(0, 1, 0, 0));
+                return DualQuaternion(Quaternion<T>(0, 0, 0, 0),Quaternion<T>(1, 0, 0, 0));
             }
 
             void transform(Vec3f& point) // TODO: this should be a lot more generic
