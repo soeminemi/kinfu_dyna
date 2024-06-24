@@ -267,13 +267,14 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
             indices[j] = ret_index_[j];
         }
         // if(tnum>100 && tnum<150)
-            testCorrrespondence(&live_vertices,
+        testCorrrespondence(&live_vertices,
                             &live_normals,
                             canonical_vertices[i],
                             canonical_normals[i],
                             this,
                             weights,
                             indices);
+                            
         ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(&live_vertices,
                                                                              &live_normals,
                                                                              canonical_vertices[i],
@@ -281,8 +282,8 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                                                                              this,
                                                                              weights,
                                                                              indices);
-        problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.01) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
 
+        problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.01) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
         tnum ++;
     }
     std::cout<<"total error before opt: "<<total_err<<std::endl;
@@ -536,11 +537,6 @@ void WarpField::setProject(float fx, float fy, float cx, float cy)
 }
 
 
-
-
-
-
-
 bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
                             const std::vector<cv::Vec3f>* live_normal_,
                             const cv::Vec3f& canonical_vertex_,
@@ -562,7 +558,6 @@ bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
     {
         for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
         {
-            
             translation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getTranslation();
             rotation_sum += weights_[i] * nodes->at(knn_indices_[i]).transform.getRotation();
         }

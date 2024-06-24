@@ -315,6 +315,7 @@ public:
             float tx, ty, tz, ta, tb, tc;
             warpField_->getNodes()->at(i / 6).transform.getTranslation(tx, ty, tz);
             warpField_->getNodes()->at(i / 6).transform.getRotation().getRodrigues(ta,tb,tc);
+            //
             warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i] + ta, parameters_[i+1] + tb, parameters_[i+2] + tc);
             warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3]+tx,parameters_[i+4]+ty,parameters_[i+5]+tz);
         }
