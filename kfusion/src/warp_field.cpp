@@ -474,23 +474,29 @@ utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex)
 {
     float weights[KNN_NEIGHBOURS];
     getWeightsAndUpdateKNN(vertex, weights);
-    utils::Quaternion<float> translation_sum(0,0,0,0);
-    utils::Quaternion<float> rotation_sum(0,0,0,0);
+    // utils::Quaternion<float> translation_sum(0,0,0,0);
+    // utils::Quaternion<float> rotation_sum(0,0,0,0);
 
-    for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
+    // for (size_t i = 0; i < KNN_NEIGHBOURS; i++)
+    // {
+    //     if(weights[0] <= 0.001)
+    //     {
+    //         fail_num ++;
+    //         weights[0] = 1;
+    //         flag_exp = true;
+    //     }
+    //     translation_sum += weights[i] * nodes_->at(ret_index_[i]).transform.getTranslation();
+    //     rotation_sum += weights[i] * nodes_->at(ret_index_[i]).transform.getRotation();
+    // }
+    // rotation_sum.normalize();
+    // auto res = utils::DualQuaternion<float>(translation_sum, rotation_sum);
+    // return res;
+    utils::DualQuaternion<float> dqb = weights[0] * nodes_->at(ret_index_[i]).transform;
+    for (size_t i = 1; i < KNN_NEIGHBOURS; i++)
     {
-        if(weights[0] <= 0.001)
-        {
-            fail_num ++;
-            weights[0] = 1;
-            flag_exp = true;
-        }
-        translation_sum += weights[i] * nodes_->at(ret_index_[i]).transform.getTranslation();
-        rotation_sum += weights[i] * nodes_->at(ret_index_[i]).transform.getRotation();
+        dqb += weights[i] * nodes_->at(ret_index_[i]).transform;
     }
-    rotation_sum.normalize();
-    auto res = utils::DualQuaternion<float>(translation_sum, rotation_sum);
-    return res;
+    return dqb.N();
 }
 
 /**

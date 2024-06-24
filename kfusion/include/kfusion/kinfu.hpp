@@ -87,8 +87,6 @@ namespace kfusion
         void dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals);
         Affine3f getCameraPose (int time = -1) const;
 
-        
-        
     private:
         void allocate_buffers();
 

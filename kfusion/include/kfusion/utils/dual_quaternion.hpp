@@ -48,7 +48,17 @@ namespace kfusion {
 
                 translation_ = 0.5 * Quaternion<T>(0, x, y, z) * rotation_;
             }
-
+            DualQuaternion(T w, T x, T y, T z, T W, T x, T y, T z)
+            {
+                rotation_.w_ = w;
+                rotation_.x_ = x;
+                rotation_.y_ = y;
+                rotation_.z_ = z;
+                translation_.w_ = W;
+                translation_.x_ = X;
+                translation_.y_ = Y;
+                translation_.z_ = Z;
+            }
             /**
              * \brief constructor that takes two quaternions as arguments.
              * \details The rotation
@@ -94,7 +104,18 @@ namespace kfusion {
 
                 encodeTranslation(x, y, z);
             }
+            DualQuaternion<T> N() const {
+                const T qq = rotation_.norm() * rotation_.norm();
+                const T qQ = rotation_.w_ * translation_.w_+rotation_.x_ * translation_.x_+rotation_.y_ * translation_.y_+rotation_.z_ * translation_.z_;
+                const T invqq = 1.0/qq;
+                const T invsq = 1.0/std::sqrt(qq);
+                const T alpha = qQ*invqq*invsq;
 
+                return DualQuaternion<T>(w*invsq, x*invsq, 
+                                        y*invsq, z*invsq,
+                                        W*invsq-w*alpha, X*invsq-x*alpha,
+                                        Y*invsq-y*alpha, Z*invsq-z*alpha);
+            }
             /**
              * \brief a reference-based method for acquiring the latest
              *        translation data.
