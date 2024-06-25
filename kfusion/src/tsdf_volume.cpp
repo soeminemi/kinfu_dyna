@@ -123,6 +123,7 @@ void kfusion::cuda::TsdfVolume::raycast(const Affine3f& camera_pose, const Intr&
     std::cout<<"raycast pose_ : "<<pose_.translation()<<", "<<pose_.rotation()<<std::endl;
     Affine3f cam2vol = pose_.inv() * camera_pose;
     std::cout<<"camera pose:"<<camera_pose.translation()<<", "<<camera_pose.rotation()<<std::endl;
+    std::cout<<"camera to vol:"<<cam2vol.translation()<<", "<<cam2vol.rotation()<<std::endl;
 
     device::Aff3f aff = device_cast<device::Aff3f>(cam2vol);
     device::Mat3f Rinv = device_cast<device::Mat3f>(cam2vol.rotation().inv(cv::DECOMP_SVD));
