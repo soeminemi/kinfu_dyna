@@ -413,7 +413,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     std::vector<Vec3f> canonical_visible(canonical);
     //
     saveToPly(canonical_cur, canonical_normals_cur, "canonical_beforwarp_cur.ply");
-    saveToPly(canonical, canonical_normals, "canonical_beforwarp.ply");
+    saveToPlyColor(canonical, canonical_normals, "canonical_beforwarp.ply",255,0,0);
     // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
     // expand the nodes
     if(true) //当warp点云的时候出现距离node过远的点时，扩展当前点云
