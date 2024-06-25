@@ -6,6 +6,7 @@
 #include "precomp.hpp"
 #include <kfusion/optimisation.hpp>
 #include <fstream>
+#include <random>
 
 using namespace std;
 void saveToPlyColorT(std::vector<cv::Vec3f> &vertices, std::vector<cv::Vec3f> &normals,std::string name, uint r, uint g, uint b)
@@ -32,6 +33,43 @@ void saveToPlyColorT(std::vector<cv::Vec3f> &vertices, std::vector<cv::Vec3f> &n
         fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<" "<<r<<" "<<g<<" "<<b<<endl;
     }
     fscan.close();
+}
+
+void saveToPlyPixelColorT(std::vector<cv::Vec3f> &vertices, std::vector<cv::Scalar> &colors,std::string name)
+{
+    int num = 0;
+    for(auto &v:vertices)
+    {
+        if(!std::isnan(v[0]))
+        {
+            num++;
+        }
+    }
+    cout<<"saving the point cloud to the file: "<<name<<endl;
+    ofstream fscan(name);
+    fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment Created by Wang Junnan"<<endl;
+    fscan<<"element vertex "<<num<<endl;
+    fscan<<"property float x"<<endl<<"property float y"<<endl<<"property float z"<<endl;
+    fscan<<"property uint8 red"<<endl<<"property uint8 green"<<endl<<"property uint8 blue"<<endl;
+    fscan<<"end_header"<<endl;
+
+    for(int i=0;i<vertices.size();i++){
+        if(std::isnan(vertices[i][0]))
+            continue;
+        fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<" "<<colors[i][0]<<" "<<colors[i][1]<<" "<<colors[i][2]<<endl;
+    }
+    fscan.close();
+}
+bool randsel(int thres)
+{
+    std::random_device rd;  // 获取随机数种子
+    std::mt19937 gen(rd()); // 以 rd() 初始化 Mersenne Twister 引擎
+    std::uniform_int_distribution<> distrib(0, 100); // 定义分布范围 [0, 100]
+ 
+    int random_number = distrib(gen); // 生成随机数
+    if(random_number < thres)
+        return true;
+    return false;
 }
 
 using namespace kfusion;
@@ -112,7 +150,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
     nodes_->reserve(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
-    exp_len_ = 0.025/voxel_size;
+    exp_len_ = 0.015/voxel_size;
 // //    FIXME:: this is a test, remove later
 //     voxel_size = 1;
     std::cout<<"start to init nodes, expand length: "<<exp_len_<<std::endl;
@@ -136,7 +174,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
                     tnode.transform = utils::DualQuaternion<float>();
                     tnode.vertex = Vec3f(point.x,point.y,point.z);
                     // tnode.weight = 3 * voxel_size; //???, only weights to set the area affected
-                    tnode.weight = 2 * exp_len_ * voxel_size;
+                    tnode.weight = 1 * exp_len_ * voxel_size;
                     nodes_->push_back(tnode);
                     // nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
                     // nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
@@ -183,7 +221,7 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
                     tnode.transform = utils::DualQuaternion<float>();
                     tnode.vertex = Vec3f(point.x,point.y,point.z);
                     // tnode.weight = 3 * voxel_size; //设置node的影响范围
-                    tnode.weight = 2 * exp_len_ * voxel_size;
+                    tnode.weight = 1 * exp_len_ * voxel_size;
                     nodes_->push_back(tnode);
                     // nodes_->at(i*canonical_frame.cols+j).transform = utils::DualQuaternion<float>();
                     // nodes_->at(i*canonical_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
@@ -258,13 +296,20 @@ void WarpField::energy(const cuda::Cloud &frame,
  * @param live_normals
  * @return
  */
+cv::Scalar generateRandomColor() {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 255);
+ 
+    return cv::Scalar(dis(gen), dis(gen), dis(gen));
+}
 void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                             const std::vector<Vec3f> &canonical_normals,
                             const std::vector<Vec3f> &live_vertices,
                             const std::vector<Vec3f> &live_normals //live normals are not used in optimization
 )
 {
-    // std::cout<<"node size: "<<nodes_->size()<<std::endl;
+    std::cout<<"node size: "<<nodes_->size()<<std::endl;
     ceres::Problem problem;
     float weights[KNN_NEIGHBOURS];
     unsigned long indices[KNN_NEIGHBOURS];
@@ -274,8 +319,100 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     total_err = 0;
     std::vector<Vec3f> pts_cano;
     std::vector<Vec3f> pts_live;
+    std::vector<cv::Scalar> cls_cano;
+    std::vector<cv::Scalar> colors;
+    colors.clear();
+    colors.resize(nodes_->size());
+    for (size_t i = 0; i < nodes_->size(); i++)
+    {
+        colors[i] = generateRandomColor();
+    }
+    
     pts_live.clear();
     pts_cano.clear();
+    cls_cano.clear();
+    for(int i = 0; i < canonical_vertices.size(); i++)
+    {
+        if(std::isnan(canonical_vertices[i][0]) ||
+           std::isnan(canonical_vertices[i][1]) ||
+           std::isnan(canonical_vertices[i][2]) //||
+        //    std::isnan(live_vertices[i][0]) ||
+        //    std::isnan(live_vertices[i][1]) ||
+        //    std::isnan(live_vertices[i][2]))
+        )
+            continue;
+        if(randsel(30)==false)
+            continue;
+        // find the correspondence from canonical to live, i-th canonical  is not correspond to i-th live
+        getWeightsAndUpdateKNN(canonical_vertices[i], weights);
+        
+        // 当前点距离node过远，不考虑用于node的位置优化
+        if(weights[0]<=0.001)
+        {
+            continue;
+        }
+//        FIXME: could just pass ret_index
+        for(int j = 0; j < KNN_NEIGHBOURS; j++)
+        {
+            indices[j] = ret_index_[j];
+        }
+        testCorrrespondence(&live_vertices,
+                            &live_normals,
+                            canonical_vertices[i],
+                            canonical_normals[i],
+                            this,
+                            weights,
+                            indices,
+                            pts_live,
+                            pts_cano,
+                            cls_cano);
+        
+        cls_cano.push_back(colors[ret_index_[0]]);
+        auto dqb = DQB(canonical_vertices[i]);               
+        ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(&live_vertices,
+                                                                             &live_normals,
+                                                                             canonical_vertices[i],
+                                                                             canonical_normals[i],
+                                                                             this,
+                                                                             weights,
+                                                                             indices,
+                                                                             dqb);
+
+        problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.01) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
+        tnum ++;
+    }
+    saveToPlyColorT(pts_live,pts_live,"live_pts_bf.ply", 255,0,0);
+    saveToPlyColorT(pts_cano,pts_cano,"cano_pts_bf.ply", 0,255,0);
+    // saveToPlyPixelColorT(pts_cano,cls_cano,"cano_pts_bf.ply");
+    // add reg const function
+    for (size_t i = 0; i < nodes_->size(); i++)
+    {
+        getWeightsAndUpdateKNN(nodes_->at(i).vertex, weights);
+        
+        ceres::CostFunction *reg_costfuncion = DynamicFusionRegEnergy::Create();
+        problem.AddResidualBlock(reg_costfuncion,  nullptr/* squared loss */, warpProblem.mutable_epsilon(indices));
+    }
+    
+    std::cout<<"total error before opt: "<<total_err<<std::endl;
+    //基于ceres求解warpField
+    ceres::Solver::Options options;
+//    options.minimizer_type = ceres::TRUST_REGION;
+    options.linear_solver_type = ceres::SPARSE_SCHUR;
+    options.minimizer_progress_to_stdout = true;
+    options.max_num_iterations = 5;
+    // options.num_linear_solver_threads = 8;
+    options.num_threads = 64;
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+    std::cout << summary.FullReport() << std::endl;
+    warpProblem.updateWarp();
+
+    // for test
+    tnum = 0;
+    total_err  = 0;
+    pts_live.clear();
+    pts_cano.clear();
+    cls_cano.clear();
     for(int i = 0; i < canonical_vertices.size(); i++)
     {
         if(std::isnan(canonical_vertices[i][0]) ||
@@ -308,92 +445,16 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                             weights,
                             indices,
                             pts_live,
-                            pts_cano);
-        auto dqb = DQB(canonical_vertices[i]);               
-        ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(&live_vertices,
-                                                                             &live_normals,
-                                                                             canonical_vertices[i],
-                                                                             canonical_normals[i],
-                                                                             this,
-                                                                             weights,
-                                                                             indices,
-                                                                             dqb);
-
-        problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.01) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
-        tnum ++;
-    }
-    saveToPlyColorT(pts_live,pts_live,"live_pts_bf.ply", 255,0,0);
-    saveToPlyColorT(pts_cano,pts_cano,"cano_pts_bf.ply", 0,255,0);
-    // add reg const function
-    for (size_t i = 0; i < nodes_->size(); i++)
-    {
-        getWeightsAndUpdateKNN(nodes_->at(i).vertex, weights);
-        
-        ceres::CostFunction *reg_costfuncion = DynamicFusionRegEnergy::Create();
-        problem.AddResidualBlock(reg_costfuncion,  nullptr/* squared loss */, warpProblem.mutable_epsilon(indices));
-    }
-    
-    
-    std::cout<<"total error before opt: "<<total_err<<std::endl;
-    //基于ceres求解warpField
-    ceres::Solver::Options options;
-//    options.minimizer_type = ceres::TRUST_REGION;
-    options.linear_solver_type = ceres::SPARSE_SCHUR;
-    options.minimizer_progress_to_stdout = true;
-    options.max_num_iterations = 5;
-    // options.num_linear_solver_threads = 8;
-    options.num_threads = 32;
-    ceres::Solver::Summary summary;
-    ceres::Solve(options, &problem, &summary);
-    std::cout << summary.FullReport() << std::endl;
-    warpProblem.updateWarp();
-    // for (size_t i = 0; i < nodes_->size(); i++)
-    // {
-    //     auto node = nodes_->at(i);
-    //     std::cout<<node.transform<<std::endl;
-    // }
-    // for test
-    tnum = 0;
-    total_err  = 0;
-    pts_live.clear();
-    pts_cano.clear();
-    for(int i = 0; i < canonical_vertices.size(); i++)
-    {
-        if(std::isnan(canonical_vertices[i][0]) ||
-           std::isnan(canonical_vertices[i][1]) ||
-           std::isnan(canonical_vertices[i][2]) //||
-        //    std::isnan(live_vertices[i][0]) ||
-        //    std::isnan(live_vertices[i][1]) ||
-        //    std::isnan(live_vertices[i][2]))
-        )
-            continue;
-        
-        // find the correspondence from canonical to live, i-th canonical  is not correspond to i-th live
-        getWeightsAndUpdateKNN(canonical_vertices[i], weights);
-        
-        // 当前点距离node过远，不考虑用于node的位置优化
-        if(weights[0]==0)
+                            pts_cano,
+                            cls_cano);
         {
-            continue;
+            cls_cano.push_back(colors[ret_index_[0]]);
         }
-//        FIXME: could just pass ret_index
-        for(int j = 0; j < KNN_NEIGHBOURS; j++)
-        {
-            indices[j] = ret_index_[j];
-        }
-            testCorrrespondence(&live_vertices,
-                            &live_normals,
-                            canonical_vertices[i],
-                            canonical_normals[i],
-                            this,
-                            weights,
-                            indices,
-                            pts_live,
-                            pts_cano);
         tnum ++;
     }
     saveToPlyColorT(pts_live,pts_live,"live_pts.ply", 255,0,0);
     saveToPlyColorT(pts_cano,pts_cano,"cano_pts.ply", 0,255,0);
+    // saveToPlyPixelColorT(pts_cano,cls_cano,"cano_pts.ply");
     std::cout<<"total error after opt: "<<total_err<<std::endl;
 }
 /**
@@ -415,8 +476,10 @@ void WarpField::getWarpedNode(std::vector<Vec3f> &warp_nodes)
         auto point = node.vertex;
         if(std::isnan(point[0]) /*|| std::isnan(normals[i][0])*/)
             continue;
-        utils::DualQuaternion<float> dqb = DQB(point); 
-        dqb.transform(point);
+        // utils::DualQuaternion<float> dqb = DQB(point); 
+        // dqb.transform(point);
+        node.transform.transform(point);
+        point = warp_to_live_ * point;
         warp_nodes.push_back(point);
     }
 }
@@ -436,15 +499,8 @@ void WarpField::warp(std::vector<Vec3f>& points, std::vector<Vec3f>& normals, bo
         i++;
         if(std::isnan(point[0]) /*|| std::isnan(normals[i][0])*/)
             continue;
-        if(flag_debug)
-            std::cout<<"dqb pt: "<<i<<","<<point[0]<<","<<point[1]<<", "<<point[2]<<std::endl;
         utils::DualQuaternion<float> dqb = DQB(point); 
-        if(flag_debug)
-            std::cout<<"++dqb point: "<<point<<","<<dqb<<std::endl;
         dqb.transform(point);
-        if(flag_debug)
-            std::cout<<"--dqb point: "<<point<<","<<dqb<<std::endl;
-
         point = warp_to_live_ * point;
         if(std::isnan(normals[i][0]))
             continue;
@@ -490,8 +546,12 @@ utils::DualQuaternion<float> WarpField::DQB(const Vec3f& vertex)
     // }
     // rotation_sum.normalize();
     // auto res = utils::DualQuaternion<float>(translation_sum, rotation_sum);
-
-    utils::DualQuaternion<float> dqb = weights[0] * nodes_->at(ret_index_[0]).transform;
+    utils::DualQuaternion<float> dqb;
+    if(weights[0] <= 0.001)
+    {
+        return dqb;
+    }
+    dqb = weights[0] * nodes_->at(ret_index_[0]).transform;
     for (size_t i = 1; i < KNN_NEIGHBOURS; i++)
     {
         dqb += weights[i] * nodes_->at(ret_index_[i]).transform;
@@ -605,7 +665,8 @@ bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
                             const float weights_[KNN_NEIGHBOURS],
                             const unsigned long knn_indices_[KNN_NEIGHBOURS],
                             std::vector<Vec3f> &pts_live,
-                            std::vector<Vec3f> &pts_cano)
+                            std::vector<Vec3f> &pts_cano,
+                            std::vector<cv::Scalar> &cls_cano)
 {
     auto nodes = warpField_->getNodes();
     
@@ -621,12 +682,12 @@ bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
     auto idx = round(live_coo[0]) + round(live_coo[1]) * warpField_->image_width;
     if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
     {
-        return true;
+        return false;
     }
     auto live_vt = (*live_vertex_)[idx];
     if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
     {
-        return true;
+        return false;
     };
     auto ipose_live_v = warpField_->aff_inv * live_vt;
     // std::cout<<warp_cv<<", "<<ipose_live_v<<std::endl;
@@ -638,6 +699,7 @@ bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
     
     auto loss = sqrt(dv.dot(dv));
     total_err += loss;
+    return true;
 }
 
 

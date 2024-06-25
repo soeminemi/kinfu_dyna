@@ -110,6 +110,7 @@ struct DynamicFusionDataEnergy
         auto tv = dqb_.transform(canonical_vertex_);
         auto warp_cv = tv;
         auto warp_cn = dqb_.rotate(canonical_normal_);
+        // std::cout<<warp_cn<<std::endl;
         warpField_->transform_to_live(tv);
         //3. find the corresponding live vertex
         auto live_coo = warpField_->projector_(tv);
@@ -123,6 +124,8 @@ struct DynamicFusionDataEnergy
         if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
         {
             residuals[0] = weight_t*T(THRES_CL);
+            residuals[1] = weight_t*T(THRES_CL);
+            residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         //4. 获得DQB，考虑到只优化一个，不用加权了
@@ -140,13 +143,19 @@ struct DynamicFusionDataEnergy
         auto ipose_live_v = warpField_->aff_inv * live_vt; //transform to the initial pose 
         T live_v[3] = {T(ipose_live_v[0]),T(ipose_live_v[1]),T(ipose_live_v[2])};
         T cano_n[3] = {T(warp_cn[0]),T(warp_cn[1]),T(warp_cn[2])};
+        T delta_v[3] = {(cano_v[0] + eps_t[0] -live_v[0]) ,(cano_v[1]+ eps_t[1] -live_v[1]) ,(cano_v[2]+ eps_t[2]-live_v[2])};
         if(fabs(ipose_live_v[2]-canonical_vertex_[2])>THRES_CL)
         {
             residuals[0] = weight_t*(THRES_CL);
+            residuals[1] = weight_t*(THRES_CL);
+            residuals[2] = weight_t*(THRES_CL);
         }
         else
         {
-            residuals[0] = weight_t*(cano_n[0] * (cano_v[0] + eps_t[0] -live_v[0]) + cano_n[1] * (cano_v[1]+ eps_t[1] -live_v[1]) + cano_n[2] * (cano_v[2]+ eps_t[2]-live_v[2]));
+            // residuals[0] = weight_t*(cano_n[0] * (cano_v[0] + eps_t[0] -live_v[0]) + cano_n[1] * (cano_v[1]+ eps_t[1] -live_v[1]) + cano_n[2] * (cano_v[2]+ eps_t[2]-live_v[2]));
+            residuals[0] = weight_t * (delta_v[0]);
+            residuals[1] = weight_t * (delta_v[1]);
+            residuals[2] = weight_t * (delta_v[2]);
         }
         // residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
         // residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
@@ -197,7 +206,7 @@ struct DynamicFusionDataEnergy
                                             ));
         for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(1);
+        cost_function->SetNumResiduals(3);
         return cost_function;
     }
     const std::vector<cv::Vec3f> *live_vertex_;
@@ -333,6 +342,7 @@ public:
             //
             warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i] + ta, parameters_[i+1] + tb, parameters_[i+2] + tc);
             warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3]+tx,parameters_[i+4]+ty,parameters_[i+5]+tz);
+            // std::cout<<tx<<", "<<ty<<", "<<tz<<", "<<ta<<", "<<tb<<", "<<tc<<std::endl;
         }
     }
 

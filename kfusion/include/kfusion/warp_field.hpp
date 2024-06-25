@@ -116,7 +116,8 @@ namespace kfusion
                             const float weights_[KNN_NEIGHBOURS],
                             const unsigned long knn_indices_[KNN_NEIGHBOURS],
                             std::vector<Vec3f> & pts_live,
-                            std::vector<Vec3f> & pts_cano);
+                            std::vector<Vec3f> & pts_cano,
+                            std::vector<cv::Scalar> &cls_cano);
             
     
 
