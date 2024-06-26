@@ -355,8 +355,12 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     normals.create(depth.rows(), depth.cols());
     cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
     auto camera_pose = poses_.back(); // 初始帧相机位姿在当前帧坐标系下的位姿，camera_pose * canonical = current
+    // Aff_p = pose_
+    // Aff_c = camera_pose_
+    // xc = Aff_p * xv
+    // xc = Aff_c * xl
     // camera_pose = camera_pose.inv(cv::DECOMP_SVD);
-    auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose
+    auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose x_cano = inverse_pose * x_live
     // warp_->aff_inv = inverse_pose;
     // warp_->setWarpToLive(camera_pose);
     warp_->aff_inv = camera_pose;
@@ -382,7 +386,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
             auto point = cloud_host.at<Point>(i, j);
             canonical_cur[i * cloud_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
             //获取初始帧坐标系下的canonical点云坐标
-            canonical[i * cloud_host.cols + j] = inverse_pose * canonical_cur[i * cloud_host.cols + j];
+            canonical[i * cloud_host.cols + j] = camera_pose * canonical_cur[i * cloud_host.cols + j];
         }
     }
 
@@ -409,7 +413,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         for (int j = 0; j < normal_host.cols; j++) {
             auto point = normal_host.at<Normal>(i, j);
             canonical_normals_cur[i * normal_host.cols + j] = cv::Vec3f(point.x, point.y, point.z);
-            canonical_normals[i * normal_host.cols + j] = inverse_pose.rotation() * cv::Vec3f(point.x, point.y, point.z);// TODO no translation include 
+            canonical_normals[i * normal_host.cols + j] = camera_pose.rotation() * cv::Vec3f(point.x, point.y, point.z);// TODO no translation include 
         }
     }
 
