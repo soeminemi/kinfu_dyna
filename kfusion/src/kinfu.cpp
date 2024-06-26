@@ -442,6 +442,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
     // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
     std::cout<<"try to warp"<<std::endl;
+     warp_->setWarpToLive(Affine3f::Identity());
     warp_->warp(canonical, canonical_normals);
     std::vector<cv::Vec3f> wnodes;
     warp_->getWarpedNode(wnodes);
@@ -461,7 +462,8 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;
     //!!!!!!!
-    tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, inverse_pose, params_.intr);
+   
+    tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, camera_pose, params_.intr);
     std::cout<<"download depth cloud"<<std::endl;
     cv::Mat depth_cloud(depth.rows(),depth.cols(), CV_16U);
     depth.download(depth_cloud.ptr<void>(), depth_cloud.step);
