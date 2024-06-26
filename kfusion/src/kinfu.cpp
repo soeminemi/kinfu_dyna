@@ -354,7 +354,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     cloud.create(depth.rows(), depth.cols());
     normals.create(depth.rows(), depth.cols());
     cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
-    auto camera_pose = poses_.back(); //pose
+    auto camera_pose = poses_.back(); // 初始帧相机位姿在当前帧坐标系下的位姿，camera_pose * canonical = current
     // camera_pose = camera_pose.inv(cv::DECOMP_SVD);
     auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose
     // warp_->aff_inv = inverse_pose;
