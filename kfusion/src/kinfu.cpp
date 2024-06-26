@@ -354,10 +354,13 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     cloud.create(depth.rows(), depth.cols());
     normals.create(depth.rows(), depth.cols());
     cv::Mat cloud_host(depth.rows(), depth.cols(), CV_32FC4); //内存上当前fusion结果的点云
-    auto camera_pose = poses_.back();
+    auto camera_pose = poses_.back(); //pose
+    // camera_pose = camera_pose.inv(cv::DECOMP_SVD);
     auto inverse_pose = camera_pose.inv(cv::DECOMP_SVD); //transform to initial camera pose
-    warp_->aff_inv = inverse_pose;
-    warp_->setWarpToLive(camera_pose);
+    // warp_->aff_inv = inverse_pose;
+    // warp_->setWarpToLive(camera_pose);
+    warp_->aff_inv = camera_pose;
+    warp_->setWarpToLive(inverse_pose);
     // 投影到当前相机视角下的canonical空间点云,通过光线追踪得到当前相机pose下的cloud和normals
     tsdf().raycast(camera_pose, params_.intr, cloud, normals);
     cloud.download(cloud_host.ptr<Point>(), cloud_host.step);
@@ -454,7 +457,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;
     //!!!!!!!
-    tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, camera_pose, params_.intr);
+    tsdf().surface_fusion(getWarp(), canonical, canonical_visible, depth, inverse_pose, params_.intr);
     std::cout<<"download depth cloud"<<std::endl;
     cv::Mat depth_cloud(depth.rows(),depth.cols(), CV_16U);
     depth.download(depth_cloud.ptr<void>(), depth_cloud.step);
@@ -466,7 +469,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     cv::Mat points, normals_t;
     std::cout<<"get points"<<std::endl;
     volume_->get_points(points);
-    std::cout<<"compute normals"<<std::endl;
+    // std::cout<<"compute normals"<<std::endl;
     // volume_->compute_normals();
     std::cout<<"END of dynamic fusion"<<std::endl;
 }

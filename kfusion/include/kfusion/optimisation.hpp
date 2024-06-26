@@ -4,7 +4,7 @@
 #include "ceres/rotation.h"
 #include <kfusion/warp_field.hpp>
 #include <kfusion/utils/dual_quaternion.hpp>
-#define THRES_CL 0.02
+#define THRES_CL 0.05
 struct DynamicFusionDataEnergy
 {
     DynamicFusionDataEnergy(const std::vector<cv::Vec3f>* live_vertex,
@@ -118,6 +118,8 @@ struct DynamicFusionDataEnergy
         if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
         {
             residuals[0] = weight_t*T(THRES_CL);
+            residuals[1] = weight_t*T(THRES_CL);
+            residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         auto live_vt = (*live_vertex_)[idx];
