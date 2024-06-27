@@ -38,6 +38,7 @@ namespace kfusion
         Vec3f vertex;
         kfusion::utils::DualQuaternion<float> transform;
         float weight = 0;
+        std::vector<int> nb_idxes;// neighbour indexs
     }; 
 
 //投影到图像
@@ -65,6 +66,7 @@ namespace kfusion
         //初始化warp filed, 如何扩展？
         void init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, Affine3f &aff_inv);
         void update_deform_node(const cv::Mat& canonical_frame,cv::Affine3f &aff_inv); // expand the nodes if necessary
+        void construct_edge(std::vector<int> &appended_nodes_idxs);
         void init(const std::vector<Vec3f>& first_frame);
         //calculate the energy of the warp field
         void energy(const cuda::Cloud &frame,

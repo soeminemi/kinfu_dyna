@@ -435,18 +435,17 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
         auto nd = warp_->getNodesAsMat();
         toPlyVec3Color(nd,nd,"cur_nodes.ply",255,0,0);
     }
-
     saveToPlyColor(live, canonical_normals, "live.ply",0,255,0);
     // 3 get the correspondence between warped canonical and live frame
     //优化warpfield
     warp_->energy_data(canonical, canonical_normals, live, canonical_normals);
     // optimiser_->optimiseWarpData(canonical, canonical_normals, live, canonical_normals); // Normals are not used yet so just send in same data
     std::cout<<"try to warp"<<std::endl;
-     warp_->setWarpToLive(Affine3f::Identity());
+    warp_->setWarpToLive(Affine3f::Identity());
     warp_->warp(canonical, canonical_normals);
-    std::vector<cv::Vec3f> wnodes;
-    warp_->getWarpedNode(wnodes);
-    saveToPlyColor(wnodes,wnodes,"warp_nodes.ply",0,255,0);
+    // std::vector<cv::Vec3f> wnodes;
+    // warp_->getWarpedNode(wnodes);
+    // saveToPlyColor(wnodes,wnodes,"warp_nodes.ply",0,255,0);
     // if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
     // {
     //     cv::Mat frame_init;
@@ -471,10 +470,10 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     depth_cloud.convertTo(display, CV_8U, 255.0/4000);
     std::cout<<"show depth diff"<<std::endl;
     cv::imshow("Depth diff", display);
-    volume_->compute_points();
-    cv::Mat points, normals_t;
-    std::cout<<"get points"<<std::endl;
-    volume_->get_points(points);
+    // volume_->compute_points();
+    // cv::Mat points, normals_t;
+    // std::cout<<"get points"<<std::endl;
+    // volume_->get_points(points);
     // std::cout<<"compute normals"<<std::endl;
     // volume_->compute_normals();
     std::cout<<"END of dynamic fusion"<<std::endl;

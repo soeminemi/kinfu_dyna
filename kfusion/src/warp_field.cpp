@@ -243,6 +243,25 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
     buildKDTree();
     std::cout<<"add new node number: "<<node_num<<std::endl;
 }
+void WarpField::construct_edge(std::vector<int> &appended_nodes_idxs)
+{
+    float weights[KNN_NEIGHBOURS];
+    unsigned long indices[KNN_NEIGHBOURS];
+    for (size_t i = 0; i < appended_nodes_idxs.size(); i++)
+    {
+        auto node_idx = appended_nodes_idxs[i];
+        getWeightsAndUpdateKNN(nodes_->at(node_idx).vertex, weights);
+        for (size_t j = 0; j < KNN_NEIGHBOURS; j++)
+        {
+            auto idx = ret_index_[j];
+            if(idx == node_idx)
+                continue;
+            nodes_->at(node_idx).nb_idxes.push_back(idx);
+            nodes_->at(idx).nb_idxes.push_back(node_idx);
+        }
+    }
+    
+}
 /**
  *
  * @param first_frame
@@ -356,18 +375,18 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         {
             indices[j] = ret_index_[j];
         }
-        testCorrrespondence(&live_vertices,
-                            &live_normals,
-                            canonical_vertices[i],
-                            canonical_normals[i],
-                            this,
-                            weights,
-                            indices,
-                            pts_live,
-                            pts_cano,
-                            cls_cano);
+        // testCorrrespondence(&live_vertices,
+        //                     &live_normals,
+        //                     canonical_vertices[i],
+        //                     canonical_normals[i],
+        //                     this,
+        //                     weights,
+        //                     indices,
+        //                     pts_live,
+        //                     pts_cano,
+        //                     cls_cano);
         
-        cls_cano.push_back(colors[ret_index_[0]]);
+        // cls_cano.push_back(colors[ret_index_[0]]);
         auto dqb = DQB(canonical_vertices[i]);               
         ceres::CostFunction* cost_function = DynamicFusionDataEnergy::Create(&live_vertices,
                                                                              &live_normals,
@@ -381,8 +400,8 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.01) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
         tnum ++;
     }
-    saveToPlyColorT(pts_live,pts_live,"live_pts_bf.ply", 255,0,0);
-    saveToPlyColorT(pts_cano,pts_cano,"cano_pts_bf.ply", 0,255,0);
+    // saveToPlyColorT(pts_live,pts_live,"live_pts_bf.ply", 255,0,0);
+    // saveToPlyColorT(pts_cano,pts_cano,"cano_pts_bf.ply", 0,255,0);
     // saveToPlyPixelColorT(pts_cano,cls_cano,"cano_pts_bf.ply");
     // add reg const function
     for (size_t i = 0; i < nodes_->size(); i++)
@@ -448,13 +467,13 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                             pts_cano,
                             cls_cano);
         {
-            cls_cano.push_back(colors[ret_index_[0]]);
+            // cls_cano.push_back(colors[ret_index_[0]]);
         }
         tnum ++;
     }
     saveToPlyColorT(pts_live,pts_live,"live_pts.ply", 255,0,0);
     saveToPlyColorT(pts_cano,pts_cano,"cano_pts.ply", 0,255,0);
-    // saveToPlyPixelColorT(pts_cano,cls_cano,"cano_pts.ply");
+    saveToPlyPixelColorT(pts_live,cls_cano,"live_pts_error.ply");
     std::cout<<"total error after opt: "<<total_err<<std::endl;
 }
 /**
@@ -693,11 +712,20 @@ bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
     // std::cout<<warp_cv<<", "<<ipose_live_v<<std::endl;
     auto dv = (warp_cv - ipose_live_v);
     // if (fabs(dv[2])<=THRES_CL)
+    uchar r, g, b;
+    
     {
         pts_live.push_back(ipose_live_v);
+        
     }
     
     auto loss = sqrt(dv.dot(dv));
+    auto frac = loss * 100;
+    frac = frac>1?1:frac;
+    r = frac * 255;
+    g = (1-frac) * 255;
+    b = 0;
+    cls_cano.push_back(cv::Scalar(r,g,b));
     total_err += loss;
     return true;
 }

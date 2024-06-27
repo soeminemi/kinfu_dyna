@@ -106,7 +106,8 @@ struct DynamicFusionDataEnergy
         // rotation_sum.normalize();
         // auto dqb = kfusion::utils::DualQuaternion<float>(translation_sum, rotation_sum); //Got DQB of canonical vertex
         //2. transform canonical vertex
-        T weight_t = T(weights_[0]);
+        // T weight_t = T(weights_[0]);
+        T weight_t = T(1.0);
         auto tv = dqb_.transform(canonical_vertex_);
         auto warp_cv = tv;
         auto warp_cn = dqb_.rotate(canonical_normal_);
@@ -118,16 +119,16 @@ struct DynamicFusionDataEnergy
         if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
         {
             residuals[0] = weight_t*T(THRES_CL);
-            residuals[1] = weight_t*T(THRES_CL);
-            residuals[2] = weight_t*T(THRES_CL);
+            // residuals[1] = weight_t*T(THRES_CL);
+            // residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         auto live_vt = (*live_vertex_)[idx];
         if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
         {
             residuals[0] = weight_t*T(THRES_CL);
-            residuals[1] = weight_t*T(THRES_CL);
-            residuals[2] = weight_t*T(THRES_CL);
+            // residuals[1] = weight_t*T(THRES_CL);
+            // residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         //4. 获得DQB，考虑到只优化一个，不用加权了
@@ -149,15 +150,15 @@ struct DynamicFusionDataEnergy
         if(fabs(ipose_live_v[2]-canonical_vertex_[2])>THRES_CL)
         {
             residuals[0] = weight_t*(THRES_CL);
-            residuals[1] = weight_t*(THRES_CL);
-            residuals[2] = weight_t*(THRES_CL);
+            // residuals[1] = weight_t*(THRES_CL);
+            // residuals[2] = weight_t*(THRES_CL);
         }
         else
         {
-            // residuals[0] = weight_t*(cano_n[0] * (cano_v[0] + eps_t[0] -live_v[0]) + cano_n[1] * (cano_v[1]+ eps_t[1] -live_v[1]) + cano_n[2] * (cano_v[2]+ eps_t[2]-live_v[2]));
-            residuals[0] = weight_t * (delta_v[0]);
-            residuals[1] = weight_t * (delta_v[1]);
-            residuals[2] = weight_t * (delta_v[2]);
+            residuals[0] = weight_t*(cano_n[0] * delta_v[0] + cano_n[1] * delta_v[1] + cano_n[2] * delta_v[2]);
+            // residuals[0] = weight_t * (delta_v[0]);
+            // residuals[1] = weight_t * (delta_v[1]);
+            // residuals[2] = weight_t * (delta_v[2]);
         }
         // residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
         // residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
@@ -208,15 +209,17 @@ struct DynamicFusionDataEnergy
                                             ));
         for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(3);
+        cost_function->SetNumResiduals(1);
         return cost_function;
     }
+
     const std::vector<cv::Vec3f> *live_vertex_;
     const std::vector<cv::Vec3f> *live_normal_;
     const cv::Vec3f canonical_vertex_;
     const cv::Vec3f canonical_normal_;
 
     float *weights_;
+
     unsigned long *knn_indices_;
 
     kfusion::WarpField *warpField_;
