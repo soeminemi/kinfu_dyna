@@ -267,6 +267,45 @@ struct DynamicFusionRegEnergy
     }
 };
 
+struct DynamicFusionEdgeEnergy
+{
+    DynamicFusionEdgeEnergy(int i, int j, kfusion::WarpField* warpField):i_(i),j_(j), warpField_(warpField)
+    {}
+    ~DynamicFusionEdgeEnergy(){}
+    template <typename T>
+    bool operator()(T const * epsilon_, T* residuals) const
+    {
+        
+        return true;
+    }
+
+/**
+ * Huber penalty function, implemented as described in https://en.wikipedia.org/wiki/Huber_loss
+ * In the paper, a value of 0.0001 is suggested for delta.
+ * \param a
+ * \param delta
+ * \return
+ */
+    template <typename T>
+    T huberPenalty(T a, T delta = 0.0001) const
+    {
+        return ceres::abs(a) <= delta ? a * a / 2 : delta * ceres::abs(a) - delta * delta / 2;
+    }
+
+    static ceres::CostFunction* Create(int i, int j, kfusion::WarpField* warpField)
+    {
+        auto cost_function = new ceres::DynamicAutoDiffCostFunction<DynamicFusionRegEnergy, 4>(
+                new DynamicFusionRegEnergy());
+        for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
+            cost_function->AddParameterBlock(6);
+        cost_function->SetNumResiduals(6);
+        return cost_function;
+    }
+    int i_;
+    int j_;
+    kfusion::WarpField* warpField_;
+};
+
 class WarpProblem {
 public:
     explicit WarpProblem(kfusion::WarpField *warp) : warpField_(warp)
