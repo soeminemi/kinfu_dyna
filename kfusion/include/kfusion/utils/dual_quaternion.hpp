@@ -84,11 +84,22 @@ namespace kfusion {
              * \brief store a rotation
              * \param angle is in radians
              */
-            void encodeRotation(T x, T y, T z)
+            // it is rodrigous, not OK!
+            // void encodeRotation(T x, T y, T z)
+            // {
+            //     rotation_.encodeRotation(sqrt(x*x+y*y+z*z), x, y, z);
+            // }
+            void encodeRotation(T roll, T pitch, T yaw)
             {
-                rotation_.encodeRotation(sqrt(x*x+y*y+z*z), x, y, z);
+                rotation_.w_ = cos(roll / 2) * cos(pitch / 2) * cos(yaw / 2) +
+                               sin(roll / 2) * sin(pitch / 2) * sin(yaw / 2);
+                rotation_.x_ = sin(roll / 2) * cos(pitch / 2) * cos(yaw / 2) -
+                               cos(roll / 2) * sin(pitch / 2) * sin(yaw / 2);
+                rotation_.y_ = cos(roll / 2) * sin(pitch / 2) * cos(yaw / 2) +
+                               sin(roll / 2) * cos(pitch / 2) * sin(yaw / 2);
+                rotation_.z_ = cos(roll / 2) * cos(pitch / 2) * sin(yaw / 2) -
+                               sin(roll / 2) * sin(pitch / 2) * cos(yaw / 2);
             }
-
             void encodeTranslation(T x, T y, T z)
             {
                 translation_ = 0.5 * Quaternion<T>(0, x, y, z) * rotation_;

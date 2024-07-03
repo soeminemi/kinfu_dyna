@@ -350,6 +350,7 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     pts_live.clear();
     pts_cano.clear();
     cls_cano.clear();
+    std::cout<<"canonical vertices size: "<<canonical_vertices.size()<<std::endl;
     for(int i = 0; i < canonical_vertices.size(); i++)
     {
         if(std::isnan(canonical_vertices[i][0]) ||
@@ -360,7 +361,7 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         //    std::isnan(live_vertices[i][2]))
         )
             continue;
-        if(randsel(30)==false)
+        if(randsel(50)==false)
             continue;
         // find the correspondence from canonical to live, i-th canonical  is not correspond to i-th live
         getWeightsAndUpdateKNN(canonical_vertices[i], weights);
@@ -375,16 +376,16 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         {
             indices[j] = ret_index_[j];
         }
-        // testCorrrespondence(&live_vertices,
-        //                     &live_normals,
-        //                     canonical_vertices[i],
-        //                     canonical_normals[i],
-        //                     this,
-        //                     weights,
-        //                     indices,
-        //                     pts_live,
-        //                     pts_cano,
-        //                     cls_cano);
+        testCorrrespondence(&live_vertices,
+                            &live_normals,
+                            canonical_vertices[i],
+                            canonical_normals[i],
+                            this,
+                            weights,
+                            indices,
+                            pts_live,
+                            pts_cano,
+                            cls_cano);
         
         // cls_cano.push_back(colors[ret_index_[0]]);
         auto dqb = DQB(canonical_vertices[i]);               
@@ -424,6 +425,7 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << std::endl;
+    std::cout<<"update warp field"<<std::endl;
     warpProblem.updateWarp();
 
     // for test

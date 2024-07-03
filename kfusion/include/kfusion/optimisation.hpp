@@ -4,7 +4,8 @@
 #include "ceres/rotation.h"
 #include <kfusion/warp_field.hpp>
 #include <kfusion/utils/dual_quaternion.hpp>
-#define THRES_CL 0.05
+#include <opencv2/surface_matching/icp.hpp>
+#define THRES_CL 0.02
 struct DynamicFusionDataEnergy
 {
     DynamicFusionDataEnergy(const std::vector<cv::Vec3f>* live_vertex,
@@ -119,16 +120,16 @@ struct DynamicFusionDataEnergy
         if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
         {
             residuals[0] = weight_t*T(THRES_CL);
-            // residuals[1] = weight_t*T(THRES_CL);
-            // residuals[2] = weight_t*T(THRES_CL);
+            residuals[1] = weight_t*T(THRES_CL);
+            residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         auto live_vt = (*live_vertex_)[idx];
         if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
         {
             residuals[0] = weight_t*T(THRES_CL);
-            // residuals[1] = weight_t*T(THRES_CL);
-            // residuals[2] = weight_t*T(THRES_CL);
+            residuals[1] = weight_t*T(THRES_CL);
+            residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         //4. 获得DQB，考虑到只优化一个，不用加权了
@@ -139,30 +140,42 @@ struct DynamicFusionDataEnergy
 //             // T eps_t[3] = {epsilon_[i][3], epsilon_[i][4], epsilon_[i][5]}; //参数对应的平移
 //             // EulerAnglesToRotationMatrix(eular, temp_rotation);
 //         }
-        T eular[3] = {epsilon_[0][0], epsilon_[0][1], epsilon_[0][2]}; //参数对应的Eular angle
-        T eps_t[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的平移
-        ceres::EulerAnglesToRotationMatrix(eular, 3, temp_rotation);
+        
+
         T cano_v[3] = {T(warp_cv[0]),T(warp_cv[1]),T(warp_cv[2])};
+
         auto ipose_live_v = warpField_->aff_inv * live_vt; //transform to the initial pose 
-        T live_v[3] = {T(ipose_live_v[0]),T(ipose_live_v[1]),T(ipose_live_v[2])};
-        T cano_n[3] = {T(warp_cn[0]),T(warp_cn[1]),T(warp_cn[2])};
-        T delta_v[3] = {(cano_v[0] + eps_t[0] -live_v[0]) ,(cano_v[1]+ eps_t[1] -live_v[1]) ,(cano_v[2]+ eps_t[2]-live_v[2])};
+
         if(fabs(ipose_live_v[2]-canonical_vertex_[2])>THRES_CL)
         {
             residuals[0] = weight_t*(THRES_CL);
-            // residuals[1] = weight_t*(THRES_CL);
-            // residuals[2] = weight_t*(THRES_CL);
+            residuals[1] = weight_t*(THRES_CL);
+            residuals[2] = weight_t*(THRES_CL);
         }
         else
         {
-            residuals[0] = weight_t*(cano_n[0] * delta_v[0] + cano_n[1] * delta_v[1] + cano_n[2] * delta_v[2]);
-            // residuals[0] = weight_t * (delta_v[0]);
-            // residuals[1] = weight_t * (delta_v[1]);
-            // residuals[2] = weight_t * (delta_v[2]);
+            T eular[3] = {epsilon_[0][0], epsilon_[0][1], epsilon_[0][2]}; //参数对应的Eular angle
+            T eps_t[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的平移
+            ceres::EulerAnglesToRotationMatrix(eular, 3, temp_rotation);
+
+            T live_v[3] = {T(ipose_live_v[0]),T(ipose_live_v[1]),T(ipose_live_v[2])};
+            T cano_n[3] = {T(warp_cn[0]),T(warp_cn[1]),T(warp_cn[2])};
+            // calc the rotation
+            T cx = temp_rotation[0] * cano_v[0] + temp_rotation[1] * cano_v[1] + temp_rotation[2] * cano_v[2];
+            T cy = temp_rotation[3] * cano_v[0] + temp_rotation[4] * cano_v[1] + temp_rotation[5] * cano_v[2];
+            T cz = temp_rotation[6] * cano_v[0] + temp_rotation[7] * cano_v[1] + temp_rotation[8] * cano_v[2];
+
+            T nx = temp_rotation[0] * cano_n[0] + temp_rotation[1] * cano_n[1] + temp_rotation[2] * cano_n[2];
+            T ny = temp_rotation[3] * cano_n[0] + temp_rotation[4] * cano_n[1] + temp_rotation[5] * cano_n[2];
+            T nz = temp_rotation[6] * cano_n[0] + temp_rotation[7] * cano_n[1] + temp_rotation[8] * cano_n[2];
+
+            T delta_v[3] = {(cx + eps_t[0] -live_v[0]) ,(cy+ eps_t[1] -live_v[1]) ,(cz+ eps_t[2]-live_v[2])};
+            // residuals[0] = weight_t*(nx * delta_v[0] + ny * delta_v[1] + nz * delta_v[2]);
+            residuals[0] = weight_t * (delta_v[0]);
+            residuals[1] = weight_t * (delta_v[1]);
+            residuals[2] = weight_t * (delta_v[2]);
         }
-        // residuals[0] = T(live_vertex_[0] - canonical_vertex_[0]) - total_translation[0];
-        // residuals[1] = T(live_vertex_[1] - canonical_vertex_[1]) - total_translation[1];
-        // residuals[2] = T(live_vertex_[2] - canonical_vertex_[2]) - total_translation[2];
+
         return true;
     }
 
@@ -209,7 +222,7 @@ struct DynamicFusionDataEnergy
                                             ));
         for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(1);
+        cost_function->SetNumResiduals(3);
         return cost_function;
     }
 
@@ -275,7 +288,39 @@ struct DynamicFusionEdgeEnergy
     template <typename T>
     bool operator()(T const * epsilon_, T* residuals) const
     {
+        auto &nd_i = warpField_->nodes_->at(i_);
+        auto &nd_j = warpField_->nodes_->at(j_);
+        auto vi = nd_i.vertex;
+        auto vj = nd_j.vertex;
+        nd_i.transform.transform(vi);
+        nd_j.transform.transform(vj);
+
+        T R_i[9];
+        T R_j[9];
+        T eular_i[3] = {epsilon_[0][0], epsilon_[0][1], epsilon_[0][2]}; //参数对应的Eular angle
+        T t_i[3] = {epsilon_[0][3], epsilon_[0][4], epsilon_[0][5]}; //参数对应的平移
+
+        T eular_j[3] = {epsilon_[1][0], epsilon_[1][1], epsilon_[1][2]}; //参数对应的Eular angle
+        T t_j[3] = {epsilon_[1][3], epsilon_[1][4], epsilon_[1][5]}; //参数对应的平移
+
+        ceres::EulerAnglesToRotationMatrix(eular_i, 3, R_i);
+        ceres::EulerAnglesToRotationMatrix(eular_j, 3, R_j);
+
+        T v_i[3] = {T(vi[0]),T(vi[1]),T(vi[2])};
+        T v_j[3] = {T(vj[0]),T(vj[1]),T(vj[2])};
+        // calc the rotation
+        T cx_i = R_i[0] * v_i[0] + R_i[1] * v_i[1] + R_i[2] * v_i[2] + t_i[0];
+        T cy_i = R_i[3] * v_i[0] + R_i[4] * v_i[1] + R_i[5] * v_i[2] + t_i[1];
+        T cz_i = R_i[6] * v_i[0] + R_i[7] * v_i[1] + R_i[8] * v_i[2] + t_i[2];
+
+        T cx_j = R_j[0] * v_j[0] + R_j[1] * v_j[1] + R_j[2] * v_j[2] + t_j[0];
+        T cy_j = R_j[3] * v_j[0] + R_j[4] * v_j[1] + R_j[5] * v_j[2] + t_j[1];
+        T cz_j = R_j[6] * v_j[0] + R_j[7] * v_j[1] + R_j[8] * v_j[2] + t_j[2];
         
+        residuals[0] = cx_i - cx_j;
+        residuals[1] = cy_i - cy_j;
+        residuals[2] = cz_i - cz_j;
+
         return true;
     }
 
@@ -296,9 +341,9 @@ struct DynamicFusionEdgeEnergy
     {
         auto cost_function = new ceres::DynamicAutoDiffCostFunction<DynamicFusionRegEnergy, 4>(
                 new DynamicFusionRegEnergy());
-        for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
+        for(int i=0; i < /*KNN_NEIGHBOURS*/2; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(6);
+        cost_function->SetNumResiduals(3);
         return cost_function;
     }
     int i_;
@@ -358,6 +403,14 @@ public:
         return mutable_epsilon_;
     }
 
+    std::vector<double*> mutable_epsilon_edge(const unsigned long i, const unsigned long j) const
+    {
+        std::vector<double*> mutable_epsilon_edge_(2);
+        mutable_epsilon_edge_[0] = &(parameters_[i * 6]); // Blocks of 6
+        mutable_epsilon_edge_[1] = &(parameters_[j * 6]); // Blocks of 6
+        return mutable_epsilon_edge_;
+    }
+
     std::vector<double*> mutable_epsilon(const std::vector<size_t>& index_list) const
     {
         std::vector<double*> mutable_epsilon_(KNN_NEIGHBOURS);
@@ -379,15 +432,16 @@ public:
     {
         for(int i = 0; i < warpField_->getNodes()->size() * 6; i+=6)
         {
-            //增量式更新
+            //增量式更新, We use Euler angle 
             float tx, ty, tz, ta, tb, tc;
             warpField_->getNodes()->at(i / 6).transform.getTranslation(tx, ty, tz);
-            warpField_->getNodes()->at(i / 6).transform.getRotation().getRodrigues(ta,tb,tc);
+            warpField_->getNodes()->at(i / 6).transform.getEuler(ta,tb,tc);
             //
-            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i] + ta, parameters_[i+1] + tb, parameters_[i+2] + tc);
+            warpField_->getNodes()->at(i / 6).transform.encodeRotation(parameters_[i]*0.0174533 + ta, parameters_[i+1]*0.0174533 + tb, parameters_[i+2]*0.0174533 + tc);
             warpField_->getNodes()->at(i / 6).transform.encodeTranslation(parameters_[i+3]+tx,parameters_[i+4]+ty,parameters_[i+5]+tz);
-            // std::cout<<tx<<", "<<ty<<", "<<tz<<", "<<ta<<", "<<tb<<", "<<tc<<std::endl;
+            // std::cout<<i/6<<","<<parameters_[i]<<", "<<parameters_[i+1]<<", "<<parameters_[i+2]<<", "<<parameters_[i+3]<<", "<<parameters_[i+5]<<", "<<parameters_[i+5]<<std::endl;
         }
+        std::cout<<"updated"<<std::endl;
     }
 
 private:
