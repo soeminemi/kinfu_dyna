@@ -5,7 +5,7 @@
 #include <kfusion/warp_field.hpp>
 #include <kfusion/utils/dual_quaternion.hpp>
 #include <opencv2/surface_matching/icp.hpp>
-#define THRES_CL 0.02
+#define THRES_CL 0.05
 struct DynamicFusionDataEnergy
 {
     DynamicFusionDataEnergy(const std::vector<cv::Vec3f>* live_vertex,
@@ -120,16 +120,16 @@ struct DynamicFusionDataEnergy
         if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
         {
             residuals[0] = weight_t*T(THRES_CL);
-            residuals[1] = weight_t*T(THRES_CL);
-            residuals[2] = weight_t*T(THRES_CL);
+            // residuals[1] = weight_t*T(THRES_CL);
+            // residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         auto live_vt = (*live_vertex_)[idx];
         if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
         {
             residuals[0] = weight_t*T(THRES_CL);
-            residuals[1] = weight_t*T(THRES_CL);
-            residuals[2] = weight_t*T(THRES_CL);
+            // residuals[1] = weight_t*T(THRES_CL);
+            // residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         //4. 获得DQB，考虑到只优化一个，不用加权了
@@ -149,8 +149,8 @@ struct DynamicFusionDataEnergy
         if(fabs(ipose_live_v[2]-canonical_vertex_[2])>THRES_CL)
         {
             residuals[0] = weight_t*(THRES_CL);
-            residuals[1] = weight_t*(THRES_CL);
-            residuals[2] = weight_t*(THRES_CL);
+            // residuals[1] = weight_t*(THRES_CL);
+            // residuals[2] = weight_t*(THRES_CL);
         }
         else
         {
@@ -170,10 +170,10 @@ struct DynamicFusionDataEnergy
             T nz = temp_rotation[6] * cano_n[0] + temp_rotation[7] * cano_n[1] + temp_rotation[8] * cano_n[2];
 
             T delta_v[3] = {(cx + eps_t[0] -live_v[0]) ,(cy+ eps_t[1] -live_v[1]) ,(cz+ eps_t[2]-live_v[2])};
-            // residuals[0] = weight_t*(nx * delta_v[0] + ny * delta_v[1] + nz * delta_v[2]);
-            residuals[0] = weight_t * (delta_v[0]);
-            residuals[1] = weight_t * (delta_v[1]);
-            residuals[2] = weight_t * (delta_v[2]);
+            residuals[0] = weight_t*(nx * delta_v[0] + ny * delta_v[1] + nz * delta_v[2]);
+            // residuals[0] = weight_t * (delta_v[0]);
+            // residuals[1] = weight_t * (delta_v[1]);
+            // residuals[2] = weight_t * (delta_v[2]);
         }
 
         return true;
@@ -222,7 +222,7 @@ struct DynamicFusionDataEnergy
                                             ));
         for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(3);
+        cost_function->SetNumResiduals(1);
         return cost_function;
     }
 
@@ -286,12 +286,15 @@ struct DynamicFusionEdgeEnergy
     {}
     ~DynamicFusionEdgeEnergy(){}
     template <typename T>
-    bool operator()(T const * epsilon_, T* residuals) const
+    bool operator()(T const * const * epsilon_, T* residuals) const
     {
-        auto &nd_i = warpField_->nodes_->at(i_);
-        auto &nd_j = warpField_->nodes_->at(j_);
-        auto vi = nd_i.vertex;
+        // std::cout<<"opt: "<<i_<<", "<<j_<<std::endl;
+        auto &nd_i = warpField_->getDeformationNode(i_);
+        auto &nd_j = warpField_->getDeformationNode(j_);
+  
+        auto vi = nd_j.vertex;
         auto vj = nd_j.vertex;
+
         nd_i.transform.transform(vi);
         nd_j.transform.transform(vj);
 
@@ -317,31 +320,19 @@ struct DynamicFusionEdgeEnergy
         T cy_j = R_j[3] * v_j[0] + R_j[4] * v_j[1] + R_j[5] * v_j[2] + t_j[1];
         T cz_j = R_j[6] * v_j[0] + R_j[7] * v_j[1] + R_j[8] * v_j[2] + t_j[2];
         
-        residuals[0] = cx_i - cx_j;
-        residuals[1] = cy_i - cy_j;
-        residuals[2] = cz_i - cz_j;
+        residuals[0] = 0.5*(cx_i - cx_j);
+        residuals[1] = 0.5*(cy_i - cy_j);
+        residuals[2] = 0.5*(cz_i - cz_j);
 
         return true;
     }
 
-/**
- * Huber penalty function, implemented as described in https://en.wikipedia.org/wiki/Huber_loss
- * In the paper, a value of 0.0001 is suggested for delta.
- * \param a
- * \param delta
- * \return
- */
-    template <typename T>
-    T huberPenalty(T a, T delta = 0.0001) const
-    {
-        return ceres::abs(a) <= delta ? a * a / 2 : delta * ceres::abs(a) - delta * delta / 2;
-    }
-
     static ceres::CostFunction* Create(int i, int j, kfusion::WarpField* warpField)
     {
-        auto cost_function = new ceres::DynamicAutoDiffCostFunction<DynamicFusionRegEnergy, 4>(
-                new DynamicFusionRegEnergy());
-        for(int i=0; i < /*KNN_NEIGHBOURS*/2; i++)
+        // std::cout<<"add "<<i<<"and "<<j<<std::endl;
+        auto cost_function = new ceres::DynamicAutoDiffCostFunction<DynamicFusionEdgeEnergy, 4>(
+                new DynamicFusionEdgeEnergy(i,j,warpField));
+        for(int i=0; i < 2; i++)
             cost_function->AddParameterBlock(6);
         cost_function->SetNumResiduals(3);
         return cost_function;

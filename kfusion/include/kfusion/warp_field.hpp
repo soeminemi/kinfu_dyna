@@ -108,6 +108,7 @@ namespace kfusion
         void expand_nodesflag(const int x, const int y, const int z, const int exp_len);
         bool get_volume_flag(const int &x, const int &y, const int &z);
         void setProject(float fx, float fy, float cx, float cy);
+        deformation_node& getDeformationNode(int idx);
 
         // test correspondence
         bool testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,

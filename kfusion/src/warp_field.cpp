@@ -132,6 +132,7 @@ void WarpField::expand_nodesflag(const int x, const int y, const int z, const in
  */
 void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv::Affine3f &aff_inv)
 {
+    std::vector<int> appended_node_idxes;
     std::cout<<"start to init volume flag: "<<first_frame.cols<<", "<<first_frame.rows<<std::endl;
     int vsize = vdims[0]*vdims[1]*vdims[2];
     vdim_x = vdims[0];
@@ -148,9 +149,10 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
     // note that nodes_ should be initialized first!!
     // nodes_->resize(first_frame.cols * first_frame.rows);
     nodes_->reserve(first_frame.cols * first_frame.rows);
+    appended_node_idxes.reserve(first_frame.cols * first_frame.rows);
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
-    exp_len_ = 0.015/voxel_size;
+    exp_len_ = 0.025/voxel_size;
 // //    FIXME:: this is a test, remove later
 //     voxel_size = 1;
     std::cout<<"start to init nodes, expand length: "<<exp_len_<<std::endl;
@@ -176,6 +178,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
                     // tnode.weight = 3 * voxel_size; //???, only weights to set the area affected
                     tnode.weight = 1 * exp_len_ * voxel_size;
                     nodes_->push_back(tnode);
+                    appended_node_idxes.push_back(node_num);
                     // nodes_->at(i*first_frame.cols+j).transform = utils::DualQuaternion<float>();
                     // nodes_->at(i*first_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
                     // nodes_->at(i*first_frame.cols+j).weight = 3 * voxel_size;
@@ -192,6 +195,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
         }
     }
     buildKDTree();
+    construct_edge(appended_node_idxes);
 }
 /**
  * canonical_frame
@@ -204,6 +208,7 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
     int not_node_num = 0;
     auto voxel_size = kfusion::KinFuParams::default_params().volume_size[0] /
                       kfusion::KinFuParams::default_params().volume_dims[0];
+    std::vector<int> appended_node_idxes;
     for(size_t i = 0; i < canonical_frame.rows; i+=step)
     {
         for(size_t j = 0; j < canonical_frame.cols; j+=step)
@@ -223,6 +228,7 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
                     // tnode.weight = 3 * voxel_size; //设置node的影响范围
                     tnode.weight = 1 * exp_len_ * voxel_size;
                     nodes_->push_back(tnode);
+                    appended_node_idxes.push_back(nodes_->size()-1);
                     // nodes_->at(i*canonical_frame.cols+j).transform = utils::DualQuaternion<float>();
                     // nodes_->at(i*canonical_frame.cols+j).vertex = Vec3f(point.x,point.y,point.z); 
                     // nodes_->at(i*canonical_frame.cols+j).weight = 3 * voxel_size;
@@ -241,6 +247,7 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
         }
     }
     buildKDTree();
+    construct_edge(appended_node_idxes);
     std::cout<<"add new node number: "<<node_num<<std::endl;
 }
 void WarpField::construct_edge(std::vector<int> &appended_nodes_idxs)
@@ -256,6 +263,11 @@ void WarpField::construct_edge(std::vector<int> &appended_nodes_idxs)
             auto idx = ret_index_[j];
             if(idx == node_idx)
                 continue;
+            auto dv = nodes_->at(node_idx).vertex - nodes_->at(idx).vertex;
+            if(sqrt(dv.dot(dv))>0.1)
+            {
+                continue;
+            }
             nodes_->at(node_idx).nb_idxes.push_back(idx);
             nodes_->at(idx).nb_idxes.push_back(node_idx);
         }
@@ -361,7 +373,7 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         //    std::isnan(live_vertices[i][2]))
         )
             continue;
-        if(randsel(50)==false)
+        if(randsel(10)==false)
             continue;
         // find the correspondence from canonical to live, i-th canonical  is not correspond to i-th live
         getWeightsAndUpdateKNN(canonical_vertices[i], weights);
@@ -376,16 +388,16 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
         {
             indices[j] = ret_index_[j];
         }
-        testCorrrespondence(&live_vertices,
-                            &live_normals,
-                            canonical_vertices[i],
-                            canonical_normals[i],
-                            this,
-                            weights,
-                            indices,
-                            pts_live,
-                            pts_cano,
-                            cls_cano);
+        // testCorrrespondence(&live_vertices,
+        //                     &live_normals,
+        //                     canonical_vertices[i],
+        //                     canonical_normals[i],
+        //                     this,
+        //                     weights,
+        //                     indices,
+        //                     pts_live,
+        //                     pts_cano,
+        //                     cls_cano);
         
         // cls_cano.push_back(colors[ret_index_[0]]);
         auto dqb = DQB(canonical_vertices[i]);               
@@ -398,20 +410,32 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
                                                                              indices,
                                                                              dqb);
 
-        problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.01) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
+        problem.AddResidualBlock(cost_function,  new ceres::TukeyLoss(0.005) /* squared loss */, warpProblem.mutable_epsilon(indices)); //warpProblem.mutable_epsilon(indices) contains the info of size of paramblocks
         tnum ++;
     }
     // saveToPlyColorT(pts_live,pts_live,"live_pts_bf.ply", 255,0,0);
     // saveToPlyColorT(pts_cano,pts_cano,"cano_pts_bf.ply", 0,255,0);
     // saveToPlyPixelColorT(pts_cano,cls_cano,"cano_pts_bf.ply");
-    // add reg const function
+    // add reg cost function
+    // edge reg cost 
     for (size_t i = 0; i < nodes_->size(); i++)
     {
-        getWeightsAndUpdateKNN(nodes_->at(i).vertex, weights);
-        
-        ceres::CostFunction *reg_costfuncion = DynamicFusionRegEnergy::Create();
-        problem.AddResidualBlock(reg_costfuncion,  nullptr/* squared loss */, warpProblem.mutable_epsilon(indices));
+        auto &nd = nodes_->at(i);
+        for (size_t j = 0; j < nd.nb_idxes.size(); j++)
+        {
+            // std::cout<<"reg: "<<i<<", "<<nd.nb_idxes[j]<<std::endl;
+            ceres::CostFunction *reg_costfuncion = DynamicFusionEdgeEnergy::Create(i, nd.nb_idxes[j],this);
+            problem.AddResidualBlock(reg_costfuncion,  nullptr/* squared loss */, warpProblem.mutable_epsilon_edge(i, nd.nb_idxes[j]));
+        }
     }
+
+    // for (size_t i = 0; i < nodes_->size(); i++)
+    // {
+    //     getWeightsAndUpdateKNN(nodes_->at(i).vertex, weights);
+        
+    //     ceres::CostFunction *reg_costfuncion = DynamicFusionRegEnergy::Create();
+    //     problem.AddResidualBlock(reg_costfuncion,  nullptr/* squared loss */, warpProblem.mutable_epsilon(indices));
+    // }
     
     std::cout<<"total error before opt: "<<total_err<<std::endl;
     //基于ceres求解warpField
@@ -421,7 +445,7 @@ void WarpField::energy_data(const std::vector<Vec3f> &canonical_vertices,
     options.minimizer_progress_to_stdout = true;
     options.max_num_iterations = 5;
     // options.num_linear_solver_threads = 8;
-    options.num_threads = 64;
+    options.num_threads = 32;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.FullReport() << std::endl;
@@ -677,6 +701,11 @@ void WarpField::setProject(float fx, float fy, float cx, float cy)
      projector_ = proj;
 }
 
+deformation_node& WarpField::getDeformationNode(int idx)
+{
+    auto &v = nodes_->at(idx);
+    return v;
+}
 
 bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
                             const std::vector<cv::Vec3f>* live_normal_,
