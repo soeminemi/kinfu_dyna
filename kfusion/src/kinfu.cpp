@@ -419,8 +419,8 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
 
     std::vector<Vec3f> canonical_visible(canonical);
     //
-    saveToPly(canonical_cur, canonical_normals_cur, "canonical_beforwarp_cur.ply");
-    saveToPlyColor(canonical, canonical_normals, "canonical_beforwarp.ply",255,0,0);
+    // saveToPly(canonical_cur, canonical_normals_cur, "canonical_beforwarp_cur.ply");
+    // saveToPlyColor(canonical, canonical_normals, "canonical_beforwarp.ply",255,0,0);
     // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
     // expand the nodes
     if(true) //当warp点云的时候出现距离node过远的点时，扩展当前点云
@@ -443,20 +443,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     std::cout<<"try to warp"<<std::endl;
     warp_->setWarpToLive(Affine3f::Identity());
     warp_->warp(canonical, canonical_normals);
-    // std::vector<cv::Vec3f> wnodes;
-    // warp_->getWarpedNode(wnodes);
-    // saveToPlyColor(wnodes,wnodes,"warp_nodes.ply",0,255,0);
-    // if(warp_->flag_exp) //当warp点云的时候出现距离node过远的点时，扩展当前点云
-    // {
-    //     cv::Mat frame_init;
-    //     volume_->computePoints(frame_init);
-    //     auto aff = volume_->getPose();
-    //     aff = aff.inv();
-    //     warp_->update_deform_node(frame_init, aff);
-    //     //存扩展后的nodes
-    //     auto nd = warp_->getNodesAsMat();
-    //     toPlyVec3(nd,nd,"cur_nodes.ply");
-    // }
+
     saveToPlyColor(canonical, canonical_normals, "aft_opt.ply",0,0,255);
 //    //ScopeTime time("fusion");
     std::cout<<"dynamic surface fusion"<<std::endl;
