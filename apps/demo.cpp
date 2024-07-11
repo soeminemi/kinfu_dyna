@@ -22,7 +22,7 @@
 #include <jsoncpp/json/json.h>
 
 using namespace kfusion;
-// #define COMBIN_MS //if body measurement is combined
+#define COMBIN_MS //if body measurement is combined
 class KinFuApp
 {
 public:
@@ -83,7 +83,11 @@ public:
         // viz.showWidget("cloud", cv::viz::WCloud(cloud_host));
         //viz.showWidget("cloud", cv::viz::WPaintedCloud(cloud_host));
     }
+    // #include <librealsense2/rs.hpp>
+    // bool execute_realsense()
+    // {
 
+    // }
     bool execute()
     {
         #ifdef COMBIN_MS
@@ -99,17 +103,17 @@ public:
         std::vector<cv::String> depths;             // store paths,
         std::vector<cv::String> images;             // store paths,
 
-        cv::glob("./data_kinfu/rotperson/depth", depths);
-        cv::glob("./data_kinfu/rotperson/color", images);
+        cv::glob("./data_kinfu/rotperson_1/depth", depths);
+        cv::glob("./data_kinfu/rotperson_1/color", images);
 
         std::sort(depths.begin(), depths.end());
         std::sort(images.begin(), images.end());
 
         pause_ = true;
-        for (int i = 65; i < depths.size() && !exit_ ; ++i)
+        for (int i = 0; i < depths.size() && !exit_ ; ++i)
         { 
-            if(i>310)
-                exit_ = true;
+            // if(i>1006)
+            //     exit_ = true;
             frame_idx = i;
             std::cout<<"frame: "<<i<<std::endl;
             // bool has_frame = capture_.grab(depth, image);
@@ -127,7 +131,6 @@ public:
                         depth.at<ushort>(i,j) = 0;
                     }
                 }
-                
             }
             // cv::Rect maskroi(0,0,200,720);
             // depth(maskroi) = 0;
@@ -177,8 +180,9 @@ public:
         //save to file for measurement
         std::stringstream ss;
         ss<<pfile;
-        kinfu.toPly(cloud_host, normal_host, ss.str());
+        kinfu.toPlyColor(cloud_host, normal_host, ss.str(),255,0,0);
         //start measurement
+
         func(readFileIntoString((char *)pfile.c_str()));
         #endif
         
@@ -204,7 +208,7 @@ public:
     fitMesh meshFittorMale;
     fitMesh meshFittorFemale;
     string pfile;
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_filtered;
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_filtered;
     string readFileIntoString(char * filename)
     {
         ifstream ifile(filename);
@@ -237,31 +241,9 @@ public:
         // rt["status"]="test";
         // rt["details"]="test, return without processing";
         // return(rt.toStyledString());
-        if(!reader.parse(param_json,root))
+        string gender = "male";
         {
-            cout<<"parse json string failed"<<endl;
-            rt["status"]="failed";
-            rt["details"]="parse json string failed";
-            return(rt.toStyledString());
-        }
-
-        if(root["ptcloud"].isString())
-        {
-            cout<<"saving to "<<pfile<<endl;
-            ofstream c_s(pfile);
-            c_s<<root["ptcloud"].asString();
-            c_s.close();
-        }
-        else
-        {
-            rt["status"]="failed";
-            rt["details"]="failed of interpret json string to get point cloud";
-            cout<<"failed of interpret json string to get point cloud"<<endl;
-            return(rt.toStyledString());
-        }
-        if(root["gender"].isString())
-        {
-            if(root["gender"].asString()=="male")
+            if(gender=="male")
             {
                 meshFittor = &meshFittorMale;
             }
@@ -270,18 +252,10 @@ public:
                 meshFittor = &meshFittorFemale;
             }
         }
-        if(root["zhuozhuang"].isString())
-        {
-            zhuozhuang_type = root["zhuozhuang"].asString();
-        }
-        else
-        {
-            cout<<"failed to interpret json string to get gender info"<<endl;
-            rt["status"]="failed";
-            rt["details"]="failed to interpret json string to get gender info";
-            return(rt.toStyledString());
-        }
-        cout<<"step 1. load ply file"<<endl;
+
+        zhuozhuang_type = "tieshen";
+
+        cout<<"step 1. load ply file:"<<pfile<<endl;
         //step 1. load ply file
         Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Identity ();
         transformation_matrix (0, 0) = 1;
@@ -289,29 +263,25 @@ public:
         transformation_matrix (2, 2) = 1;
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-        if(pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> (pfile, *cloud_orig) == -1)
+        if(pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final1.ply", *cloud_orig) == -1)
         {
             PCL_ERROR("Could not read file \n");
         }
+        std::cout<<"ply file loaded, try to filter the data"<<std::endl;
         pcl::transformPointCloud (*cloud_orig, *cloud, transformation_matrix);
-        // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         //step 2 filter the outlier points
+        cout<<"set transformed"<<endl;
         pcl::RadiusOutlierRemoval<pcl::PointXYZRGBNormal> sor;
         sor.setInputCloud(cloud);
         sor.setRadiusSearch(0.05);
         sor.setMinNeighborsInRadius(20);
         sor.setNegative(false);
+        cout<<"start filter"<<endl;
         sor.filter(*cloud_filtered);
 
         pcl::io::savePLYFile("./results/aft_filter.ply",*cloud_filtered);
-        if(cloud_filtered->points.size()<10000)
-        {
-            cout<<"number of scan points too few"<<endl;
-            rt["status"]="failed";
-            rt["details"]="激光数据异常，请重启设备";
-            rt["test_load"]=readFileIntoString("./results/load.ply");
-            return(rt.toStyledString());
-        }
+    
         pcl::PointCloud<pcl::PointXYZRGBNormal> scan;
         scan = * cloud_filtered;
         //step 3. fit the model
@@ -325,9 +295,7 @@ public:
             if(z<minz)
                 minz = z;
         }
-        cout<<"maxz - minz = "<<maxz - minz<<endl;
         pcl::io::savePLYFile("./results/scan.ply",scan);
-
         Json::Value val_weights;
         ifstream rcf("./data/weights_"+zhuozhuang_type+".conf");
         if(!reader.parse(rcf,val_weights))
@@ -349,16 +317,7 @@ public:
         Json::Value jval;
         Json::Reader reader2;
         string measure_type = "xifu";
-        cout<<"==================================================================haha"<<endl;
-        if(root["clothtype"].isString())
-        {
-            cout<<"cloth type is "<<root["clothtype"]<<endl;
-            measure_type = root["clothtype"].asString();
-        }
-        else
-        {
-            cout<<"cloth type is not found"<<endl;
-        }
+
         //load the corresponding measuring configure file
         string mfolder = "measure_"+measure_type;
         ifstream cf("./data/body_measure/"+mfolder+"/measure_"+measure_type+".conf");
@@ -590,6 +549,11 @@ public:
 
 int main (int argc, char* argv[])
 {
+    // //test ply loading
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    // pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final1.ply", *cloud_orig);
+    // cout<<"ply loaded"<<endl;
+    // return 0;
     int device = 0;
     cuda::setDevice (device);
     cuda::printShortCudaDeviceInfo (device);

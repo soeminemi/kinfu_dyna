@@ -49,16 +49,18 @@ void saveToPlyColor(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &no
     }
     cout<<"saving the point cloud to the file"<<endl;
     ofstream fscan(name);
-    fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment Created by Wang Junnan"<<endl;
+    fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment VCGLIB generated"<<endl;
     fscan<<"element vertex "<<num<<endl;
     fscan<<"property float x"<<endl<<"property float y"<<endl<<"property float z"<<endl;
-    fscan<<"property uint8 red"<<endl<<"property uint8 green"<<endl<<"property uint8 blue"<<endl;
+    fscan<<"property uchar red"<<endl<<"property uchar blue"<<endl<<"property uchar green"<<endl;
+    fscan<<"property uchar alpha"<<endl;
     fscan<<"end_header"<<endl;
+
 
     for(int i=0;i<vertices.size();i++){
         if(std::isnan(vertices[i][0]))
             continue;
-        fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<" "<<r<<" "<<g<<" "<<b<<endl;
+        fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<" "<<r<<" "<<g<<" "<<b<<" "<<255<<endl;
     }
     fscan.close();
 }

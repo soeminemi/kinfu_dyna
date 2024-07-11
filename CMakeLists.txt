@@ -1,11 +1,12 @@
-cmake_minimum_required(VERSION 2.8.8)
-
+cmake_minimum_required(VERSION 3.2.1)
+set(CMAKE_CXX_STANDARD 17)
 # ---[ Configurations types
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Possible configurations" FORCE)
 if (DEFINED CMAKE_BUILD_TYPE)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
 endif()
 
+set(CMAKE_BUILD_TYPE DEBUG)
 # ---[ Solution name
 project(kfusion C CXX)
 
@@ -20,6 +21,7 @@ find_package(OpenCV REQUIRED COMPONENTS core highgui)
 find_package(CUDA REQUIRED)
 find_package(OpenNI REQUIRED)
 find_package(Ceres REQUIRED)
+set(DEPENDENCIES realsense2 )
 include_directories(${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${OPENNI_INCLUDE_DIR} ${CERES_INCLUDE_DIRS} /usr/include/eigen3)
 # ---[ misc settings
 if(USE_PROJECT_FOLDERS)

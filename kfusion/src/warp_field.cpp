@@ -751,7 +751,7 @@ bool WarpField::testCorrrespondence(const std::vector<cv::Vec3f>* live_vertex_,
     }
     
     auto loss = sqrt(dv.dot(dv));
-    auto frac = loss * 100;
+    auto frac = loss * 50;
     frac = frac>1?1:frac;
     r = frac * 255;
     g = (1-frac) * 255;

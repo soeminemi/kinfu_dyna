@@ -120,16 +120,16 @@ struct DynamicFusionDataEnergy
         if(idx < 0 || idx >= warpField_->image_width * warpField_->image_height)
         {
             residuals[0] = weight_t*T(THRES_CL);
-            // residuals[1] = weight_t*T(THRES_CL);
-            // residuals[2] = weight_t*T(THRES_CL);
+            residuals[1] = weight_t*T(THRES_CL);
+            residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         auto live_vt = (*live_vertex_)[idx];
         if(std::isnan(live_vt[0]) ||std::isnan(live_vt[1]) ||std::isnan(live_vt[2]))
         {
             residuals[0] = weight_t*T(THRES_CL);
-            // residuals[1] = weight_t*T(THRES_CL);
-            // residuals[2] = weight_t*T(THRES_CL);
+            residuals[1] = weight_t*T(THRES_CL);
+            residuals[2] = weight_t*T(THRES_CL);
             return true;
         }
         //4. 获得DQB，考虑到只优化一个，不用加权了
@@ -149,8 +149,8 @@ struct DynamicFusionDataEnergy
         if(fabs(ipose_live_v[2]-canonical_vertex_[2])>THRES_CL)
         {
             residuals[0] = weight_t*(THRES_CL);
-            // residuals[1] = weight_t*(THRES_CL);
-            // residuals[2] = weight_t*(THRES_CL);
+            residuals[1] = weight_t*(THRES_CL);
+            residuals[2] = weight_t*(THRES_CL);
         }
         else
         {
@@ -170,10 +170,10 @@ struct DynamicFusionDataEnergy
             T nz = temp_rotation[6] * cano_n[0] + temp_rotation[7] * cano_n[1] + temp_rotation[8] * cano_n[2];
 
             T delta_v[3] = {(cx + eps_t[0] -live_v[0]) ,(cy+ eps_t[1] -live_v[1]) ,(cz+ eps_t[2]-live_v[2])};
-            residuals[0] = weight_t*(nx * delta_v[0] + ny * delta_v[1] + nz * delta_v[2]);
-            // residuals[0] = weight_t * (delta_v[0]);
-            // residuals[1] = weight_t * (delta_v[1]);
-            // residuals[2] = weight_t * (delta_v[2]);
+            // residuals[0] = weight_t*(nx * delta_v[0] + ny * delta_v[1] + nz * delta_v[2]);
+            residuals[0] = weight_t * (delta_v[0]);
+            residuals[1] = weight_t * (delta_v[1]);
+            residuals[2] = weight_t * (delta_v[2]);
         }
 
         return true;
@@ -222,7 +222,7 @@ struct DynamicFusionDataEnergy
                                             ));
         for(int i=0; i < /*KNN_NEIGHBOURS*/1; i++)
             cost_function->AddParameterBlock(6);
-        cost_function->SetNumResiduals(1);
+        cost_function->SetNumResiduals(3);
         return cost_function;
     }
 
