@@ -84,17 +84,58 @@ public:
         //viz.showWidget("cloud", cv::viz::WPaintedCloud(cloud_host));
     }
     // #include <librealsense2/rs.hpp>
-    // bool execute_realsense()
-    // {
-
-    // }
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <unistd.h>
+    #include <string.h>
+    bool execute_tcp()
+    {
+        int server_fd, new_socket;
+        struct sockaddr_in address;
+        int opt = 1;
+        int addrlen = sizeof(address);
+        char buffer[256];
+        cv::Mat img = cv::imread("image.jpg", cv::IMREAD_COLOR);
+        cv::Mat compressedImg;
+        std::vector<uchar> buf;
+    
+        // 创建socket
+        if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+            perror("socket failed");
+            exit(EXIT_FAILURE);
+        }
+    
+        // 绑定socket到地址和端口
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = INADDR_ANY;
+        address.sin_port = htons(9099);
+    
+        if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+            perror("bind failed");
+            exit(EXIT_FAILURE);
+        }
+    
+        // 监听连接请求
+        if (listen(server_fd, 3) < 0) {
+            perror("listen");
+            exit(EXIT_FAILURE);
+        }
+    
+        // 接受连接
+        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+            perror("accept");
+            exit(EXIT_FAILURE);
+        }
+    
+        // 接收图像数据
+        // ...
+    
+        // 关闭socket
+        close(server_fd);
+        return 0;
+    }
     bool execute()
     {
-        #ifdef COMBIN_MS
-        std::cout<<"init body measure"<<std::endl;
-        init_bodymeasuer();
-        cout<<"body initialized"<<endl;
-        #endif
         KinFu& kinfu = *kinfu_;
         cv::Mat depth, image;
         double time_ms = 0;
@@ -263,7 +304,7 @@ public:
         transformation_matrix (2, 2) = 1;
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-        if(pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final1.ply", *cloud_orig) == -1)
+        if(pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final.ply", *cloud_orig) == -1)
         {
             PCL_ERROR("Could not read file \n");
         }
@@ -308,11 +349,14 @@ public:
             meshFittor->setWeights(val_weights["weight_out"].asDouble(),val_weights["weight_in"].asDouble() ,val_weights["weight_in_margin"].asDouble(), val_weights["in_thick"].asDouble() );
             cout<<"===============================================weights seted"<<endl;
         }
+        cout<<"reset parameters"<<endl;
         meshFittor->resetParameters();
+        cout<<"start mainprocess"<<endl;
         meshFittor->mainProcess(scan);
+        cout<<"start measure"<<endl;
         //step 4. measure the body
         Json::Value jmeasure,jmeasure_add;
-        bm.loadMeasureBody("./results/rbody.ply");
+        bm.loadMeasureBody("../results/rbody.ply");
         //load the config file
         Json::Value jval;
         Json::Reader reader2;
@@ -321,6 +365,7 @@ public:
         //load the corresponding measuring configure file
         string mfolder = "measure_"+measure_type;
         ifstream cf("./data/body_measure/"+mfolder+"/measure_"+measure_type+".conf");
+        cout<<"mfolder : "<<mfolder<<" , "<<measure_type<<endl;
         if(!reader2.parse(cf,jval))
         {
             cout<<"load config file for measurment failed"<<endl;
@@ -350,6 +395,8 @@ public:
                 arma::mat tmp;
                 tmp.load(pp_name);
                 double length = 0;
+                cout<<"measuring: "<<ms_type<<","<<strKey<<endl;
+                cout<<"haha"<<endl;
                 if(ms_type == "hori_circle")
                 {
                     bm.MeasureCircleHori(length,tmp);
@@ -401,6 +448,7 @@ public:
                     jmeasure[ms_name]=round(length*1000)/10.0;
             }
         }
+        cout<<"measure finished"<<endl;
         rt["left_shoulder_idx"]=lshoulder_idx;
         rt["right_shoulder_idx"]=rshoulder_idx;
         rt["status"]="succeeded";
@@ -431,9 +479,10 @@ public:
         //     // cout<<"模型测量身高是:"<<jmeasure["身高"]<<endl;
         //     jmeasure["身高"] = round(shengao * ratio*1000)/10.0;
         // }
+        cout<<jmeasure.toStyledString()<<endl;
         //aditional measure
         mfolder = "measure_chenshan_all";
-        ifstream cfa("./data/body_measure/"+mfolder+"/measure_chenshan"+".conf");
+        ifstream cfa("./data/body_measure/"+mfolder+"/measure_chenshan_xx"+".conf");
         if(!reader2.parse(cfa,jval))
         {
             cout<<"load config file for measurment failed"<<endl;
@@ -454,6 +503,7 @@ public:
                 arma::mat tmp;
                 tmp.load(pp_name);
                 double length = 0;
+                cout<<"measure type: "<<ms_type<<endl;
                 if(ms_type == "hori_circle")
                 {
                     bm.MeasureCircleHori(length,tmp);
@@ -562,6 +612,13 @@ int main (int argc, char* argv[])
         return std::cout << std::endl << "Kinfu is not supported for pre-Fermi GPU architectures, and not built for them by default. Exiting..." << std::endl, 1;
 
     KinFuApp app;
+    #ifdef COMBIN_MS
+    std::cout<<"init body measure"<<std::endl;
+    app.init_bodymeasuer();
+    cout<<"body initialized"<<endl;
+    #endif
+    // app.func("haha");
+    // return 0;
     // executing
     try { app.execute(); }
     catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
