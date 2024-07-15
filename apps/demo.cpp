@@ -20,6 +20,7 @@
 #include <iostream>
 #include <pthread.h>
 #include <jsoncpp/json/json.h>
+#include <io/CWebsocketServer.hpp>
 
 using namespace kfusion;
 #define COMBIN_MS //if body measurement is combined
@@ -90,6 +91,7 @@ public:
     #include <string.h>
     bool execute_tcp()
     {
+        CWSServer ws;
         int server_fd, new_socket;
         struct sockaddr_in address;
         int opt = 1;
@@ -151,9 +153,9 @@ public:
         std::sort(images.begin(), images.end());
 
         pause_ = true;
-        for (int i = 0; i < depths.size() && !exit_ ; ++i)
+        for (int i = 200; i < depths.size() && !exit_ ; ++i)
         { 
-            // if(i>1006)
+            // if(i>200)
             //     exit_ = true;
             frame_idx = i;
             std::cout<<"frame: "<<i<<std::endl;
