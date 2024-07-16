@@ -300,8 +300,8 @@ void kfusion::KinFu::toPlyColor(cv::Mat& points, cv::Mat &normals, std::string s
         for (size_t j = 0; j < points.cols; j++)
         {
             cv::Vec4f pt = points.at<cv::Vec4f>(i,j);
-            cv::Vec4f nl = points.at<cv::Vec4f>(i,j);
-            if(!isnan(pt[0]))
+            cv::Vec4f nl = normals.at<cv::Vec4f>(i,j);
+            if(!isnan(pt[0]) || isnan(nl[0]))
             {
                 // cv::Vec3f pt = cv::Vec3f(pts[0],pts[1],pts[2]);
                 pts.push_back(pt);
