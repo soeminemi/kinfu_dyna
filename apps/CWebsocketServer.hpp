@@ -61,12 +61,10 @@ public:
     void on_open(connection_hdl hdl);
     void on_close(connection_hdl hdl);
     void on_message(connection_hdl hdl, server::message_ptr msg);
-    void on_http(websocketpp::connection_hdl hdl);
     action archieve_message(bool &flag);
     bool send_msg(connection_hdl &send_hdl, const std::string& msg);
     bool bind_hdl_uuid(const connection_hdl &hdl, const std::string &uuid);
     void stop_server();
-    void append_msg_extern(std::string msg);
 private:
     typedef std::set<connection_hdl,std::owner_less<connection_hdl> > con_list;
     std::map<websocketpp::connection_hdl, std::string, std::owner_less<connection_hdl>> m_hdl_map;

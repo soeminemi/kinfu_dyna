@@ -20,10 +20,58 @@
 #include <iostream>
 #include <pthread.h>
 #include <jsoncpp/json/json.h>
-#include <io/CWebsocketServer.hpp>
-
+#include "CWebsocketServer.hpp"
 using namespace kfusion;
 #define COMBIN_MS //if body measurement is combined
+
+
+static const std::string base64_chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789+/";
+
+
+static inline bool is_base64(unsigned char c) {
+    return (isalnum(c) || (c == '+') || (c == '/'));
+}
+
+std::string base64_decode(const std::string& encoded_string) {
+    size_t in_len = encoded_string.size();
+    int i = 0;
+    int j = 0;
+    int in_ = 0;
+    unsigned char char_array_4[4], char_array_3[3];
+    std::string ret;
+
+    while (in_len-- && (encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
+        char_array_4[i++] = encoded_string[in_]; in_++;
+        if (i == 4) {
+            for (i = 0; i < 4; i++)
+                char_array_4[i] = base64_chars.find(char_array_4[i]) & 0xff;
+
+            char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+            char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+            char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+            for (i = 0; (i < 3); i++)
+                ret += char_array_3[i];
+            i = 0;
+        }
+    }
+
+    if (i) {
+        for (j = 0; j < i; j++)
+            char_array_4[j] = base64_chars.find(char_array_4[j]) & 0xff;
+
+        char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+        char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+
+        for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
+    }
+
+    return ret;
+}
+
 class KinFuApp
 {
 public:
@@ -89,53 +137,116 @@ public:
     #include <netinet/in.h>
     #include <unistd.h>
     #include <string.h>
-    bool execute_tcp()
+    #include <thread>
+    #include <fstream>
+    bool execute_ws()
     {
         CWSServer ws;
-        int server_fd, new_socket;
-        struct sockaddr_in address;
-        int opt = 1;
-        int addrlen = sizeof(address);
-        char buffer[256];
-        cv::Mat img = cv::imread("image.jpg", cv::IMREAD_COLOR);
-        cv::Mat compressedImg;
-        std::vector<uchar> buf;
-    
-        // 创建socket
-        if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-            perror("socket failed");
-            exit(EXIT_FAILURE);
+        ws.set_port(9099);
+        thread t_ws(bind(&CWSServer::excute,&ws));
+        bool flag_got = false;
+        int fid = 0;
+        KinFu& kinfu = *kinfu_;
+        cv::Mat depth, image;
+        double time_ms = 0;
+        bool has_image = false;
+        pause_ = false;
+        while (true)
+        {
+            std::cout<<"try to achieve msg"<<std::endl;
+            auto a = ws.archieve_message(flag_got);
+            if(flag_got)
+            {
+                
+                //start to process the message
+                // std::cout<<a.msg_str<<std::endl;
+                std::string ws_str = base64_decode(a.msg->get_payload());
+                std::cout<<"image received: "<<ws_str.size()<<std::endl;
+                if(ws_str.size()<100)
+                {
+                    std::cout<<"msg: "<<ws_str<<std::endl;
+                }
+                // if(ws_str == "finished")
+                if(ws_str.size()< 100)
+                {
+                    std::cout<<"finished and try to measure"<<std::endl;
+                    //save final cloud to file
+                    cuda::DeviceArray<Point> cloud = kinfu.tsdf().fetchCloud(cloud_buffer);
+                    kinfu.tsdf().fetchNormals(cloud,normal_buffer);
+                    //
+                    cv::Mat cloud_host(1, (int)cloud.size(), CV_32FC4);
+                    cloud.download(cloud_host.ptr<Point>());
+                    //
+                    cv::Mat normal_host(1, (int)cloud.size(), CV_32FC4);
+                    normal_buffer.download(normal_host.ptr<Point>());
+                    
+                    #ifdef COMBIN_MS
+                    //save to file for measurement
+                    std::stringstream ss;
+                    ss<<pfile;
+                    kinfu.toPlyColor(cloud_host, normal_host, ss.str(),255,0,0);
+                    //start measurement
+
+                    auto rst = func(readFileIntoString((char *)pfile.c_str()));
+                    ws.send_msg(a.hdl,rst);
+                    #endif
+                    kinfu.tsdf().clear();
+
+                }
+                else{
+                    std::cout<<"base 64 decoded"<<std::endl;
+                    std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
+                    std::cout<<"decode png"<<std::endl;
+                    cv::Mat depth = cv::imdecode(img_vec, cv::IMREAD_ANYDEPTH);
+                    depth = depth /4;
+                    ////////////////////////START//////////////////////////
+                    // user specified code, for test to filter the point cloud
+                    for (size_t i = 0; i < depth.rows; i++)
+                    {
+                        for (size_t j = 0; j < depth.cols; j++)
+                        {
+                            if(depth.at<ushort>(i,j)>2000)
+                            {
+                                depth.at<ushort>(i,j) = 0;
+                            }
+                        }
+                    }
+                    // cv::Rect maskroi(0,0,200,720);
+                    // depth(maskroi) = 0;
+                    ////////////////////////END//////////////////////////
+                    depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
+                    // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
+                    {
+                        SampledScopeTime fps(time_ms); (void)fps;
+                        has_image = kinfu(depth_device_);
+                    }
+
+                    if (has_image)
+                        show_raycasted(kinfu);
+
+                    // show_depth(depth);
+                    cv::imshow("Image", depth);
+                    int key = cv::waitKey(pause_ ? 0 : 3);
+
+                    switch(key)
+                    {
+                    case 't': case 'T' : take_cloud(kinfu); break;
+                    case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
+                    case 's':pause_ = false;break;
+                    case 27: exit_ = true; break;
+                    case 'p': pause_ = !pause_; break;
+                    }
+                    std::cout<<"image received"<<std::endl;
+                }
+            }
+            else{
+                std::cout<<"achieve msg failed"<<std::endl;
+            }
         }
-    
-        // 绑定socket到地址和端口
-        address.sin_family = AF_INET;
-        address.sin_addr.s_addr = INADDR_ANY;
-        address.sin_port = htons(9099);
-    
-        if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-            perror("bind failed");
-            exit(EXIT_FAILURE);
-        }
-    
-        // 监听连接请求
-        if (listen(server_fd, 3) < 0) {
-            perror("listen");
-            exit(EXIT_FAILURE);
-        }
-    
-        // 接受连接
-        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
-            perror("accept");
-            exit(EXIT_FAILURE);
-        }
-    
-        // 接收图像数据
-        // ...
-    
-        // 关闭socket
-        close(server_fd);
-        return 0;
+        
+        return true;
     }
+
     bool execute()
     {
         KinFu& kinfu = *kinfu_;
@@ -398,7 +509,6 @@ public:
                 tmp.load(pp_name);
                 double length = 0;
                 cout<<"measuring: "<<ms_type<<","<<strKey<<endl;
-                cout<<"haha"<<endl;
                 if(ms_type == "hori_circle")
                 {
                     bm.MeasureCircleHori(length,tmp);
@@ -482,6 +592,7 @@ public:
         //     jmeasure["身高"] = round(shengao * ratio*1000)/10.0;
         // }
         cout<<jmeasure.toStyledString()<<endl;
+        return jmeasure.toStyledString();
         //aditional measure
         mfolder = "measure_chenshan_all";
         ifstream cfa("./data/body_measure/"+mfolder+"/measure_chenshan_xx"+".conf");
@@ -622,7 +733,7 @@ int main (int argc, char* argv[])
     // app.func("haha");
     // return 0;
     // executing
-    try { app.execute(); }
+    try { app.execute_ws(); }
     catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
     catch (const std::exception& /*e*/) { std::cout << "Exception" << std::endl; }
     std::cout<<"finished"<<std::endl;

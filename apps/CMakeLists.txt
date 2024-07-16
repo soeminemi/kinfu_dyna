@@ -6,11 +6,12 @@ include_directories(${CMAKE_SOURCE_DIR}/kfusion/include
 ${PCL_INCLUDE_DIRS}
 ${Ceres_INCLUDE_DIRS}
 /usr/include/jsoncpp
+${CMAKE_SOURCE_DIR}/apps
 )
 
 file(GLOB srcs *.cpp *.hpp)
 add_executable(demo ${srcs})
-message(${PCL_LIBRARIES} )
+#message(${srcs} )
 target_link_libraries(demo ${OpenCV_LIBS} ${PCL_LIBRARIES} kfusion -lceres -lglog -lbody3D -lcurl -lopenjp2 -ljsoncpp)
 
 set_target_properties(demo PROPERTIES
