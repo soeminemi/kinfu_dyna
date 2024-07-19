@@ -83,6 +83,7 @@ namespace kfusion
         void getPoints(cv::Mat& points);
         void toPly(cv::Mat& points, cv::Mat &normals, std::string spath);
         void toPlyColor(cv::Mat& points, cv::Mat &normals, std::string spath, uint8_t r, uint8_t g, uint8_t b);
+        void toPlyColorFilter(cv::Mat& points, cv::Mat &normals, std::string spath, uint8_t r, uint8_t g, uint8_t b);
         void toPlyVec3(cv::Mat& points, cv::Mat &normals, std::string spath);
         void toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::string spath, uint8_t r, uint8_t g, uint8_t b);
         void dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals);

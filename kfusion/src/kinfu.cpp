@@ -24,7 +24,7 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     
     p.volume_dims = Vec3i::all(256);  //number of voxels
     p.volume_size = Vec3f::all(2.0f);  //meters
-    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 1.0f)); //设置初始
+    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.9f)); //设置初始
 
     p.bilateral_sigma_depth = 0.04f;  //meter
     p.bilateral_sigma_spatial = 4.5; //pixels
@@ -314,6 +314,63 @@ void kfusion::KinFu::toPlyColor(cv::Mat& points, cv::Mat &normals, std::string s
     std::cout<<"point number of final cloud: "<<ptnum<<std::endl;
 }
 
+void kfusion::KinFu::toPlyColorFilter(cv::Mat& points, cv::Mat &normals, std::string spath, uint8_t r, uint8_t g, uint8_t b)
+{
+    int ptnum = 0;
+    std::vector<cv::Vec4f> pts;
+    std::vector<cv::Vec4f> nls;
+    pts.reserve(points.rows*points.cols);
+    nls.reserve(points.rows*points.cols);
+    double thres_groud = 0;
+    double min_x = 10000;
+    for (size_t i = 0; i < points.rows; i++)
+    {
+        for (size_t j = 0; j < points.cols; j++)
+        {
+            cv::Vec4f pt = points.at<cv::Vec4f>(i,j);
+            cv::Vec4f nl = normals.at<cv::Vec4f>(i,j);
+            if(!isnan(pt[0]) || isnan(nl[0]))
+            {
+                // cv::Vec3f pt = cv::Vec3f(pts[0],pts[1],pts[2]);
+                pts.push_back(pt);
+                nls.push_back(nl);
+                ptnum ++;
+                if (pt[0]>thres_groud)
+                {
+                    thres_groud = pt[0];
+                }
+                if (pt[0]<min_x)
+                {
+                    min_x = pt[0];
+                }
+            }
+        }
+    }
+    ifstream sfile("./data/thick.txt");
+    double thick;
+    if(sfile.is_open())
+    {
+        sfile>>thick;
+        sfile.close();
+    }
+    cout<<"max and min x: "<<thres_groud<<", "<<min_x<<","<<thick<<endl;
+    thres_groud = thres_groud - thick;
+
+    std::vector<cv::Vec4f> ptsf;
+    std::vector<cv::Vec4f> nlsf;
+    for (size_t i = 0; i < pts.size(); i++)
+    {
+        if(pts[i][0]>thres_groud)
+        {
+            continue;
+        }
+        ptsf.push_back(pts[i]);
+        nlsf.push_back(nls[i]);
+    }
+    
+    saveToPlyColor(ptsf, nlsf, spath, r, g, b);
+    std::cout<<"point number of final cloud: "<<ptnum<<std::endl;
+}
 void kfusion::KinFu::toPlyVec3(cv::Mat& points, cv::Mat &normals, std::string spath)
 {
     int ptnum = 0;

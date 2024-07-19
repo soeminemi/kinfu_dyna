@@ -184,7 +184,7 @@ public:
                     //save to file for measurement
                     std::stringstream ss;
                     ss<<pfile;
-                    kinfu.toPlyColor(cloud_host, normal_host, ss.str(),255,0,0);
+                    kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(),255,0,0);
                     //start measurement
 
                     auto rst = func(readFileIntoString((char *)pfile.c_str()));
@@ -334,7 +334,7 @@ public:
         //save to file for measurement
         std::stringstream ss;
         ss<<pfile;
-        kinfu.toPlyColor(cloud_host, normal_host, ss.str(),255,0,0);
+        kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(),255,0,0);
         //start measurement
 
         func(readFileIntoString((char *)pfile.c_str()));
@@ -421,6 +421,10 @@ public:
         {
             PCL_ERROR("Could not read file \n");
         }
+        if(cloud_orig->size()<10000)
+        {
+            return "{\"error\":\"points not enough\"}";
+        }
         std::cout<<"ply file loaded, try to filter the data"<<std::endl;
         pcl::transformPointCloud (*cloud_orig, *cloud, transformation_matrix);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
@@ -443,7 +447,7 @@ public:
         double maxz=-10000000,minz=10000000;
         for(int i=0;i<scan.points.size();i++)
         {
-            double z = scan.points[i].z;
+            double z = scan.points[i].x;
             if(z>maxz)
                 maxz = z;
             if(z<minz)
@@ -473,7 +477,7 @@ public:
         //load the config file
         Json::Value jval;
         Json::Reader reader2;
-        string measure_type = "xifu";
+        string measure_type = "chenshan";
 
         //load the corresponding measuring configure file
         string mfolder = "measure_"+measure_type;
