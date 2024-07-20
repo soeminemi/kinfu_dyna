@@ -407,7 +407,7 @@ public:
             }
         }
 
-        zhuozhuang_type = "tieshen";
+        // zhuozhuang_type = "tieshen";
 
         cout<<"step 1. load ply file:"<<pfile<<endl;
         //step 1. load ply file
@@ -471,13 +471,23 @@ public:
         cout<<"start mainprocess"<<endl;
         meshFittor->mainProcess(scan);
         cout<<"start measure"<<endl;
+        return measure_body(minz, maxz);
+        
+    }
+    string measure_body(double minz, double maxz)
+    {
+        Json::Reader reader;
+        Json::Value root;
+        Json::Value rt;
+        string zhuozhuang_type="jinshen";
         //step 4. measure the body
         Json::Value jmeasure,jmeasure_add;
-        bm.loadMeasureBody("../results/rbody.ply");
+        // bm.loadMeasureBody("../results/rbody.ply");
+        bm.loadMeasureBody("../results/male_init_tempbody.ply");
         //load the config file
         Json::Value jval;
         Json::Reader reader2;
-        string measure_type = "chenshan";
+        string measure_type = "qipao";
 
         //load the corresponding measuring configure file
         string mfolder = "measure_"+measure_type;
@@ -513,13 +523,21 @@ public:
                 tmp.load(pp_name);
                 double length = 0;
                 cout<<"measuring: "<<ms_type<<","<<strKey<<endl;
+                //for test, save measuring point to file
+                bool flag_show = false;
+                if(strKey == "tuiwei")
+                {
+                    bm.showIndexWithColor("../results/idx"+strKey+".ply",tmp);
+                    flag_show = true;
+                    cout<<"measure type of "<<strKey<<": "<<ms_type<<endl;
+                }
                 if(ms_type == "hori_circle")
                 {
                     bm.MeasureCircleHori(length,tmp);
                 }
                 else if(ms_type=="circle")
                 {
-                    bm.MeasureCircle(length,tmp);
+                    bm.MeasureCircle(length,tmp,flag_show);
                 }
                 else if(ms_type == "angle")
                 {
@@ -692,6 +710,7 @@ public:
         ff1<<endl;
         ff1.close();
         return rt.toStyledString();
+
     }
     void init_bodymeasuer()
     {
@@ -734,8 +753,8 @@ int main (int argc, char* argv[])
     app.init_bodymeasuer();
     cout<<"body initialized"<<endl;
     #endif
-    // app.func("haha");
-    // return 0;
+    cout<<app.measure_body(0,175)<<endl;
+    return 0;
     // executing
     try { app.execute_ws(); }
     catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
