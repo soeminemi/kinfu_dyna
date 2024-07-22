@@ -33,24 +33,33 @@ if __name__ == "__main__":
     fid = 0
     ws_url = "ws://192.168.18.61:9099"
     ws = websocket.create_connection(ws_url)
-
+    show_msg = "Ready"
+    orig = (50,50)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fontscale = 1
+    color = (255,0,0)
     while True:
         rgbd_frame = rscam.capture_frame()
         # o3d.io.write_image(f"color/color{fid:05d}.png", rgbd_frame.color.to_legacy())
         # o3d.io.write_image(f"depth/depth{fid:05d}.png", rgbd_frame.depth.to_legacy())
         img_o3d_numpy = np.asarray(rgbd_frame.color.to_legacy())
-        cv2.imshow("color",img_o3d_numpy)
+        showimg = cv2.cvtColor(img_o3d_numpy,cv2.COLOR_BGR2RGB)
+        cv2.putText(showimg, show_msg, orig, font, fontscale, color, 2)
+        cv2.imshow("color",showimg)
+        
         key = cv2.waitKey(30)
 
         if key == 115:
             print("数据正在实时上传服务器......")
             flag_start = True
             flag_end = False
+            show_msg = "Processing..."
         elif key == 101:
             if flag_start == False:
                 break
             flag_end = True
             flag_start = False
+            show_msg = "Wait for Server..."
         if flag_start:
             if flag_save_disk:
                 depths.append( rgbd_frame.depth.to_legacy())
@@ -75,6 +84,7 @@ if __name__ == "__main__":
                 print(key, value)
             print("测量耗时: ", time.time()-stime," 秒")
             print("Press \'s\' to start and \'e\' to stop")
+            show_msg = "Ready"
     if flag_save_disk:
         print("saving to disk")
         # path = "/home/john/Projects/dynamicfusion/data/desk1"

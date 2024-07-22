@@ -190,7 +190,7 @@ public:
                     auto rst = func(readFileIntoString((char *)pfile.c_str()));
                     ws.send_msg(a.hdl,rst);
                     #endif
-                    kinfu.tsdf().clear();
+                    kinfu.reset();
 
                 }
                 else{
@@ -407,27 +407,37 @@ public:
             }
         }
 
-        // zhuozhuang_type = "tieshen";
+        zhuozhuang_type = "tieshen";
 
         cout<<"step 1. load ply file:"<<pfile<<endl;
         //step 1. load ply file
-        Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Identity ();
-        transformation_matrix (0, 0) = 1;
-        transformation_matrix (1, 1) = 1;
-        transformation_matrix (2, 2) = 1;
+        Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Zero ();
+        transformation_matrix (0, 1) = -1;
+        transformation_matrix (1, 0) = -1;
+        transformation_matrix (2, 2) = -1;
+        transformation_matrix (3, 3) = 1;
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         if(pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final.ply", *cloud_orig) == -1)
         {
             PCL_ERROR("Could not read file \n");
         }
+        
         if(cloud_orig->size()<10000)
         {
             return "{\"error\":\"points not enough\"}";
         }
         std::cout<<"ply file loaded, try to filter the data"<<std::endl;
-        pcl::transformPointCloud (*cloud_orig, *cloud, transformation_matrix);
+        pcl::transformPointCloudWithNormals (*cloud_orig, *cloud, transformation_matrix);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        // for(size_t i = 0;i<cloud->size();i++)
+        // {
+        //     pcl::PointXYZRGBNormal &tp = (*cloud)[i];
+        //     tp.normal_x = -tp.normal_x;
+        //     tp.normal_y = -tp.normal_y;
+        //     tp.normal_z = -tp.normal_z;
+        // }
+        
         //step 2 filter the outlier points
         cout<<"set transformed"<<endl;
         pcl::RadiusOutlierRemoval<pcl::PointXYZRGBNormal> sor;
@@ -447,7 +457,7 @@ public:
         double maxz=-10000000,minz=10000000;
         for(int i=0;i<scan.points.size();i++)
         {
-            double z = scan.points[i].x;
+            double z = scan.points[i].z;
             if(z>maxz)
                 maxz = z;
             if(z<minz)
@@ -525,11 +535,9 @@ public:
                 cout<<"measuring: "<<ms_type<<","<<strKey<<endl;
                 //for test, save measuring point to file
                 bool flag_show = false;
-                if(strKey == "tuiwei")
+                // if(strKey == "tuiwei")
                 {
                     bm.showIndexWithColor("../results/idx"+strKey+".ply",tmp);
-                    flag_show = true;
-                    cout<<"measure type of "<<strKey<<": "<<ms_type<<endl;
                 }
                 if(ms_type == "hori_circle")
                 {
@@ -735,6 +743,9 @@ public:
 
 int main (int argc, char* argv[])
 {
+    // test load ply myself
+    // changeXYZ_ply("./examples/final.ply");
+    // return 0;
     // //test ply loading
     // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     // pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final1.ply", *cloud_orig);
@@ -753,8 +764,8 @@ int main (int argc, char* argv[])
     app.init_bodymeasuer();
     cout<<"body initialized"<<endl;
     #endif
-    cout<<app.measure_body(0,175)<<endl;
-    return 0;
+    // cout<<app.func("d")<<endl;
+    // return 0;
     // executing
     try { app.execute_ws(); }
     catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }

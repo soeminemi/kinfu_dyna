@@ -1,6 +1,6 @@
 #include "precomp.hpp"
 #include "internal.hpp"
-#include "io/saveply.hpp"
+#include "io/ply.hpp"
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
