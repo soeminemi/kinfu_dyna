@@ -43,7 +43,7 @@ if __name__ == "__main__":
         # o3d.io.write_image(f"color/color{fid:05d}.png", rgbd_frame.color.to_legacy())
         # o3d.io.write_image(f"depth/depth{fid:05d}.png", rgbd_frame.depth.to_legacy())
         img_o3d_numpy = np.asarray(rgbd_frame.color.to_legacy())
-        showimg = cv2.cvtColor(img_o3d_numpy,cv2.COLOR_BGR2RGB)
+        showimg = cv2.rotate(cv2.cvtColor(img_o3d_numpy,cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
         cv2.putText(showimg, show_msg, orig, font, fontscale, color, 2)
         cv2.imshow("color",showimg)
         

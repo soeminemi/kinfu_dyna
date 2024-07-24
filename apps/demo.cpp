@@ -21,9 +21,10 @@
 #include <pthread.h>
 #include <jsoncpp/json/json.h>
 #include "CWebsocketServer.hpp"
+#include <locale>
 using namespace kfusion;
 #define COMBIN_MS //if body measurement is combined
-
+bool flag_std_sample = false;
 
 static const std::string base64_chars =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -76,16 +77,8 @@ class KinFuApp
 {
 public:
     int frame_idx = 0;
-    // static void KeyboardCallback(const cv::viz::KeyboardEvent& event, void* pthis)
-    // {
-    //     KinFuApp& kinfu = *static_cast<KinFuApp*>(pthis);
-    //     if(event.action != cv::viz::KeyboardEvent::KEY_DOWN)
-    //         return;
-    //     if(event.code == 't' || event.code == 'T')
-    //         kinfu.take_cloud(*kinfu.kinfu_);
-    //     if(event.code == 'i' || event.code == 'I')
-    //         kinfu.iteractive_mode_ = !kinfu.iteractive_mode_;
-    // }
+    string zhuozhuang_type="tieshen";
+    string measure_type = "qipao";
 
     KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(true)
     {
@@ -187,7 +180,7 @@ public:
                     kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(),255,0,0);
                     //start measurement
 
-                    auto rst = func(readFileIntoString((char *)pfile.c_str()));
+                    auto rst = func(pfile);
                     ws.send_msg(a.hdl,rst);
                     #endif
                     kinfu.reset();
@@ -337,7 +330,7 @@ public:
         kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(),255,0,0);
         //start measurement
 
-        func(readFileIntoString((char *)pfile.c_str()));
+        func(pfile);
         #endif
         
         return true;
@@ -382,12 +375,15 @@ public:
         strftime(ch, sizeof(ch) - 1, "%Y-%m-%d %H:%M:%S", localtime(&t));     //年-月-日 时-分-秒
         return ch;
     }
-    string func(string param_json)
+    string func(string bodypath)
     {
         ofstream ff("log.txt",ios::app);
         ff<<"calling the service @ "<<getCurrentTimeStr()<<endl;
         ff.close();
-        string zhuozhuang_type = "jinshen";
+        if(flag_std_sample)
+        {
+            zhuozhuang_type="nake";
+        }
         Json::Reader reader;
         Json::Value root;
         Json::Value rt;
@@ -407,18 +403,27 @@ public:
             }
         }
 
-        zhuozhuang_type = "tieshen";
+        // zhuozhuang_type = "lvekuansong";
 
         cout<<"step 1. load ply file:"<<pfile<<endl;
         //step 1. load ply file
         Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Zero ();
-        transformation_matrix (0, 1) = -1;
-        transformation_matrix (1, 0) = -1;
-        transformation_matrix (2, 2) = -1;
-        transformation_matrix (3, 3) = 1;
+        if(flag_std_sample ==  true)
+        {
+            transformation_matrix (0, 0) = 1;
+            transformation_matrix (1, 1) = 1;
+            transformation_matrix (2, 2) = 1;
+            transformation_matrix (3, 3) = 1;
+        }
+        else{
+            transformation_matrix (0, 1) = -1;
+            transformation_matrix (1, 0) = -1;
+            transformation_matrix (2, 2) = -1;
+            transformation_matrix (3, 3) = 1;
+        }
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-        if(pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final.ply", *cloud_orig) == -1)
+        if(pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> (bodypath, *cloud_orig) == -1)
         {
             PCL_ERROR("Could not read file \n");
         }
@@ -457,7 +462,7 @@ public:
         double maxz=-10000000,minz=10000000;
         for(int i=0;i<scan.points.size();i++)
         {
-            double z = scan.points[i].z;
+            double z = scan.points[i].y;
             if(z>maxz)
                 maxz = z;
             if(z<minz)
@@ -481,7 +486,8 @@ public:
         cout<<"start mainprocess"<<endl;
         meshFittor->mainProcess(scan);
         cout<<"start measure"<<endl;
-        return measure_body(minz, maxz);
+        auto rst =  measure_body(minz, maxz);
+        return rst;
         
     }
     string measure_body(double minz, double maxz)
@@ -489,15 +495,18 @@ public:
         Json::Reader reader;
         Json::Value root;
         Json::Value rt;
-        string zhuozhuang_type="jinshen";
+        
+        if(flag_std_sample)
+        {
+            zhuozhuang_type="nake";
+        }
         //step 4. measure the body
         Json::Value jmeasure,jmeasure_add;
-        // bm.loadMeasureBody("../results/rbody.ply");
-        bm.loadMeasureBody("../results/male_init_tempbody.ply");
+        bm.loadMeasureBody("./results/rbody.ply");
+        // bm.loadMeasureBody_pcl("./results/scan.ply", "./results/rbody.ply", "./results/corres_idxes.mat");
         //load the config file
         Json::Value jval;
         Json::Reader reader2;
-        string measure_type = "qipao";
 
         //load the corresponding measuring configure file
         string mfolder = "measure_"+measure_type;
@@ -532,12 +541,12 @@ public:
                 arma::mat tmp;
                 tmp.load(pp_name);
                 double length = 0;
-                cout<<"measuring: "<<ms_type<<","<<strKey<<endl;
+                cout<<"measuring: "<<ms_type<<","<<strKey<<","<<pp_name<<endl;
                 //for test, save measuring point to file
                 bool flag_show = false;
                 // if(strKey == "tuiwei")
                 {
-                    bm.showIndexWithColor("../results/idx"+strKey+".ply",tmp);
+                    bm.showIndexWithColor("./results/idx"+strKey+".ply",tmp);
                 }
                 if(ms_type == "hori_circle")
                 {
@@ -590,140 +599,56 @@ public:
                     jmeasure[ms_name]=round(length*1000)/10.0;
             }
         }
+        double shengao =(maxz-minz);
+        jmeasure["身高"]=ceil(shengao*100);
         cout<<"measure finished"<<endl;
         rt["left_shoulder_idx"]=lshoulder_idx;
         rt["right_shoulder_idx"]=rshoulder_idx;
         rt["status"]="succeeded";
         rt["details"]="call body3D succeeded";
-        double shengao =(maxz-minz);
-        double ratio = 1.0;//bm.getHeightRatio();
-        if(flag_houyichang2)
-        {
-            double ratio_ubr = (jmeasure[houyichang_name].asDouble()/normal_ubr);
-            if(ratio_ubr > 1.1)
-            {
-                ratio_ubr = 1.1;
-            }
-            if(ratio_ubr < 0.9)
-            {
-                ratio_ubr = 0.9;
-            }
-            ratio_ubr = (ratio_ubr-1.0)/2+1.0;
-            double hl=(shengao*100*0.4738-5.8165)*ratio_ubr;
-            jmeasure[houyichang_name] = round(hl*10)/10;
-        }
-        if(ratio <1.0)
-            ratio = 1.0;
-        jmeasure["身高"]=ceil(shengao*100);
+        rt["measures"] = jmeasure;
+        rt["time"] = getCurrentTimeStr();
+        Json::StreamWriterBuilder jswBuilder;
+        jswBuilder["emitUTF8"] = true;
+        std::unique_ptr<Json::StreamWriter>jsWriter(jswBuilder.newStreamWriter());
 
-        // if(jmeasure["身高"].isDouble())
-        // {
-        //     // cout<<"模型测量身高是:"<<jmeasure["身高"]<<endl;
-        //     jmeasure["身高"] = round(shengao * ratio*1000)/10.0;
-        // }
-        cout<<jmeasure.toStyledString()<<endl;
-        return jmeasure.toStyledString();
-        //aditional measure
-        mfolder = "measure_chenshan_all";
-        ifstream cfa("./data/body_measure/"+mfolder+"/measure_chenshan_xx"+".conf");
-        if(!reader2.parse(cfa,jval))
-        {
-            cout<<"load config file for measurment failed"<<endl;
-            rt["status"]="failed";
-            rt["details"]="load config file for additional measurment failed";
-            return(rt.toStyledString());
-        }
-        members = jval.getMemberNames();   // 获取所有key的值
-        for (Json::Value::Members::iterator iterMember = members.begin(); iterMember != members.end(); iterMember++)   // 遍历每个key
-        {
-            std::string strKey = *iterMember;
-            int rsidx, lsidx;
-            if(jval[strKey].isArray())
-            {
-                string pp_name = "./data/body_measure/"+mfolder+"/"+strKey+".mat";
-                string ms_type = jval[strKey][0].asString();
-                string ms_name = jval[strKey][1].asString();
-                arma::mat tmp;
-                tmp.load(pp_name);
-                double length = 0;
-                cout<<"measure type: "<<ms_type<<endl;
-                if(ms_type == "hori_circle")
-                {
-                    bm.MeasureCircleHori(length,tmp);
-                }
-                else if(ms_type=="circle")
-                {
-                    bm.MeasureCircle(length,tmp);
-                }
-                else if(ms_type == "angle")
-                {
-                    bm.MeasureAngle(length,tmp);
-                }
-                else if (ms_type == "length")
-                {
-                    bm.MeasureLength(length,tmp);
-                }
-                else if (ms_type == "v_length")
-                {
-                    bm.MeasureLengthVertical(length,tmp);
-                }
-                else if (ms_type == "jiankuan")
-                {
-                    cout<<"measure jiankuan"<<endl;
-                    bm.MeasureLengthJiankuan(length,0.71,tmp,rsidx,lsidx,"_shoulder.ply");
-                }
-                else{
-                    cout<<"measure type unsupported!!! "<<ms_type<<endl;
-                }
-                if(ms_type == "angle")
-                    jmeasure_add[ms_name]=round(length);
-                else
-                    jmeasure_add[ms_name]=round(length*1000)/10.0;
-            }
-        }
-        //add qianyaojie,houyaojie to measure
-        jmeasure["前腰节长"]=jmeasure_add["前腰节长"].asDouble();
-        jmeasure["后腰节长"]=jmeasure_add["后腰节长"].asDouble();
-        rt["measures"].append(jmeasure);
-        cout<<rt["measures"].toStyledString()<<endl;
-        //save measure results to the check results for  checking
+        std::ostringstream os;
+        jsWriter->write(rt, &os);
+
         struct timeval tv;
         gettimeofday(&tv,NULL);
+        //save result and files to sample
         stringstream ss;
-        ss<<"./check_results/body_"<<tv.tv_sec;
-        string spfile_name = ss.str();
-        ofstream of(spfile_name+".txt");
+        ss<<"./check_results/body_"<<tv.tv_sec<<"/";
+        string spfile_folder = ss.str();
+        string cmd_mkdir = "mkdir -p "+spfile_folder;
+        system(cmd_mkdir.c_str());
+        ofstream of(spfile_folder+"result.txt");
         of<<zhuozhuang_type<<endl;
-        of<<rt.toStyledString();
+        of<<os.str();
         of.close();
         //end saving
-        rt["model"]=readFileIntoString("./results/rbody.ply");
-        rt["kn"]=readFileIntoString("./results/kn0.ply");
-        rt["ptcloud"] = readFileIntoString("./results/aft_filter.ply");
-        // rt["test_load"]=readFileIntoString("./results/load.ply");
-        //
-        rt["measures_additional"].append(jmeasure_add);
-        cout<<rt["measures_additional"].toStyledString()<<endl;
+        
         cout<<"config file is: "<<zhuozhuang_type<<endl;
-        // system("python ./scripts/upload_data.py");
         cout<<"End of process @ "<<getCurrentTimeStr()<<endl;
         //save result for checking
 
-        string cppath ="cp ./results/kn0.ply "+ spfile_name+"_kn0.ply";
+        string cppath ="cp ./results/kn0.ply "+ spfile_folder+"kn0.ply";
         system(cppath.c_str());
-        cppath = "cp ./results/aft_filter.ply "+ spfile_name+"_ptcloud.ply";
+        cppath = "cp ./examples/final.ply "+ spfile_folder+"final.ply";
         system(cppath.c_str());
         ofstream ff1("log.txt",ios::app);
         ff1<<"end calling the service @ "<<getCurrentTimeStr()<<endl;
         ff1<<endl;
         ff1.close();
-        return rt.toStyledString();
+        cout<<"end calling the service @ "<<getCurrentTimeStr()<<endl;
 
+        
+        return os.str();
     }
     void init_bodymeasuer()
     {
         bm.setPathPre("./data/body_measure/");
-        // cloud_filtered = std::shared_ptr<pcl::PointCloud<pcl::PointXYZRGBNormal> >(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         pfile = "./examples/final.ply";
         meshFittorMale.setGender("male");
         meshFittorFemale.setGender("female");
@@ -743,14 +668,9 @@ public:
 
 int main (int argc, char* argv[])
 {
-    // test load ply myself
-    // changeXYZ_ply("./examples/final.ply");
-    // return 0;
-    // //test ply loading
-    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    // pcl::io::loadPLYFile<pcl::PointXYZRGBNormal> ("./examples/final1.ply", *cloud_orig);
-    // cout<<"ply loaded"<<endl;
-    // return 0;
+    cout<<"usage: --test for test, follow with ply file path"<<endl;
+    std::locale::global(std::locale("en_US.UTF-8"));
+    std::wcout.imbue(std::locale("en_US.UTF-8"));
     int device = 0;
     cuda::setDevice (device);
     cuda::printShortCudaDeviceInfo (device);
@@ -764,12 +684,20 @@ int main (int argc, char* argv[])
     app.init_bodymeasuer();
     cout<<"body initialized"<<endl;
     #endif
-    // cout<<app.func("d")<<endl;
-    // return 0;
-    // executing
-    try { app.execute_ws(); }
-    catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
-    catch (const std::exception& /*e*/) { std::cout << "Exception" << std::endl; }
-    std::cout<<"finished"<<std::endl;
-    return 0;
+    if(argc >= 2)
+    {
+        string filename(argv[1]);
+        std::cout<<app.func(filename)<<endl;
+        // app.measure_body(0,100);
+        return 0;
+    }
+    else{
+        // executing
+        try { app.execute_ws(); }
+        catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
+        catch (const std::exception& /*e*/) { std::cout << "Exception" << std::endl; }
+        std::cout<<"finished"<<std::endl;
+        return 0;
+    }
+    
 }
