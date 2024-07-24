@@ -79,6 +79,7 @@ public:
     int frame_idx = 0;
     string zhuozhuang_type="tieshen";
     string measure_type = "qipao";
+    string gender = "male";
 
     KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(true)
     {
@@ -387,11 +388,6 @@ public:
         Json::Reader reader;
         Json::Value root;
         Json::Value rt;
-        // cout<<"in func"<<endl;
-        // rt["status"]="test";
-        // rt["details"]="test, return without processing";
-        // return(rt.toStyledString());
-        string gender = "male";
         {
             if(gender=="male")
             {
@@ -683,6 +679,11 @@ int main (int argc, char* argv[])
     std::cout<<"init body measure"<<std::endl;
     app.init_bodymeasuer();
     cout<<"body initialized"<<endl;
+    //根据需要调整
+    app.measure_type = "qipao";
+    app.zhuozhuang_type = "tieshen";
+    app.gender = "male";
+
     #endif
     if(argc >= 2)
     {

@@ -5,21 +5,55 @@ import socket
 import websocket
 import base64
 import json
+import cvui
 
 volume = o3d.pipelines.integration.ScalableTSDFVolume(
 voxel_length=4.0 / 512.0,
 sdf_trunc=0.04,
 color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
+WINDOW_NAME="realsense"
 #
 #socket client
 # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # server_address = ('localhost', 9099)
 # client_socket.connect(server_address)
 #
+def test_cvui():
+    global WINDOW_NAME
+    frame = np.zeros((1280, 768, 3), np.uint8)
+    cvui.init(WINDOW_NAME)
+    male_checked = False
+    gender = "female"
+    button_name = "start"
+    while True:
+        # Fill the frame with a nice color
+        frame[:] = (49, 52, 49)
+
+        # Render UI components to the frame
+        cvui.text(frame, 110, 80, 'Hello, world!')
+        cvui.text(frame, 110, 120, 'cvui is awesome!')
+        cvui.checkbox(frame,110,160,"male",[male_checked])
+        if cvui.button(frame, 110, 60, button_name):
+            print('Button clicked')
+            if button_name == "start":
+                button_name = "end"
+            else:
+                button_name = "start"
+        cvui.update()
+        # Update cvui stuff and show everything on the screen
+        cvui.imshow(WINDOW_NAME, frame)
+        if male_checked:
+            gender = "male"
+            print(gender)
+        if cv2.waitKey(20) == 27:
+            break
+
 depths = []
 images=[]
 import time
 if __name__ == "__main__":
+    test_cvui()
+    exit()
     sample_num = 1500
     flag_save_disk = False
     o3d.t.io.RealSenseSensor.list_devices()
