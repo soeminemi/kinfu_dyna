@@ -11,49 +11,18 @@ volume = o3d.pipelines.integration.ScalableTSDFVolume(
 voxel_length=4.0 / 512.0,
 sdf_trunc=0.04,
 color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
-WINDOW_NAME="realsense"
 #
 #socket client
 # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # server_address = ('localhost', 9099)
 # client_socket.connect(server_address)
 #
-def test_cvui():
-    global WINDOW_NAME
-    frame = np.zeros((1280, 768, 3), np.uint8)
-    cvui.init(WINDOW_NAME)
-    male_checked = False
-    gender = "female"
-    button_name = "start"
-    while True:
-        # Fill the frame with a nice color
-        frame[:] = (49, 52, 49)
-
-        # Render UI components to the frame
-        cvui.text(frame, 110, 80, 'Hello, world!')
-        cvui.text(frame, 110, 120, 'cvui is awesome!')
-        cvui.checkbox(frame,110,160,"male",[male_checked])
-        if cvui.button(frame, 110, 60, button_name):
-            print('Button clicked')
-            if button_name == "start":
-                button_name = "end"
-            else:
-                button_name = "start"
-        cvui.update()
-        # Update cvui stuff and show everything on the screen
-        cvui.imshow(WINDOW_NAME, frame)
-        if male_checked:
-            gender = "male"
-            print(gender)
-        if cv2.waitKey(20) == 27:
-            break
-
 depths = []
 images=[]
 import time
 if __name__ == "__main__":
-    test_cvui()
-    exit()
+    font_path = "SimHei.ttf"
+
     sample_num = 1500
     flag_save_disk = False
     o3d.t.io.RealSenseSensor.list_devices()
@@ -67,19 +36,54 @@ if __name__ == "__main__":
     fid = 0
     ws_url = "ws://192.168.18.61:9099"
     ws = websocket.create_connection(ws_url)
-    show_msg = "Ready"
+    show_msg = "ready"
     orig = (50,50)
     font = cv2.FONT_HERSHEY_SIMPLEX
     fontscale = 1
     color = (255,0,0)
+    WINDOW_NAME = "realsense"
+    frame = np.zeros((1280, 768, 3), np.uint8)
+    cvui.init(WINDOW_NAME)
+    male_checked = [True]
+    female_checked = [False]
+    gender = "female"
+    button_name = "START"
+    result_str = "None"
     while True:
         rgbd_frame = rscam.capture_frame()
         # o3d.io.write_image(f"color/color{fid:05d}.png", rgbd_frame.color.to_legacy())
         # o3d.io.write_image(f"depth/depth{fid:05d}.png", rgbd_frame.depth.to_legacy())
+
         img_o3d_numpy = np.asarray(rgbd_frame.color.to_legacy())
+        
         showimg = cv2.rotate(cv2.cvtColor(img_o3d_numpy,cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
-        cv2.putText(showimg, show_msg, orig, font, fontscale, color, 2)
-        cv2.imshow("color",showimg)
+        
+        if cvui.checkbox(showimg,50,60,"male",male_checked):
+            female_checked=[False]
+            gender = "male"
+        if cvui.checkbox(showimg,50,80,"female",female_checked):
+            male_checked = [False]
+            gender = "female"
+
+        if cvui.button(showimg, 50, 100,  button_name):
+            if button_name == "START":
+                button_name = "STOP"
+                flag_start = True
+                flag_end = False
+                show_msg = "Sending Data to Server......"
+                result_str = "None"
+            else:
+                button_name = "START"
+                flag_end = True
+                flag_start = False
+                show_msg = 'Waiting for Measuring......'
+                result_str = "None"
+        if cvui.button(showimg, 250, 100,  "EXIT"):
+            break
+        cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
+        cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
+        cvui.update()
+        cv2.imshow(WINDOW_NAME,showimg)
         
         key = cv2.waitKey(30)
 
@@ -87,7 +91,7 @@ if __name__ == "__main__":
             print("数据正在实时上传服务器......")
             flag_start = True
             flag_end = False
-            show_msg = "Processing..."
+            show_msg = "数据正在实时上传服务器......"
         elif key == 101:
             if flag_start == False:
                 break
@@ -101,6 +105,9 @@ if __name__ == "__main__":
             depthimg = np.asarray(rgbd_frame.depth.to_legacy())
             encoded_image = cv2.imencode('.png', depthimg)[1]
             data = base64.b64encode(np.array(encoded_image).tobytes())
+            # sd = {}
+            # sd["gender"]=gender
+            # sd["data"] = data
             ws.send(data)
             fid += 1
 
@@ -116,6 +123,9 @@ if __name__ == "__main__":
             jr = json.loads(result)
             for key, value in jr.items():
                 print(key, value)
+                if key == "measures":
+                    result_str = json.dumps(value)
+                    break
             print("测量耗时: ", time.time()-stime," 秒")
             print("Press \'s\' to start and \'e\' to stop")
             show_msg = "Ready"

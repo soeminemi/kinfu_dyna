@@ -145,6 +145,8 @@ public:
         double time_ms = 0;
         bool has_image = false;
         pause_ = false;
+        Json::Value jv;
+        Json::Reader jreader;
         while (true)
         {
             std::cout<<"try to achieve msg"<<std::endl;
@@ -154,7 +156,17 @@ public:
                 
                 //start to process the message
                 // std::cout<<a.msg_str<<std::endl;
-                std::string ws_str = base64_decode(a.msg->get_payload());
+                auto msg = a.msg->get_payload();
+                // jreader.parse(msg, jv);
+                // if(jv["gender"].asString() == "male")
+                // {
+                //     meshFittor = &meshFittorMale;
+                // }
+                // else{
+                //     meshFittor = &meshFittorFemale;
+                // }
+                // std::string ws_str = base64_decode(jv["data"].asString());
+                std::string ws_str = base64_decode(msg);
                 std::cout<<"image received: "<<ws_str.size()<<std::endl;
                 if(ws_str.size()<100)
                 {
