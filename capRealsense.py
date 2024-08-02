@@ -55,7 +55,7 @@ if __name__ == "__main__":
         # o3d.io.write_image(f"depth/depth{fid:05d}.png", rgbd_frame.depth.to_legacy())
 
         img_o3d_numpy = np.asarray(rgbd_frame.color.to_legacy())
-        
+        print(type(img_o3d_numpy))
         showimg = cv2.rotate(cv2.cvtColor(img_o3d_numpy,cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
         
         if cvui.checkbox(showimg,50,60,"male",male_checked):
