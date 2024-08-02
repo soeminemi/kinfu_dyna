@@ -21,7 +21,7 @@
 #include <pthread.h>
 #include <jsoncpp/json/json.h>
 #include "CWebsocketServer.hpp"
-#include <locale>
+
 using namespace kfusion;
 #define COMBIN_MS //if body measurement is combined
 bool flag_std_sample = false;
@@ -77,13 +77,28 @@ class KinFuApp
 {
 public:
     int frame_idx = 0;
-    string zhuozhuang_type="tieshen";
+    string cloth_type="tieshen";
     string measure_type = "qipao";
     string gender = "male";
-
+    string device_type = "kinect";
+    string spfile_folder = "./check_results/body_default/";
+    string color_folder = "./check_results/body_default/colors";
+    string depth_folder = "./check_results/body_default/depths";
     KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(true)
     {
         KinFuParams params = KinFuParams::default_params();
+        if(device_type == "kinect")
+        {
+            params.intr = Intr(365.3566f, 365.3566f, 261.4155f, 206.6168f);
+            params.cols = 512;  //pixels
+            params.rows = 414;  //pixels
+        }
+        else if(device_type == "realsense")
+        {
+            params.cols = 1280;  //pixels
+            params.rows = 780;  //pixels
+            params.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
+        }
         kinfu_ = KinFu::Ptr( new KinFu(params) );
         // capture_.setRegistration(true);
         // cv::viz::WCube cube(cv::Vec3d::all(0), cv::Vec3d(params.volume_size), true, cv::viz::Color::apricot());
@@ -135,6 +150,7 @@ public:
     #include <fstream>
     bool execute_ws()
     {
+        bool flag_started = false;
         CWSServer ws;
         ws.set_port(9099);
         thread t_ws(bind(&CWSServer::excute,&ws));
@@ -157,24 +173,36 @@ public:
                 //start to process the message
                 // std::cout<<a.msg_str<<std::endl;
                 auto msg = a.msg->get_payload();
-                // jreader.parse(msg, jv);
-                // if(jv["gender"].asString() == "male")
-                // {
-                //     meshFittor = &meshFittorMale;
-                // }
-                // else{
-                //     meshFittor = &meshFittorFemale;
-                // }
-                // std::string ws_str = base64_decode(jv["data"].asString());
-                std::string ws_str = base64_decode(msg);
-                std::cout<<"image received: "<<ws_str.size()<<std::endl;
-                if(ws_str.size()<100)
+                // std::cout<<"msg received:"<<msg<<std::endl;
+                jreader.parse(msg, jv);
+                if(jv["ack"].isString())
                 {
-                    std::cout<<"msg: "<<ws_str<<std::endl;
+                    struct timeval tv;
+                    gettimeofday(&tv,NULL);
+                    //save result and files to sample
+                    stringstream ss;
+                    ss<<tv.tv_sec;
+                    ws.send_msg(a.hdl,ss.str());
+                    continue;
                 }
-                // if(ws_str == "finished")
-                if(ws_str.size()< 100)
+                if(jv["cmd"].asString() == "finish")
                 {
+                    if(jv["gender"].isString())
+                    {
+                        if(jv["gender"].asString() == "male")
+                            meshFittor = &meshFittorMale;
+                        else
+                            meshFittor = &meshFittorFemale;
+                    }
+                    if(jv["measure_type"].isString())
+                    {
+                        measure_type = jv["measure_type"].asString();
+                    }
+                    if(jv["cloth_type"].isString())
+                    {
+                        cloth_type = jv["cloth_type"].asString();
+                    }
+                    flag_started = false;
                     std::cout<<"finished and try to measure"<<std::endl;
                     //save final cloud to file
                     cuda::DeviceArray<Point> cloud = kinfu.tsdf().fetchCloud(cloud_buffer);
@@ -192,7 +220,6 @@ public:
                     ss<<pfile;
                     kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(),255,0,0);
                     //start measurement
-
                     auto rst = func(pfile);
                     ws.send_msg(a.hdl,rst);
                     #endif
@@ -200,49 +227,85 @@ public:
 
                 }
                 else{
-                    std::cout<<"base 64 decoded"<<std::endl;
-                    std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
-                    std::cout<<"decode png"<<std::endl;
-                    cv::Mat depth = cv::imdecode(img_vec, cv::IMREAD_ANYDEPTH);
-                    depth = depth /4;
-                    ////////////////////////START//////////////////////////
-                    // user specified code, for test to filter the point cloud
-                    for (size_t i = 0; i < depth.rows; i++)
+                    if(flag_started == false)
                     {
-                        for (size_t j = 0; j < depth.cols; j++)
+                        struct timeval tv;
+                        gettimeofday(&tv,NULL);
+                        //save result and files to sample
+                        stringstream ss;
+                        ss<<"./check_results/body_"<<tv.tv_sec<<"/";
+                        spfile_folder = ss.str();
+                        string cmd_mkdir = "mkdir -p "+spfile_folder;
+                        system(cmd_mkdir.c_str());
+                        color_folder = spfile_folder+"colors/";
+                        depth_folder = spfile_folder + "depths/";
+                        system(("mkdir -p "+color_folder).c_str());
+                        system(("mkdir -p "+depth_folder).c_str());
+                    }
+                    flag_started = true;
+                    if(jv["img_type"].asString()=="color")
+                    {
+                        std::string ws_str = base64_decode(jv["data"].asString());
+                        std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
+                        std::cout<<"decode png"<<std::endl;
+                        cv::Mat color = cv::imdecode(img_vec, cv::IMREAD_COLOR);
+                        cv::imwrite(color_folder+jv["frame_id"].asString()+".jpg",color);
+                    }
+                    else
+                    {
+                        std::string ws_str = base64_decode(jv["data"].asString());
+                        std::cout<<"base 64 decoded"<<std::endl;
+                        std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
+                        std::cout<<"decode png"<<std::endl;
+                        cv::Mat depth = cv::imdecode(img_vec, cv::IMREAD_ANYDEPTH);
+                        cv::imwrite(depth_folder+jv["frame_id"].asString()+".png",depth);
+                        if(device_type == "realsense")
                         {
-                            if(depth.at<ushort>(i,j)>2000)
+                            depth = depth /4;
+                        }
+                        else if(device_type == "kinect")
+                        {
+                            depth = depth;
+                        }
+                        ////////////////////////START//////////////////////////
+                        // user specified code, for test to filter the point cloud
+                        for (size_t i = 0; i < depth.rows; i++)
+                        {
+                            for (size_t j = 0; j < depth.cols; j++)
                             {
-                                depth.at<ushort>(i,j) = 0;
+                                if(depth.at<ushort>(i,j)>2000)
+                                {
+                                    depth.at<ushort>(i,j) = 0;
+                                }
                             }
                         }
-                    }
-                    // cv::Rect maskroi(0,0,200,720);
-                    // depth(maskroi) = 0;
-                    ////////////////////////END//////////////////////////
-                    depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
-                    // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
-                    {
-                        SampledScopeTime fps(time_ms); (void)fps;
-                        has_image = kinfu(depth_device_);
-                    }
+                        // cv::Rect maskroi(0,0,200,720);
+                        // depth(maskroi) = 0;
+                        ////////////////////////END//////////////////////////
+                        depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
+                        // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
+                        {
+                            SampledScopeTime fps(time_ms); (void)fps;
+                            has_image = kinfu(depth_device_);
+                        }
 
-                    if (has_image)
-                        show_raycasted(kinfu);
+                        if (has_image)
+                            show_raycasted(kinfu);
 
-                    // show_depth(depth);
-                    cv::imshow("Image", depth);
-                    int key = cv::waitKey(pause_ ? 0 : 3);
+                        // show_depth(depth);
+                        cv::imshow("Image", depth);
+                        int key = cv::waitKey(pause_ ? 0 : 3);
 
-                    switch(key)
-                    {
-                    case 't': case 'T' : take_cloud(kinfu); break;
-                    case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
-                    case 's':pause_ = false;break;
-                    case 27: exit_ = true; break;
-                    case 'p': pause_ = !pause_; break;
+                        // switch(key)
+                        // {
+                        // case 't': case 'T' : take_cloud(kinfu); break;
+                        // case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
+                        // case 's':pause_ = false;break;
+                        // case 27: exit_ = true; break;
+                        // case 'p': pause_ = !pause_; break;
+                        // }
                     }
-                    std::cout<<"image received"<<std::endl;
+                    std::cout<<"image received: "<<jv["img_type"].asString()<<std::endl;
                 }
             }
             else{
@@ -395,7 +458,7 @@ public:
         ff.close();
         if(flag_std_sample)
         {
-            zhuozhuang_type="nake";
+            cloth_type="nake";
         }
         Json::Reader reader;
         Json::Value root;
@@ -411,7 +474,7 @@ public:
             }
         }
 
-        // zhuozhuang_type = "lvekuansong";
+        // cloth_type = "lvekuansong";
 
         cout<<"step 1. load ply file:"<<pfile<<endl;
         //step 1. load ply file
@@ -478,14 +541,14 @@ public:
         }
         pcl::io::savePLYFile("./results/scan.ply",scan);
         Json::Value val_weights;
-        ifstream rcf("./data/weights_"+zhuozhuang_type+".conf");
+        ifstream rcf("./data/weights_"+cloth_type+".conf");
         if(!reader.parse(rcf,val_weights))
         {
             cout<<"===================================================load config file for measurment failed"<<endl;
         }
         else
         {
-            cout<<"config file is: "<<zhuozhuang_type<<endl;
+            cout<<"config file is: "<<cloth_type<<endl;
             meshFittor->setWeights(val_weights["weight_out"].asDouble(),val_weights["weight_in"].asDouble() ,val_weights["weight_in_margin"].asDouble(), val_weights["in_thick"].asDouble() );
             cout<<"===============================================weights seted"<<endl;
         }
@@ -506,7 +569,7 @@ public:
         
         if(flag_std_sample)
         {
-            zhuozhuang_type="nake";
+            cloth_type="nake";
         }
         //step 4. measure the body
         Json::Value jmeasure,jmeasure_add;
@@ -616,6 +679,9 @@ public:
         rt["details"]="call body3D succeeded";
         rt["measures"] = jmeasure;
         rt["time"] = getCurrentTimeStr();
+        rt["cloth_type"] = cloth_type;
+        rt["measure_type"] = measure_type;
+        rt["gender"] = gender;
         Json::StreamWriterBuilder jswBuilder;
         jswBuilder["emitUTF8"] = true;
         std::unique_ptr<Json::StreamWriter>jsWriter(jswBuilder.newStreamWriter());
@@ -623,21 +689,12 @@ public:
         std::ostringstream os;
         jsWriter->write(rt, &os);
 
-        struct timeval tv;
-        gettimeofday(&tv,NULL);
-        //save result and files to sample
-        stringstream ss;
-        ss<<"./check_results/body_"<<tv.tv_sec<<"/";
-        string spfile_folder = ss.str();
-        string cmd_mkdir = "mkdir -p "+spfile_folder;
-        system(cmd_mkdir.c_str());
         ofstream of(spfile_folder+"result.txt");
-        of<<zhuozhuang_type<<endl;
         of<<os.str();
         of.close();
         //end saving
         
-        cout<<"config file is: "<<zhuozhuang_type<<endl;
+        cout<<"config file is: "<<cloth_type<<endl;
         cout<<"End of process @ "<<getCurrentTimeStr()<<endl;
         //save result for checking
 
@@ -651,7 +708,6 @@ public:
         ff1.close();
         cout<<"end calling the service @ "<<getCurrentTimeStr()<<endl;
 
-        
         return os.str();
     }
     void init_bodymeasuer()
@@ -677,8 +733,6 @@ public:
 int main (int argc, char* argv[])
 {
     cout<<"usage: --test for test, follow with ply file path"<<endl;
-    std::locale::global(std::locale("en_US.UTF-8"));
-    std::wcout.imbue(std::locale("en_US.UTF-8"));
     int device = 0;
     cuda::setDevice (device);
     cuda::printShortCudaDeviceInfo (device);
@@ -693,7 +747,7 @@ int main (int argc, char* argv[])
     cout<<"body initialized"<<endl;
     //根据需要调整
     app.measure_type = "qipao";
-    app.zhuozhuang_type = "tieshen";
+    app.cloth_type = "tieshen";
     app.gender = "male";
 
     #endif

@@ -17,11 +17,24 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     // p.cols = 640;  //pixels
     // p.rows = 480;  //pixels
     // p.intr = Intr(598.68896484375f, 599.1634521484375f, 328.7f, 235.72f);
-
-    p.cols = 1280;  //pixels
-    p.rows = 780;  //pixels
-    p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
-    
+    // if (device_type == "realsense")
+    // {
+    //     p.cols = 1280;  //pixels
+    //     p.rows = 780;  //pixels
+    //     p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
+    // }
+    // else if(device_type == "kinect")
+    // {
+        p.cols = 512;  //pixels
+        p.rows = 414;  //pixels
+        p.intr = Intr(365.3566f, 365.3566f, 261.4155f, 206.6168f);
+    // }
+    // else
+    // {
+    //     p.cols = 1280;  //pixels
+    //     p.rows = 780;  //pixels
+    //     p.intr = Intr(898.033f, 898.745f, 653.17f, 353.58f);
+    // }
     p.volume_dims = Vec3i::all(256);  //number of voxels
     p.volume_size = Vec3f::all(2.0f);  //meters
     p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.9f)); //设置初始
