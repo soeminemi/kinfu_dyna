@@ -7,6 +7,7 @@ import websocket
 import base64
 import json
 import cvui
+import threading
 # 获取深度图, 默认尺寸 424x512
 def get_last_depth():
     frame = kinect.get_last_depth_frame()
@@ -28,10 +29,24 @@ def get_last_rbg():
 
 depths = []
 images=[]
+lock = threading.RLock()
 import time
+
+def pub_msg(ws):
+    global msgs
+    while True:
+        lock.acquire()
+        if len(msgs) > 0:
+            msg = msgs.pop(0)
+            ws.send(msg)
+        else:
+            time.sleep(0.01)
+        lock.release()
+
 if __name__ == "__main__":
     kinect = PyKinectRuntime.PyKinectRuntime(PyKinectV2.FrameSourceTypes_Depth | PyKinectV2.FrameSourceTypes_Color)
     sample_num = 1500
+    flag_cache_send = True
     flag_save_disk = False
     flag_start = False
     flag_end = False
@@ -53,6 +68,11 @@ if __name__ == "__main__":
     gender = "female"
     button_name = "START"
     result_str = "None"
+    global msgs
+    msgs = []
+    if flag_cache_send:
+        thread_sdmsg = threading.Thread(target=pub_msg, args=(ws))
+        thread_sdmsg.start()
     while True:
         last_depth_frame = get_last_depth()
         last_color_frame = get_last_rbg()
@@ -89,7 +109,7 @@ if __name__ == "__main__":
         cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
         cvui.update()
         cv2.imshow(WINDOW_NAME,showimg)
-        key = cv2.waitKey(30)
+        key = cv2.waitKey(3)
 
         if flag_start:
             if flag_save_disk:
@@ -105,7 +125,12 @@ if __name__ == "__main__":
             sd["img_type"]="depth"
             sd["frame_id"]=str(fid)
             sdstr = json.dumps(sd)
-            ws.send(sdstr)
+            if flag_cache_send:
+                lock.acquire()
+                msgs.append(sdstr)
+                lock.release()
+            else:
+                ws.send(sdstr)
             if fid == 0:
                 encoded_image = cv2.imencode('.png', last_color_frame)[1]
                 data = base64.b64encode(np.array(encoded_image).tobytes())
@@ -116,7 +141,12 @@ if __name__ == "__main__":
                 sd["img_type"]="color"
                 sd["frame_id"]=str(fid)
                 sdstr = json.dumps(sd)
-                ws.send(sdstr)
+                if flag_cache_send:
+                    lock.acquire()
+                    msgs.append(sdstr)
+                    lock.release()
+                else:
+                    ws.send(sdstr)
             fid += 1
 
         if flag_end:

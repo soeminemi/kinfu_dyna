@@ -453,6 +453,7 @@ public:
     }
     string func(string bodypath)
     {
+        auto start = std::chrono::high_resolution_clock::now();
         ofstream ff("log.txt",ios::app);
         ff<<"calling the service @ "<<getCurrentTimeStr()<<endl;
         ff.close();
@@ -558,6 +559,9 @@ public:
         meshFittor->mainProcess(scan);
         cout<<"start measure"<<endl;
         auto rst =  measure_body(minz, maxz);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        cout<<"time used for optimization: "<<elapsed.count()<<endl;
         return rst;
         
     }

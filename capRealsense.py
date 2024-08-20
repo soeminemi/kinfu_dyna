@@ -34,7 +34,7 @@ if __name__ == "__main__":
     flag_end = False
     # for fid in range(sample_num):
     fid = 0
-    ws_url = "ws://192.168.18.61:9099"
+    ws_url = "ws://jeunjq.natappfree.cc"
     ws = websocket.create_connection(ws_url)
     show_msg = "ready"
     orig = (50,50)
