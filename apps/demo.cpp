@@ -25,7 +25,7 @@
 using namespace kfusion;
 #define COMBIN_MS //if body measurement is combined
 bool flag_std_sample = false;
-
+bool flag_show_image = false;
 static const std::string base64_chars =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         "abcdefghijklmnopqrstuvwxyz"
@@ -130,7 +130,8 @@ public:
         // ss<<"./results/rst"<<frame_idx<<".ply";
         // kinfu.toPly(points_host_,ss.str());
         view_device_.download(view_host_.ptr<void>(), view_host_.step);
-        cv::imshow("Scene", view_host_);
+        if(flag_show_image)
+            cv::imshow("Scene", view_host_);
     }
 
     void take_cloud(KinFu& kinfu)
@@ -293,8 +294,10 @@ public:
                             show_raycasted(kinfu);
 
                         // show_depth(depth);
-                        cv::imshow("Image", depth);
-                        int key = cv::waitKey(pause_ ? 0 : 3);
+                        if(flag_show_image)
+                        {
+                            cv::imshow("Image", depth);
+                            int key = cv::waitKey(pause_ ? 0 : 3);
 
                         // switch(key)
                         // {
@@ -304,6 +307,7 @@ public:
                         // case 27: exit_ = true; break;
                         // case 'p': pause_ = !pause_; break;
                         // }
+                        }
                     }
                     std::cout<<"image received: "<<jv["img_type"].asString()<<std::endl;
                 }
