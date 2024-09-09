@@ -35,10 +35,15 @@ import time
 
 def pub_msg(ws):
     global msgs
+    global flag_exit
+    flag_exit = False
     print("start the send thread")
     print("当前thread: [{}]".format(threading.current_thread().name))
     while True:
         lock.acquire()
+        if flag_exit:
+            lock.release()
+            break
         if len(msgs) > 0:
             msg = msgs.pop(0)
             print("send msg to server ", len(msgs))
@@ -111,6 +116,9 @@ if __name__ == "__main__":
                 show_msg = 'Waiting for Measuring......'
                 result_str = "None"
         if cvui.button(showimg, 250, 100,  "EXIT"):
+            lock.acquire()
+            flag_exit = True
+            lock.release()
             break
         cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
         cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
