@@ -21,6 +21,9 @@
 #include <pthread.h>
 #include <jsoncpp/json/json.h>
 #include "CWebsocketServer.hpp"
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/err.h>
 
 using namespace kfusion;
 #define COMBIN_MS //if body measurement is combined
@@ -807,9 +810,64 @@ public:
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+bool RSADecrypt(const std::string &publicKeyFile, const std::string &data, std::vector<unsigned char> &encrypted) {
+    // 读取公钥
+    FILE *keyFile = fopen(publicKeyFile.c_str(), "r");
+    if (!keyFile) {
+        std::cerr << "公钥文件无法打开" << std::endl;
+        return false;
+    }
+    RSA *rsa = RSA_new();
+    RSA *tmp_rsa = nullptr;
+    if (!PEM_read_RSA_PUBKEY(keyFile, &tmp_rsa, nullptr, nullptr)) {
+        std::cerr << "公钥读取失败" << std::endl;
+        RSA_free(rsa);
+        fclose(keyFile);
+        return false;
+    }
+    rsa = tmp_rsa;
+    fclose(keyFile);
+ 
+    // 加密数据
+    int len = RSA_size(rsa);
+    unsigned char *to[1];
+    int to_len[1];
+    to[0] = new unsigned char[len];
+    int r = RSA_public_encrypt(data.length(), (const unsigned char*)data.c_str(), to[0], rsa, RSA_PKCS1_OAEP_PADDING);
+    if (r < 0) {
+        std::cerr << "加密失败" << std::endl;
+        RSA_free(rsa);
+        delete[] to[0];
+        return false;
+    }
+    to_len[0] = r;
+ 
+    // 输出加密结果
+    for (int i = 0; i < 1; ++i) {
+        encrypted.assign(to[i], to[i] + to_len[i]);
+    }
+ 
+    // 清理
+    RSA_free(rsa);
+    delete[] to[0];
+    return true;
+}
 int main (int argc, char* argv[])
 {
+    //jianquan
+    std::string publicKeyFile = "server_rsa.pub"; // 公钥文件路径
+    std::string data = "Hello, World!";       // 待加密的数据
+    std::vector<unsigned char> encrypted;     // 加密后的数据
+ 
+    if (RSADecrypt(publicKeyFile, data, encrypted)) {
+        std::cout << "加密成功，加密数据：" << std::endl;
+        for (unsigned char c : encrypted) {
+            std::cout << c;
+        }
+    } else {
+        std::cout << "鉴权失败，无使用权限，错误码：0001" << std::endl;
+        return 0;
+    }
     cout<<"usage: --test for test, follow with ply file path"<<endl;
     int device = 0;
     cuda::setDevice (device);
