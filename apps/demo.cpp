@@ -855,7 +855,7 @@ bool RSADecrypt(const std::string &publicKeyFile, const std::string &data, std::
 int main (int argc, char* argv[])
 {
     //jianquan
-    std::string publicKeyFile = "server_rsa.pub"; // 公钥文件路径
+    std::string publicKeyFile = "./apps/server_rsa.pub"; // 公钥文件路径
     std::string data = "Hello, World!";       // 待加密的数据
     std::vector<unsigned char> encrypted;     // 加密后的数据
  
