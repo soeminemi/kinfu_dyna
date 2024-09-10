@@ -121,7 +121,7 @@ bool CWSServer::send_msg(connection_hdl &send_hdl, const std::string& msg)
 {
     unique_lock<mutex> lock(m_send_lock);
     if(m_connections.count(send_hdl)){
-        std::cout<<"send msg: " << msg <<std::endl;
+        // std::cout<<"send msg: " << msg <<std::endl;
         m_server.send(send_hdl, msg, websocketpp::frame::opcode::text);
         return true;
     }else{

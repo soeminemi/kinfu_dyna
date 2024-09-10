@@ -186,7 +186,13 @@ if __name__ == "__main__":
             print("测量结果如下")
             jr = json.loads(result)
             for key, value in jr.items():
-                print(key, value)
+                if key == "body_model":
+                    with open(f"body_model.ply", "w") as f:
+                        # print(key, value)
+                        f.write((value))
+                        f.close()
+                else: 
+                    print(key, value)
             print("测量耗时: ", time.time()-stime," 秒")
             print("Press \'s\' to start and \'e\' to stop")
             show_msg = "Ready"

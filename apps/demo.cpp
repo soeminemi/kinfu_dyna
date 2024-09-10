@@ -36,6 +36,47 @@ static inline bool is_base64(unsigned char c) {
     return (isalnum(c) || (c == '+') || (c == '/'));
 }
 
+unsigned char* base64_encode(const char* str0)
+{
+	unsigned char* str = (unsigned char*)str0;	//转为unsigned char无符号,移位操作时可以防止错误
+	long len;				//base64处理后的字符串长度
+	long str_len;			//源字符串长度
+	long flag;				//用于标识模3后的余数
+	unsigned char* res;		//返回的字符串
+	str_len = strlen((const char*)str);
+	switch (str_len % 3)	//判断模3的余数
+	{
+	case 0:flag = 0; len = str_len / 3 * 4; break;
+	case 1:flag = 1; len = (str_len / 3 + 1) * 4; break;
+	case 2:flag = 2; len = (str_len / 3 + 1) * 4; break;
+	}
+	res = (unsigned char*)malloc(sizeof(unsigned char) * len + 1);
+	for (int i = 0, j = 0; j < str_len - flag; j += 3, i += 4)//先处理整除部分
+	{
+		//注意&运算和位移运算的优先级,是先位移后与或非
+		res[i] = base64_chars[str[j] >> 2];
+		res[i + 1] = base64_chars[(str[j] & 0x3) << 4 | str[j + 1] >> 4];
+		res[i + 2] = base64_chars[(str[j + 1] & 0xf) << 2 | (str[j + 2] >> 6)];
+		res[i + 3] = base64_chars[str[j + 2] & 0x3f];
+	}
+	//不满足被三整除时,要矫正
+	switch (flag)
+	{
+	case 0:break;	//满足时直接退出
+	case 1:res[len - 4] = base64_chars[str[str_len - 1] >> 2];	//只剩一个字符时,右移两位得到高六位
+		res[len - 3] = base64_chars[(str[str_len - 1] & 0x3) << 4];//获得低二位再右移四位,自动补0
+		res[len - 2] = res[len - 1] = '='; break;				//最后两个补=
+	case 2:
+		res[len - 4] = base64_chars[str[str_len - 2] >> 2];				//剩两个字符时,右移两位得高六位
+		res[len - 3] = base64_chars[(str[str_len - 2] & 0x3) << 4 | str[str_len - 1] >> 4];	//第一个字符低二位和第二个字符高四位
+		res[len - 2] = base64_chars[(str[str_len - 1] & 0xf) << 2];	//第二个字符低四位,左移两位自动补0
+		res[len - 1] = '=';											//最后一个补=
+		break;
+	}
+	res[len] = '\0';	//补上字符串结束标识
+	return res;
+}
+
 std::string base64_decode(const std::string& encoded_string) {
     size_t in_len = encoded_string.size();
     int i = 0;
@@ -207,23 +248,41 @@ public:
                     std::cout<<"finished and try to measure"<<std::endl;
                     //save final cloud to file
                     cuda::DeviceArray<Point> cloud = kinfu.tsdf().fetchCloud(cloud_buffer);
-                    kinfu.tsdf().fetchNormals(cloud,normal_buffer);
-                    //
-                    cv::Mat cloud_host(1, (int)cloud.size(), CV_32FC4);
-                    cloud.download(cloud_host.ptr<Point>());
-                    //
-                    cv::Mat normal_host(1, (int)cloud.size(), CV_32FC4);
-                    normal_buffer.download(normal_host.ptr<Point>());
-                    
-                    #ifdef COMBIN_MS
-                    //save to file for measurement
-                    std::stringstream ss;
-                    ss<<pfile;
-                    kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(),255,0,0);
-                    //start measurement
-                    auto rst = func(pfile);
-                    ws.send_msg(a.hdl,rst);
-                    #endif
+                    if(cloud.size() > 0)
+                    {
+                        std::cout<<"try to fetch normals"<<std::endl;
+                        kinfu.tsdf().fetchNormals(cloud,normal_buffer);
+                        //
+                        cv::Mat cloud_host(1, (int)cloud.size(), CV_32FC4);
+                        cloud.download(cloud_host.ptr<Point>());
+                        //
+                        cv::Mat normal_host(1, (int)cloud.size(), CV_32FC4);
+                        normal_buffer.download(normal_host.ptr<Point>());
+                        
+                        #ifdef COMBIN_MS
+                        //save to file for measurement
+                        std::stringstream ss;
+                        ss<<pfile;
+                        kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(),255,0,0);
+                        //start measurement
+                        auto rst = func(pfile);
+                        ws.send_msg(a.hdl,rst);
+                        #endif
+                    }
+                    else{
+                        
+                        //for test 
+                        Json::Value rt;
+                        rt["error"] = "points not enough";
+                        Json::StreamWriterBuilder jswBuilder;
+                        jswBuilder["emitUTF8"] = true;
+                        std::unique_ptr<Json::StreamWriter>jsWriter(jswBuilder.newStreamWriter());
+
+                        std::ostringstream os;
+                        jsWriter->write(rt, &os);
+                        ws.send_msg(a.hdl,os.str());
+                    }
+                   
                     kinfu.reset();
 
                 }
@@ -569,6 +628,16 @@ public:
         return rst;
         
     }
+    std::string readFileToString(std::string filePath) 
+    {
+        std::ifstream fileStream(filePath);
+        if (!fileStream.is_open()) {
+            throw std::runtime_error("Unable to open file.");
+        }
+        std::stringstream stringStream;
+        stringStream << fileStream.rdbuf();
+        return stringStream.str();
+    }
     string measure_body(double minz, double maxz)
     {
         Json::Reader reader;
@@ -582,6 +651,7 @@ public:
         //step 4. measure the body
         Json::Value jmeasure,jmeasure_add;
         bm.loadMeasureBody("./results/rbody.ply");
+        rt["body_model"] = (readFileIntoString("./results/rbody.ply").c_str());
         // bm.loadMeasureBody_pcl("./results/scan.ply", "./results/rbody.ply", "./results/corres_idxes.mat");
         //load the config file
         Json::Value jval;
