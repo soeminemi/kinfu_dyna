@@ -808,74 +808,272 @@ public:
     #endif
 };
 
+#include <websocketpp/config/asio_no_tls_client.hpp>
+#include <websocketpp/client.hpp>
+#include <thread>
+#include <chrono>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool RSADecrypt(const std::string &publicKeyFile, const std::string &data, std::vector<unsigned char> &encrypted) {
-    // 读取公钥
-    FILE *keyFile = fopen(publicKeyFile.c_str(), "r");
-    if (!keyFile) {
-        std::cerr << "公钥文件无法打开" << std::endl;
-        return false;
-    }
-    RSA *rsa = RSA_new();
-    RSA *tmp_rsa = nullptr;
-    if (!PEM_read_RSAPublicKey(keyFile, &tmp_rsa, nullptr, nullptr)) {
-        std::cerr << "公钥读取失败" << std::endl;
-        RSA_free(rsa);
-        fclose(keyFile);
-        return false;
-    }
-    rsa = tmp_rsa;
-    fclose(keyFile);
- 
-    // 加密数据
-    int len = RSA_size(rsa);
-    unsigned char *to[1];
-    int to_len[1];
-    to[0] = new unsigned char[len];
-    int r = RSA_public_encrypt(data.length(), (const unsigned char*)data.c_str(), to[0], rsa, RSA_PKCS1_OAEP_PADDING);
-    if (r < 0) {
-        std::cerr << "加密失败" << std::endl;
-        RSA_free(rsa);
-        delete[] to[0];
-        return false;
-    }
-    to_len[0] = r;
- 
-    // 输出加密结果
-    for (int i = 0; i < 1; ++i) {
-        encrypted.assign(to[i], to[i] + to_len[i]);
-    }
- 
-    // 清理
-    RSA_free(rsa);
-    delete[] to[0];
-    return true;
+typedef websocketpp::client<websocketpp::config::asio_client> client;
+
+// Base64 编码函数
+std::string base64_encode(const std::vector<unsigned char>& input) {
+    BIO *bio, *b64;
+    BUF_MEM *bufferPtr;
+
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_new(BIO_s_mem());
+    bio = BIO_push(b64, bio);
+
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+    BIO_write(bio, input.data(), input.size());
+    BIO_flush(bio);
+    BIO_get_mem_ptr(bio, &bufferPtr);
+    BIO_set_close(bio, BIO_NOCLOSE);
+    BIO_free_all(bio);
+
+    return std::string(bufferPtr->data, bufferPtr->length);
 }
+
+// Base64 解码函数
+std::vector<unsigned char> base64_decode(const std::string& input) {
+    BIO *bio, *b64;
+    std::vector<unsigned char> result(input.size());
+
+    bio = BIO_new_mem_buf(input.c_str(), -1);
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64, bio);
+
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+    int decoded_size = BIO_read(bio, result.data(), input.size());
+    BIO_free_all(bio);
+
+    result.resize(decoded_size);
+    return result;
+}
+
+class WebSocketClient {
+public:
+    WebSocketClient() : m_done(false), m_connected(false) {
+        m_client.clear_access_channels(websocketpp::log::alevel::all);
+        m_client.clear_error_channels(websocketpp::log::elevel::all);
+
+        m_client.init_asio();
+
+        m_client.set_open_handler([this](websocketpp::connection_hdl hdl) {
+            m_connected = true;
+            m_hdl = hdl;
+            std::cout << "WebSocket 连接已打开" << std::endl;
+        });
+
+        m_client.set_message_handler([this](websocketpp::connection_hdl hdl, client::message_ptr msg) {
+            std::cout << "收到服务器消息: " << msg->get_payload() << std::endl;
+            m_received_message = msg->get_payload();
+            m_done = true;
+        });
+
+        m_client.set_close_handler([this](websocketpp::connection_hdl hdl) {
+            m_connected = false;
+            std::cout << "WebSocket 连接已关闭" << std::endl;
+        });
+
+        m_client.set_fail_handler([this](websocketpp::connection_hdl hdl) {
+            auto con = m_client.get_con_from_hdl(hdl);
+            std::cout << "WebSocket 连接失败: " << con->get_ec().message() << std::endl;
+            m_connected = false;
+        });
+    }
+
+    void run(const std::string& uri) {
+        websocketpp::lib::error_code ec;
+        client::connection_ptr con = m_client.get_connection(uri, ec);
+        if (ec) {
+            std::cout << "连接错误: " << ec.message() << std::endl;
+            return;
+        }
+
+        m_client.connect(con);
+        m_client.run();
+    }
+
+    bool send(const std::string& message) {
+        if (!m_connected) {
+            std::cout << "WebSocket 未连接，无法发送消息" << std::endl;
+            return false;
+        }
+        websocketpp::lib::error_code ec;
+        m_client.send(m_hdl, message, websocketpp::frame::opcode::text, ec);
+        if (ec) {
+            std::cout << "发送消息失败: " << ec.message() << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    void close() {
+        if (m_connected) {
+            websocketpp::lib::error_code ec;
+            m_client.close(m_hdl, websocketpp::close::status::normal, "Closing connection", ec);
+            if (ec) {
+                std::cout << "关闭连接失败: " << ec.message() << std::endl;
+            }
+        }
+    }
+
+    bool is_done() const { return m_done; }
+    bool is_connected() const { return m_connected; }
+    const std::string& get_received_message() const { return m_received_message; }
+
+private:
+    client m_client;
+    websocketpp::connection_hdl m_hdl;
+    bool m_done;
+    bool m_connected;
+    std::string m_received_message;
+};
+
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/err.h>
+#include <string>
+#include <vector>
+
+class RSACrypto {
+public:
+    static std::vector<unsigned char> encrypt(const std::string& plain_text, RSA* public_key);
+    static std::string decrypt(const std::vector<unsigned char>& cipher_text, RSA* private_key);
+};
+
+
+// 实现 RSACrypto 类的方法
+std::vector<unsigned char> RSACrypto::encrypt(const std::string& plain_text, RSA* public_key) {
+    std::vector<unsigned char> encrypted(RSA_size(public_key));
+    int encrypted_length = RSA_public_encrypt(plain_text.length(),
+                                              reinterpret_cast<const unsigned char*>(plain_text.c_str()),
+                                              encrypted.data(),
+                                              public_key,
+                                              RSA_PKCS1_OAEP_PADDING);
+    if (encrypted_length == -1) {
+        throw std::runtime_error("加密失败");
+    }
+    encrypted.resize(encrypted_length);
+    return encrypted;
+}
+
+std::string RSACrypto::decrypt(const std::vector<unsigned char>& cipher_text, RSA* private_key) {
+    std::vector<unsigned char> decrypted(RSA_size(private_key));
+    int decrypted_length = RSA_private_decrypt(cipher_text.size(),
+                                               cipher_text.data(),
+                                               decrypted.data(),
+                                               private_key,
+                                               RSA_PKCS1_OAEP_PADDING);
+    if (decrypted_length == -1) {
+        throw std::runtime_error("解密失败");
+    }
+    return std::string(reinterpret_cast<char*>(decrypted.data()), decrypted_length);
+}
+
 int main (int argc, char* argv[])
 {
     //jianquan
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
     std::string publicKeyFile = "./apps/server_key.pem"; // 公钥文件路径
-    std::string data = "Hello, World!";       // 待加密的数据
+    std::string data = "server_A40_1";       // 待加密的数据
     std::vector<unsigned char> encrypted;     // 加密后的数据
-
-    if (RSADecrypt(publicKeyFile, data, encrypted)) {
-        std::cout << "加密成功，加密数据：" << std::endl;
-        
-        std::stringstream ss;
-        for (unsigned char c : encrypted) {
-            ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(c);
-        }
-        std::string cipher_text_str = ss.str();
-        cout<<cipher_text_str<<endl;
-
-    } 
-    else {
-        std::cout << "鉴权失败，无使用权限，错误码：0001" << std::endl;
-        return 0;
+    FILE* public_key_file = fopen(publicKeyFile, "rb");
+    if (!public_key_file) {
+        std::cerr << "无法打开公钥文件" << std::endl;
+        return 1;
     }
+    RSA* public_key = PEM_read_RSAPublicKey(public_key_file, nullptr, nullptr, nullptr);
+    fclose(public_key_file);
+    if (!public_key) {
+        std::cerr << "无法读取公钥" << std::endl;
+        return 1;
+    }
+    try {
+        // 加密
+        std::vector<unsigned char> cipher_text = RSACrypto::encrypt(plain_text, public_key);
+        
+        // 将加密后的数据转换为Base64字符串
+        std::string encoded_cipher = base64_encode(cipher_text);
+        std::cout << "Base64编码后的加密数据: " << encoded_cipher << std::endl;
+
+        // 将Base64字符串解码回二进制数据
+        std::vector<unsigned char> decoded_cipher = base64_decode(encoded_cipher);
+        
+        // 验证：使用私钥解密
+        std::string decrypted_text = RSACrypto::decrypt(decoded_cipher, private_key);
+        std::cout << "验证解密结果: " << decrypted_text << std::endl;
+        if (decrypted_text == plain_text) {
+            std::cout << "验证成功：加密和解密操作正确" << std::endl;
+        } else {
+            std::cout << "验证失败：加密和解密结果不匹配" << std::endl;
+            throw std::runtime_error("加密验证失败");
+        }
+
+        // 创建 WebSocket 客户端并连接到服务器
+        WebSocketClient client;
+        std::thread client_thread([&client]() {
+            client.run("ws://localhost:9002");
+        });
+        // 等待连接建立
+        while (!client.is_connected()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        // 发送加密数据到服务器，不进行 Base64 编码
+        std::string encoded_message = base64_encode(cipher_text);
+        // 添加以下代码来显示解码后的数据（十六进制格式）
+        std::vector<unsigned char> decoded_data = base64_decode(encoded_message);
+        std::cout << std::dec << std::endl;
+
+        if (!client.send(encoded_message)) {
+            client.close();
+            client_thread.join();
+            std::err << "鉴权失败，无使用权限，错误码：0004" << std::endl;
+            throw std::runtime_error("鉴权失败，错误码：0004");
+        }
+
+        // 等待服务器响应
+        auto start_time = std::chrono::steady_clock::now();
+        while (!client.is_done()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            auto current_time = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(current_time - start_time).count() > 10) {
+                 std::err << "鉴权失败，无使用权限，错误码：0003" << std::endl;
+                throw std::runtime_error("鉴权失败，错误码：0003");
+            }
+        }
+
+        // 获取服务器响应
+        std::string server_response = client.get_received_message();
+        std::vector<unsigned char> encrypted_response = base64_decode(server_response);
+        std::string server_decrypted_text = RSACrypto::decrypt(encrypted_response, private_key);
+        if (server_decrypted_text == plain_text) {
+            std::cout << "验证成功：加密和解密操作正确" << std::endl;
+        } else {
+            std::err << "鉴权失败，无使用权限，错误码：0001" << std::endl;
+            throw std::runtime_error("鉴权失败，错误码：0001");
+        }
+
+        // 关闭 WebSocket 连接
+        client.close();
+        // 等待 WebSocket 客户端线程结束
+        client_thread.join();
+
+    } catch (const std::exception& e) {
+        std::err << "鉴权失败，无使用权限，错误码：0002" << std::endl;
+        return 1;
+    }
+
+    // 清理
+    RSA_free(public_key);
+    RSA_free(private_key);
+    EVP_cleanup();
+    ERR_free_strings();
     cout<<"usage: --test for test, follow with ply file path"<<endl;
     int device = 0;
     cuda::setDevice (device);
