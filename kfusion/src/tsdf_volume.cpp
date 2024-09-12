@@ -162,6 +162,12 @@ void kfusion::cuda::TsdfVolume::fetchNormals(const DeviceArray<Point>& cloud, De
 {
     std::cout<<"fn called"<<std::endl;
     normals.create(cloud.size());
+    if(cloud.size() <= 0)
+    {
+        std::cout<<"try to extract normals of cloud with size 0, return "<<std::endl;
+        return ;
+    }
+   
     std::cout<<"mark 1"<<std::endl;
     DeviceArray<device::Point>& c = (DeviceArray<device::Point>&)cloud;
 

@@ -29,19 +29,29 @@ def get_last_rbg():
 
 depths = []
 images=[]
-lock = threading.RLock()
+global lock
+lock = threading.Lock()
 import time
 
 def pub_msg(ws):
     global msgs
+    global flag_exit
+    flag_exit = False
+    print("start the send thread")
+    print("当前thread: [{}]".format(threading.current_thread().name))
     while True:
         lock.acquire()
+        if flag_exit:
+            lock.release()
+            break
         if len(msgs) > 0:
             msg = msgs.pop(0)
+            print("send msg to server ", len(msgs))
+            lock.release()
             ws.send(msg)
         else:
-            time.sleep(0.01)
-        lock.release()
+            lock.release()
+        time.sleep(0.01)
 
 if __name__ == "__main__":
     kinect = PyKinectRuntime.PyKinectRuntime(PyKinectV2.FrameSourceTypes_Depth | PyKinectV2.FrameSourceTypes_Color)
@@ -71,8 +81,10 @@ if __name__ == "__main__":
     global msgs
     msgs = []
     if flag_cache_send:
-        thread_sdmsg = threading.Thread(target=pub_msg, args=(ws))
+        print("try to start the msg sending thread")
+        thread_sdmsg = threading.Thread(target=pub_msg, args=(ws,),name="send1")
         thread_sdmsg.start()
+        # thread_sdmsg.join()
     while True:
         last_depth_frame = get_last_depth()
         last_color_frame = get_last_rbg()
@@ -104,6 +116,9 @@ if __name__ == "__main__":
                 show_msg = 'Waiting for Measuring......'
                 result_str = "None"
         if cvui.button(showimg, 250, 100,  "EXIT"):
+            lock.acquire()
+            flag_exit = True
+            lock.release()
             break
         cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
         cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
@@ -157,7 +172,13 @@ if __name__ == "__main__":
             sd["measure_type"]="qipao"
             sd["cloth_type"] = "jinshen"
             sdstr = json.dumps(sd)
-            ws.send(sdstr)
+            if flag_cache_send:
+                lock.acquire()
+                msgs.append(sdstr)
+                lock.release()
+                print("cached msg size: ", len(msgs))
+            else:
+                ws.send(sdstr)
             stime = time.time()
             print("测量中，请稍候")
             fid = 0
