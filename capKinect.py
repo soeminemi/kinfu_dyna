@@ -52,7 +52,7 @@ if __name__ == "__main__":
     flag_end = False
     # for fid in range(sample_num):
     fid = 0
-    ws_url = "ws://http://zeroonearea.natapp1.cc:80"
+    ws_url = "ws://175.6.27.254:9099"
     ws = websocket.create_connection(ws_url)
     show_msg = "Ready"
     orig = (50,50)
