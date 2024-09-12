@@ -12,7 +12,7 @@ ${CMAKE_SOURCE_DIR}/apps
 file(GLOB srcs *.cpp *.hpp)
 add_executable(demo ${srcs})
 #message(${srcs} )
-target_link_libraries(demo ${OpenCV_LIBS} ${PCL_LIBRARIES} kfusion -lceres -lglog -lbody3D -lcurl -lopenjp2 -ljsoncpp)
+target_link_libraries(demo ${OpenCV_LIBS} ${PCL_LIBRARIES} kfusion -lceres -lglog -lbody3D -lcurl -lopenjp2 -ljsoncpp -lssl -lcrypto)
 
 set_target_properties(demo PROPERTIES
     DEBUG_POSTFIX "d"
