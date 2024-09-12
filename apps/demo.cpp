@@ -858,16 +858,34 @@ int main (int argc, char* argv[])
     std::string publicKeyFile = "./apps/server_rsa.pub"; // 公钥文件路径
     std::string data = "Hello, World!";       // 待加密的数据
     std::vector<unsigned char> encrypted;     // 加密后的数据
- 
-    if (RSADecrypt(publicKeyFile, data, encrypted)) {
-        std::cout << "加密成功，加密数据：" << std::endl;
-        for (unsigned char c : encrypted) {
-            std::cout << c;
-        }
-    } else {
-        std::cout << "鉴权失败，无使用权限，错误码：0001" << std::endl;
+    // 读取公钥文件
+    FILE* pubKeyFile = fopen(publicKeyFile.c_str(), "rb");
+    if (!pubKeyFile) {
+        std::cout << "无法打开公钥文件" << std::endl;
         return 0;
     }
+
+    RSA* rsa = PEM_read_RSA_PUBKEY(pubKeyFile, NULL, NULL, NULL);
+    fclose(pubKeyFile);
+
+    if (!rsa) {
+        std::cout << "读取公钥失败" << std::endl;
+        return 0;
+    }
+
+    std::cout << "成功读取公钥" << std::endl;
+
+    // 使用完毕后释放RSA结构
+    RSA_free(rsa);
+    // if (RSADecrypt(publicKeyFile, data, encrypted)) {
+    //     std::cout << "加密成功，加密数据：" << std::endl;
+    //     for (unsigned char c : encrypted) {
+    //         std::cout << c;
+    //     }
+    // } else {
+    //     std::cout << "鉴权失败，无使用权限，错误码：0001" << std::endl;
+    //     return 0;
+    // }
     cout<<"usage: --test for test, follow with ply file path"<<endl;
     int device = 0;
     cuda::setDevice (device);
