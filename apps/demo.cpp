@@ -819,7 +819,7 @@ bool RSADecrypt(const std::string &publicKeyFile, const std::string &data, std::
     }
     RSA *rsa = RSA_new();
     RSA *tmp_rsa = nullptr;
-    if (!PEM_read_RSA_PUBKEY(keyFile, &tmp_rsa, nullptr, nullptr)) {
+    if (!PEM_read_RSAPublicKey(keyFile, &tmp_rsa, nullptr, nullptr)) {
         std::cerr << "公钥读取失败" << std::endl;
         RSA_free(rsa);
         fclose(keyFile);
@@ -855,37 +855,27 @@ bool RSADecrypt(const std::string &publicKeyFile, const std::string &data, std::
 int main (int argc, char* argv[])
 {
     //jianquan
-    std::string publicKeyFile = "/home/john/.ssh/server_key.pem"; // 公钥文件路径
+    OpenSSL_add_all_algorithms();
+    ERR_load_crypto_strings();
+    std::string publicKeyFile = "./apps/server_key.pem"; // 公钥文件路径
     std::string data = "Hello, World!";       // 待加密的数据
     std::vector<unsigned char> encrypted;     // 加密后的数据
-    // 读取公钥文件
-    FILE* pubKeyFile = fopen(publicKeyFile.c_str(), "rb");
-    if (!pubKeyFile) {
-        std::cout << "无法打开公钥文件" << std::endl;
+
+    if (RSADecrypt(publicKeyFile, data, encrypted)) {
+        std::cout << "加密成功，加密数据：" << std::endl;
+        
+        std::stringstream ss;
+        for (unsigned char c : encrypted) {
+            ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(c);
+        }
+        std::string cipher_text_str = ss.str();
+        cout<<cipher_text_str<<endl;
+
+    } 
+    else {
+        std::cout << "鉴权失败，无使用权限，错误码：0001" << std::endl;
         return 0;
     }
-
-    RSA* rsa = PEM_read_RSA_PUBKEY(pubKeyFile, NULL, NULL, NULL);
-    fclose(pubKeyFile);
-
-    if (!rsa) {
-        std::cout << "读取公钥失败" << std::endl;
-        return 0;
-    }
-
-    std::cout << "成功读取公钥" << std::endl;
-
-    // 使用完毕后释放RSA结构
-    RSA_free(rsa);
-    // if (RSADecrypt(publicKeyFile, data, encrypted)) {
-    //     std::cout << "加密成功，加密数据：" << std::endl;
-    //     for (unsigned char c : encrypted) {
-    //         std::cout << c;
-    //     }
-    // } else {
-    //     std::cout << "鉴权失败，无使用权限，错误码：0001" << std::endl;
-    //     return 0;
-    // }
     cout<<"usage: --test for test, follow with ply file path"<<endl;
     int device = 0;
     cuda::setDevice (device);
