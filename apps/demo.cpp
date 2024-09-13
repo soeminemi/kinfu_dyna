@@ -80,7 +80,7 @@ unsigned char* base64_encode(const char* str0)
 	return res;
 }
 
-std::string base64_decode(const std::string& encoded_string) {
+std::string base64_decode_str(const std::string& encoded_string) {
     size_t in_len = encoded_string.size();
     int i = 0;
     int j = 0;
@@ -308,7 +308,7 @@ public:
                     flag_started = true;
                     if(jv["img_type"].asString()=="color")
                     {
-                        std::string ws_str = base64_decode(jv["data"].asString());
+                        std::string ws_str = base64_decode_str(jv["data"].asString());
                         std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
                         std::cout<<"decode png"<<std::endl;
                         cv::Mat color = cv::imdecode(img_vec, cv::IMREAD_COLOR);
@@ -316,7 +316,7 @@ public:
                     }
                     else
                     {
-                        std::string ws_str = base64_decode(jv["data"].asString());
+                        std::string ws_str = base64_decode_str(jv["data"].asString());
                         std::cout<<"base 64 decoded"<<std::endl;
                         std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
                         std::cout<<"decode png"<<std::endl;
@@ -981,9 +981,9 @@ int main (int argc, char* argv[])
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
     std::string publicKeyFile = "./apps/server_key.pem"; // 公钥文件路径
-    std::string data = "server_A40_1";       // 待加密的数据
+    std::string plain_text = "server_A40_1";       // 待加密的数据
     std::vector<unsigned char> encrypted;     // 加密后的数据
-    FILE* public_key_file = fopen(publicKeyFile, "rb");
+    FILE* public_key_file = fopen(publicKeyFile.c_str(), "rb");
     if (!public_key_file) {
         std::cerr << "无法打开公钥文件" << std::endl;
         return 1;
@@ -1005,16 +1005,6 @@ int main (int argc, char* argv[])
         // 将Base64字符串解码回二进制数据
         std::vector<unsigned char> decoded_cipher = base64_decode(encoded_cipher);
         
-        // 验证：使用私钥解密
-        std::string decrypted_text = RSACrypto::decrypt(decoded_cipher, private_key);
-        std::cout << "验证解密结果: " << decrypted_text << std::endl;
-        if (decrypted_text == plain_text) {
-            std::cout << "验证成功：加密和解密操作正确" << std::endl;
-        } else {
-            std::cout << "验证失败：加密和解密结果不匹配" << std::endl;
-            throw std::runtime_error("加密验证失败");
-        }
-
         // 创建 WebSocket 客户端并连接到服务器
         WebSocketClient client;
         std::thread client_thread([&client]() {
@@ -1033,7 +1023,7 @@ int main (int argc, char* argv[])
         if (!client.send(encoded_message)) {
             client.close();
             client_thread.join();
-            std::err << "鉴权失败，无使用权限，错误码：0004" << std::endl;
+             std::cerr << "鉴权失败，无使用权限，错误码：0004" << std::endl;
             throw std::runtime_error("鉴权失败，错误码：0004");
         }
 
@@ -1043,7 +1033,7 @@ int main (int argc, char* argv[])
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             auto current_time = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(current_time - start_time).count() > 10) {
-                 std::err << "鉴权失败，无使用权限，错误码：0003" << std::endl;
+                  std::cerr << "鉴权失败，无使用权限，错误码：0003" << std::endl;
                 throw std::runtime_error("鉴权失败，错误码：0003");
             }
         }
@@ -1051,11 +1041,11 @@ int main (int argc, char* argv[])
         // 获取服务器响应
         std::string server_response = client.get_received_message();
         std::vector<unsigned char> encrypted_response = base64_decode(server_response);
-        std::string server_decrypted_text = RSACrypto::decrypt(encrypted_response, private_key);
+        std::string server_decrypted_text = RSACrypto::decrypt(encrypted_response, public_key);
         if (server_decrypted_text == plain_text) {
             std::cout << "验证成功：加密和解密操作正确" << std::endl;
         } else {
-            std::err << "鉴权失败，无使用权限，错误码：0001" << std::endl;
+             std::cerr << "鉴权失败，无使用权限，错误码：0001" << std::endl;
             throw std::runtime_error("鉴权失败，错误码：0001");
         }
 
@@ -1065,13 +1055,12 @@ int main (int argc, char* argv[])
         client_thread.join();
 
     } catch (const std::exception& e) {
-        std::err << "鉴权失败，无使用权限，错误码：0002" << std::endl;
+         std::cerr << "鉴权失败，无使用权限，错误码：0002" << std::endl;
         return 1;
     }
 
     // 清理
     RSA_free(public_key);
-    RSA_free(private_key);
     EVP_cleanup();
     ERR_free_strings();
     cout<<"usage: --test for test, follow with ply file path"<<endl;
