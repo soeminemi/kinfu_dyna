@@ -51,12 +51,25 @@ def pub_msg(ws):
         else:
             lock.release()
         time.sleep(0.01)
-
+import os
+import re
+import sys
 if __name__ == "__main__":
+    print(f"当前程序执行路径: {os.getcwd()}")
+    if len(sys.argv) < 2:
+        print("使用方法: python testServer.py <深度图像文件夹路径>")
+        sys.exit(1)
+
+    depth_folder = sys.argv[1]  # 从命令行参数获取深度图像文件夹路径
+    if not os.path.isdir(depth_folder):
+        print(f"错误: 文件夹 '{depth_folder}' 不存在")
+        sys.exit(1)
+
+    print(f"使用深度图像文件夹: {depth_folder}")
     sample_num = 1500
     flag_cache_send = True
     flag_save_disk = False
-    flag_start = False
+    flag_start = True
     flag_end = False
     # for fid in range(sample_num):
     fid = 0
@@ -83,12 +96,32 @@ if __name__ == "__main__":
         thread_sdmsg = threading.Thread(target=pub_msg, args=(ws,),name="send1")
         thread_sdmsg.start()
         # thread_sdmsg.join()
+    # depth_folder = "./body_1726305326/depths"  # 指定深度图像文件夹
+    # depth_files = sorted([f for f in os.listdir(depth_folder) if f.endswith('.png')])
+    def sort_key(filename):
+        # 从文件名中提取数字
+        numbers = re.findall(r'\d+', filename)
+        return int(numbers[0]) if numbers else 0
+
+    depth_files = sorted([f for f in os.listdir(depth_folder) if f.endswith('.png')], key=sort_key)
+    
+    depth_index = 0
     while True:
         depth_file = "./depth.png"
         color_file = "./color.png"
+        if depth_index < len(depth_files):
+            depth_file = os.path.join(depth_folder, depth_files[depth_index])
+            print("sending: ",depth_file)
+            last_depth_frame = cv2.imread(depth_file, cv2.IMREAD_ANYDEPTH)
+            depth_index +=1
+        else:
+            flag_start = False
+            flag_end = True
+            show_msg = '所有深度图像已发送,等待接收结果'
 
-        last_depth_frame = cv2.imread(depth_file,cv2.IMREAD_ANYDEPTH)
-        last_color_frame = cv2.imread(color_file)
+
+        # last_color_frame = cv2.imread(color_file)
+        last_color_frame = np.ones((300, 300, 3), dtype=np.uint8) * 128  # 128 是中灰色
         showimg = last_color_frame
         # cv2.putText(showimg, show_msg, orig, font, fontscale, color, 2)
         showimg = cv2.rotate(cv2.cvtColor(last_color_frame,cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
@@ -122,7 +155,7 @@ if __name__ == "__main__":
         cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
         cvui.update()
         cv2.imshow(WINDOW_NAME,showimg)
-        key = cv2.waitKey(3)
+        key = cv2.waitKey(30)
 
         if flag_start:
             if flag_save_disk:
@@ -195,6 +228,11 @@ if __name__ == "__main__":
                     print(key, value)
             print("测量耗时: ", time.time()-stime," 秒")
             print("Press \'s\' to start and \'e\' to stop")
+            print("测量完成，程序退出")
+            lock.acquire()
+            flag_exit = True
+            lock.release()
+            break
             show_msg = "Ready"
 
     if flag_save_disk:

@@ -24,6 +24,16 @@
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+#include <iomanip>
+#include <sstream>
 
 using namespace kfusion;
 #define COMBIN_MS //if body measurement is combined
@@ -115,6 +125,55 @@ std::string base64_decode_str(const std::string& encoded_string) {
     }
 
     return ret;
+}
+
+// 获取本机MAC地址的函数
+std::string get_local_mac() {
+    struct ifreq ifr;
+    struct ifconf ifc;
+    char buf[1024];
+    int success = 0;
+
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if (sock == -1) {
+        return "";
+    }
+
+    ifc.ifc_len = sizeof(buf);
+    ifc.ifc_buf = buf;
+    if (ioctl(sock, SIOCGIFCONF, &ifc) == -1) {
+        close(sock);
+        return "";
+    }
+
+    struct ifreq* it = ifc.ifc_req;
+    const struct ifreq* const end = it + (ifc.ifc_len / sizeof(struct ifreq));
+
+    for (; it != end; ++it) {
+        strcpy(ifr.ifr_name, it->ifr_name);
+        if (ioctl(sock, SIOCGIFFLAGS, &ifr) == 0) {
+            if (!(ifr.ifr_flags & IFF_LOOPBACK)) { // don't count loopback
+                if (ioctl(sock, SIOCGIFHWADDR, &ifr) == 0) {
+                    success = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    close(sock);
+
+    if (success) {
+        std::stringstream ss;
+        ss << std::hex << std::setfill('0');
+        for (int i = 0; i < 6; i++) {
+            ss << std::setw(2) << static_cast<unsigned>(static_cast<unsigned char>(ifr.ifr_hwaddr.sa_data[i]));
+            if (i != 5) ss << ":";
+        }
+        return ss.str();
+    }
+
+    return "";
 }
 
 class KinFuApp
@@ -856,7 +915,7 @@ std::vector<unsigned char> base64_decode(const std::string& input) {
 
 class WebSocketClient {
 public:
-    WebSocketClient() : m_done(false), m_connected(false) {
+    WebSocketClient() : m_done(false), m_connected(false), m_connection_failed(false) {
         m_client.clear_access_channels(websocketpp::log::alevel::all);
         m_client.clear_error_channels(websocketpp::log::elevel::all);
 
@@ -881,21 +940,39 @@ public:
 
         m_client.set_fail_handler([this](websocketpp::connection_hdl hdl) {
             auto con = m_client.get_con_from_hdl(hdl);
-            std::cout << "WebSocket 连接失败: " << con->get_ec().message() << std::endl;
+            std::cerr << "WebSocket 连接失败: " << con->get_ec().message() << std::endl;
             m_connected = false;
+            m_connection_failed = true;
         });
     }
 
-    void run(const std::string& uri) {
+    bool run(const std::string& uri) {
         websocketpp::lib::error_code ec;
         client::connection_ptr con = m_client.get_connection(uri, ec);
         if (ec) {
-            std::cout << "连接错误: " << ec.message() << std::endl;
-            return;
+            std::cerr << "连接错误: " << ec.message() << std::endl;
+            return false;
         }
 
         m_client.connect(con);
-        m_client.run();
+        
+        // 使用独立线程运行客户端
+        std::thread client_thread([this]() {
+            m_client.run();
+        });
+
+        // 等待连接建立或失败
+        while (!m_connected && !m_connection_failed) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        if (m_connection_failed) {
+            client_thread.join();
+            return false;
+        }
+
+        client_thread.detach();
+        return true;
     }
 
     bool send(const std::string& message) {
@@ -931,6 +1008,7 @@ private:
     websocketpp::connection_hdl m_hdl;
     bool m_done;
     bool m_connected;
+    bool m_connection_failed;
     std::string m_received_message;
 };
 
@@ -980,8 +1058,15 @@ int main (int argc, char* argv[])
     //jianquan
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
-    std::string publicKeyFile = "./apps/server_key.pem"; // 公钥文件路径
-    std::string plain_text = "server_A40_1";       // 待加密的数据
+    std::string publicKeyFile = "./apps/public_key.pem"; // 公钥文件路径
+    std::string plain_text = "server_A40_1";       // 原始的plaintext
+    std::string local_mac = get_local_mac();       // 获取本机MAC地址
+    
+    // 合并MAC地址和原始plaintext
+    plain_text = local_mac + "_" + plain_text;
+    
+    std::cout << "Combined plaintext: " << plain_text << std::endl;
+
     std::vector<unsigned char> encrypted;     // 加密后的数据
     FILE* public_key_file = fopen(publicKeyFile.c_str(), "rb");
     if (!public_key_file) {
@@ -1007,13 +1092,11 @@ int main (int argc, char* argv[])
         
         // 创建 WebSocket 客户端并连接到服务器
         WebSocketClient client;
-        std::thread client_thread([&client]() {
-            client.run("ws://localhost:9002");
-        });
-        // 等待连接建立
-        while (!client.is_connected()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if (!client.run("ws://175.6.27.254:9002")) {
+            std::cerr << "WebSocket 连接失败，程序结束" << std::endl;
+            return 1;
         }
+
         // 发送加密数据到服务器，不进行 Base64 编码
         std::string encoded_message = base64_encode(cipher_text);
         // 添加以下代码来显示解码后的数据（十六进制格式）
@@ -1022,9 +1105,8 @@ int main (int argc, char* argv[])
 
         if (!client.send(encoded_message)) {
             client.close();
-            client_thread.join();
-             std::cerr << "鉴权失败，无使用权限，错误码：0004" << std::endl;
-            throw std::runtime_error("鉴权失败，错误码：0004");
+            std::cerr << "鉴权失败，无使用权限，错误码：0004" << std::endl;
+            return 1;
         }
 
         // 等待服务器响应
@@ -1034,25 +1116,22 @@ int main (int argc, char* argv[])
             auto current_time = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(current_time - start_time).count() > 10) {
                   std::cerr << "鉴权失败，无使用权限，错误码：0003" << std::endl;
-                throw std::runtime_error("鉴权失败，错误码：0003");
+                return 1;
             }
         }
 
         // 获取服务器响应
         std::string server_response = client.get_received_message();
-        std::vector<unsigned char> encrypted_response = base64_decode(server_response);
-        std::string server_decrypted_text = RSACrypto::decrypt(encrypted_response, public_key);
-        if (server_decrypted_text == plain_text) {
+
+        if (server_response == "ok") {
             std::cout << "验证成功：加密和解密操作正确" << std::endl;
         } else {
              std::cerr << "鉴权失败，无使用权限，错误码：0001" << std::endl;
-            throw std::runtime_error("鉴权失败，错误码：0001");
+            return 1;
         }
 
         // 关闭 WebSocket 连接
         client.close();
-        // 等待 WebSocket 客户端线程结束
-        client_thread.join();
 
     } catch (const std::exception& e) {
          std::cerr << "鉴权失败，无使用权限，错误码：0002" << std::endl;
