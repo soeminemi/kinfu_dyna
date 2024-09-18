@@ -6,18 +6,23 @@ from datetime import datetime
 def run_demo():
     # 确保 logs 文件夹存在
     os.makedirs('logs', exist_ok=True)
-    log_file = 'logs/faillog.log'
+    fail_log_file = 'logs/faillog.log'
 
     while True:
         try:
-            # 启动 demo 程序
-            process = subprocess.Popen(['build/bin/demo'])
-            # 等待程序退出
-            process.wait()
+            # 创建新的日志文件,文件名包含时间戳
+            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_log_file = f'logs/log_{current_time}.log'
             
-            # 记录退出时间
+            # 启动 demo 程序,并将输出重定向到新的日志文件
+            with open(output_log_file, 'w') as f:
+                process = subprocess.Popen(['build/bin/demo'], stdout=f, stderr=subprocess.STDOUT)
+                # 等待程序退出
+                process.wait()
+            
+            # 记录退出时间到 faillog.log
             exit_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(log_file, 'a') as f:
+            with open(fail_log_file, 'a') as f:
                 f.write(f"程序在 {exit_time} 退出\n")
             
         except KeyboardInterrupt:
