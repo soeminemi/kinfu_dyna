@@ -246,7 +246,9 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
             }
         }
     }
+    std::cout<<"build tree"<<std::endl;
     buildKDTree();
+    std::cout<<"construct edge"<<std::endl;
     construct_edge(appended_node_idxes);
     std::cout<<"add new node number: "<<node_num<<std::endl;
 }

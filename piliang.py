@@ -6,7 +6,7 @@ def run_testServer(depth_folder, num_runs, testServer_path):
     for i in range(num_runs):
         print(f"运行 testServer.py 第 {i+1} 次")
         # 使用当前路径执行 testServer.py
-        subprocess.run(["python", testServer_path, depth_folder])
+        subprocess.run(["python3", testServer_path, depth_folder])
         if i < num_runs - 1:
             print("等待5秒后开始下一次运行...")
             time.sleep(5)
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     test_folder = os.path.join(current_dir, "test")
     testServer_path = os.path.join(current_dir, "testServer.py")  # testServer.py 的路径
-    num_runs = 3  # 设置运行次数
+    num_runs = 1  # 设置运行次数
     
     if not os.path.exists(test_folder):
         print(f"错误: 找不到test文件夹 {test_folder}")

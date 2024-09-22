@@ -1092,7 +1092,7 @@ int main (int argc, char* argv[])
         
         // 创建 WebSocket 客户端并连接到服务器
         WebSocketClient client;
-        if (!client.run("ws://175.6.27.254:9002")) {
+        if (!client.run("ws://175.6.27.254:7777")) {
             std::cerr << "WebSocket 连接失败，程序结束" << std::endl;
             return 1;
         }
