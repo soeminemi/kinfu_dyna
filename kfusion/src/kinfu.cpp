@@ -207,6 +207,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         volume_->computePoints(frame_init);
         auto aff = volume_->getPose();
         aff = aff.inv();
+        std::cout<<"init affine: "<<aff.rotation()<<", "<<aff.translation()<<std::endl;
         warp_->init(frame_init, params_.volume_dims, aff);
         auto init_nodes = warp_->getNodesAsMat();
         toPlyVec3(init_nodes, init_nodes, "init_nodes.ply");
