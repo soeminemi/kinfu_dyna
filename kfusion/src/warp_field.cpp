@@ -100,6 +100,10 @@ WarpField::~WarpField()
 
 bool WarpField::get_volume_flag(const int &x, const int &y, const int &z)
 {
+    if( x<0 || x>=vdim_x || y<0 || y>= vdim_y || z<0 || z>vdim_z)
+    {
+        return true;
+    }
     return volume_flag[x + y * vdim_x + z * vdim_x*vdim_y] > 0;
 }
 
