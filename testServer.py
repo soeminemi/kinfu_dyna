@@ -7,18 +7,19 @@ import json
 import cvui
 import threading
 from imageio import imread
-# 获取深度图, 默认尺寸 424x512
-def get_last_depth():
-    frame = kinect.get_last_depth_frame()
-    frame = frame.astype(np.uint16)
-    # print("frame shape: ", frame.shape)
-    dep_frame = np.reshape(frame, [424, 512])
-    return dep_frame
+import time
+# # 获取深度图, 默认尺寸 424x512
+# def get_last_depth():
+#     frame = kinect.get_last_depth_frame()
+#     frame = frame.astype(np.uint16)
+#     # print("frame shape: ", frame.shape)
+#     dep_frame = np.reshape(frame, [424, 512])
+#     return dep_frame
 
-#获取rgb图, 1080x1920x4
-def get_last_rbg():
-    frame = kinect.get_last_color_frame()
-    return np.reshape(frame, [1080, 1920, 4])[:, :, 0:3]
+# #获取rgb图, 1080x1920x4
+# def get_last_rbg():
+#     frame = kinect.get_last_color_frame()
+#     return np.reshape(frame, [1080, 1920, 4])[:, :, 0:3]
 #
 #socket client
 # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -72,9 +73,72 @@ if __name__ == "__main__":
     flag_start = True
     flag_end = False
     # for fid in range(sample_num):
+    # 查询可用服务
+    def query_available_service():
+        query_ws_url = "ws://175.6.27.254:8766"  # 查询服务器的WebSocket地址
+        
+        try:
+            # 创建WebSocket连接
+            query_ws = websocket.create_connection(query_ws_url)
+            
+            # 发送查询请求
+            query_ws.send(json.dumps({"cmd": "query"}))
+            
+            # 接收服务器响应
+            response = query_ws.recv()
+            service_info = json.loads(response)
+            
+            # 关闭WebSocket连接
+            query_ws.close()
+            
+            if service_info:
+                print("可用服务信息:")
+                print(f"IP: {service_info['ip']}")
+                print(f"端口: {service_info['port']}")
+                print(f"验证码: {service_info['verification_code']}")
+                return service_info
+            else:
+                print("当前没有可用的服务")
+                return None
+        
+        except Exception as e:
+            print(f"查询服务时发生错误: {str(e)}")
+            return None
+
+    # 获取可用服务信息
+    service_info = query_available_service()
+    
+    if not service_info:
+        print("无法获取可用服务，程序退出")
+        sys.exit(1)
+
+        # 连接到给定的WebSocket服务
+    ws_url = f"ws://{service_info['ip']}:{service_info['port']}"
+    vcode = service_info['verification_code']
     fid = 0
-    ws_url = "ws://175.6.27.254:9099"
+    # ws_url = "ws://175.6.27.254:9099"
     ws = websocket.create_connection(ws_url)
+    # 判断连接是否成功
+    # print("try to connect to server")
+    # try:
+    #     # 发送一个简单的消息来测试连接
+    #     test_message = json.dumps({"ack": "test"})
+    #     ws.send(test_message)
+        
+    #     # 等待服务器响应
+    #     response = ws.recv()
+    #     response_data = json.loads(response)
+        
+    #     if response_data.get("status") == "ok":
+    #         print("WebSocket连接成功")
+    #     else:
+    #         print("WebSocket连接失败")
+    #         ws.close()
+    #         sys.exit(1)
+    # except Exception as e:
+    #     print(f"连接测试时发生错误: {str(e)}")
+    #     ws.close()
+    #     sys.exit(1)
     show_msg = "Ready"
     orig = (50,50)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -83,7 +147,7 @@ if __name__ == "__main__":
     flag_show_intrinsic = False
     WINDOW_NAME = "Kinect"
     frame = np.zeros((1920, 1080, 3), np.uint8)
-    cvui.init(WINDOW_NAME)
+    # cvui.init(WINDOW_NAME)
     male_checked = [True]
     female_checked = [False]
     gender = "female"
@@ -126,37 +190,37 @@ if __name__ == "__main__":
         # cv2.putText(showimg, show_msg, orig, font, fontscale, color, 2)
         showimg = cv2.rotate(cv2.cvtColor(last_color_frame,cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
         
-        if cvui.checkbox(showimg,50,60,"male",male_checked):
-            female_checked=[False]
-            gender = "male"
-        if cvui.checkbox(showimg,50,80,"female",female_checked):
-            male_checked = [False]
-            gender = "female"
+        # if cvui.checkbox(showimg,50,60,"male",male_checked):
+        #     female_checked=[False]
+        #     gender = "male"
+        # if cvui.checkbox(showimg,50,80,"female",female_checked):
+        #     male_checked = [False]
+        #     gender = "female"
 
-        if cvui.button(showimg, 50, 100,  button_name):
-            if button_name == "START":
-                button_name = "STOP"
-                flag_start = True
-                flag_end = False
-                show_msg = "Sending Data to Server......"
-                result_str = "None"
-            else:
-                button_name = "START"
-                flag_end = True
-                flag_start = False
-                show_msg = 'Waiting for Measuring......'
-                result_str = "None"
-        if cvui.button(showimg, 250, 100,  "EXIT"):
-            lock.acquire()
-            flag_exit = True
-            lock.release()
-            break
-        cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
-        cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
-        cvui.update()
-        cv2.imshow(WINDOW_NAME,showimg)
-        key = cv2.waitKey(30)
-
+        # if cvui.button(showimg, 50, 100,  button_name):
+        #     if button_name == "START":
+        #         button_name = "STOP"
+        #         flag_start = True
+        #         flag_end = False
+        #         show_msg = "Sending Data to Server......"
+        #         result_str = "None"
+        #     else:
+        #         button_name = "START"
+        #         flag_end = True
+        #         flag_start = False
+        #         show_msg = 'Waiting for Measuring......'
+        #         result_str = "None"
+        # if cvui.button(showimg, 250, 100,  "EXIT"):
+        #     lock.acquire()
+        #     flag_exit = True
+        #     lock.release()
+        #     break
+        # cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
+        # cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
+        # cvui.update()
+        # cv2.imshow(WINDOW_NAME,showimg)
+        # key = cv2.waitKey(30)
+        time.sleep(0.03)
         if flag_start:
             if flag_save_disk:
                 depths.append(last_depth_frame)
@@ -165,11 +229,13 @@ if __name__ == "__main__":
             encoded_image = cv2.imencode('.png', depthimg)[1]
             data = base64.b64encode(np.array(encoded_image).tobytes())
             sd = {}
+            sd["flag_test"]=True
             sd["gender"]=gender
             sd["data"] = data.decode()
             sd["cmd"]="upload"
             sd["img_type"]="depth"
             sd["frame_id"]=str(fid)
+            sd["vcode"]=vcode
             sdstr = json.dumps(sd)
             if flag_cache_send:
                 lock.acquire()
@@ -186,6 +252,7 @@ if __name__ == "__main__":
                 sd["cmd"]="upload"
                 sd["img_type"]="color"
                 sd["frame_id"]=str(fid)
+                sd["vcode"]=vcode
                 sdstr = json.dumps(sd)
                 if flag_cache_send:
                     lock.acquire()
@@ -202,6 +269,7 @@ if __name__ == "__main__":
             sd["cmd"]="finish"
             sd["measure_type"]="qipao"
             sd["cloth_type"] = "jinshen"
+            sd["vcode"]=vcode
             sdstr = json.dumps(sd)
             if flag_cache_send:
                 lock.acquire()
@@ -216,7 +284,7 @@ if __name__ == "__main__":
             flag_start = False;
             flag_end = False
             result = ws.recv()
-            print("测量结果如下")
+            print("测量结果如下:",result)
             jr = json.loads(result)
             for key, value in jr.items():
                 if key == "body_model":
@@ -235,12 +303,12 @@ if __name__ == "__main__":
             break
             show_msg = "Ready"
 
-    if flag_save_disk:
-        print("saving to disk")
-        # path = "/home/john/Projects/dynamicfusion/data/desk1"
-        path = "./data_kinfu/rotperson_1"
-        for fid in range(len(depths)):
-            o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
-            o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
-            print("saving: ",fid)
+    # if flag_save_disk:
+    #     print("saving to disk")
+    #     # path = "/home/john/Projects/dynamicfusion/data/desk1"
+    #     path = "./data_kinfu/rotperson_1"
+    #     for fid in range(len(depths)):
+    #         o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
+    #         o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
+    #         print("saving: ",fid)
     

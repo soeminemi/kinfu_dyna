@@ -187,6 +187,7 @@ public:
     string spfile_folder = "./check_results/body_default/";
     string color_folder = "./check_results/body_default/colors";
     string depth_folder = "./check_results/body_default/depths";
+    int port = 9099;
     KinFuApp() : exit_(false),  iteractive_mode_(false), pause_(true)
     {
         KinFuParams params = KinFuParams::default_params();
@@ -254,9 +255,10 @@ public:
     #include <fstream>
     bool execute_ws()
     {
+        string vcode = "none";
         bool flag_started = false;
         CWSServer ws;
-        ws.set_port(9099);
+        ws.set_port(port);
         thread t_ws(bind(&CWSServer::excute,&ws));
         bool flag_got = false;
         int fid = 0;
@@ -279,6 +281,7 @@ public:
                 auto msg = a.msg->get_payload();
                 // std::cout<<"msg received:"<<msg<<std::endl;
                 jreader.parse(msg, jv);
+                //先处理ack消息
                 if(jv["ack"].isString())
                 {
                     struct timeval tv;
@@ -286,11 +289,34 @@ public:
                     //save result and files to sample
                     stringstream ss;
                     ss<<tv.tv_sec;
-                    ws.send_msg(a.hdl,ss.str());
+		    if(vcode == "none")
+			ws.send_msg(a.hdl, "OK");
+		    else
+			ws.send_msg(a.hdl,ss.str());
                     continue;
                 }
+                //当消息为需要处理的实际消息时，判断验证码是否对应
+                if(jv["vcode"].isString())
+                {
+                    jv["vcode"].asString();
+                    if(vcode == "none")
+                    {
+                        vcode = jv["vcode"].asString();
+                    }
+                    if(vcode != jv["vcode"].asString())
+                    {
+                        ws.send_msg(a.hdl,"vcode not correct, refused");
+                        continue;
+                    }
+                }
+                else{
+                    ws.send_msg(a.hdl,"no vcode contained, refused");
+                    continue;
+                }
+                
                 if(jv["cmd"].asString() == "finish")
                 {
+                    vcode = "none"; // ready to receive new process
                     if(jv["gender"].isString())
                     {
                         if(jv["gender"].asString() == "male")
@@ -355,7 +381,16 @@ public:
                         gettimeofday(&tv,NULL);
                         //save result and files to sample
                         stringstream ss;
-                        ss<<"./check_results/body_"<<tv.tv_sec<<"/";
+                        //测试数据存储到单独的文件夹
+                        if(jv["flag_test"].isBool())
+                        {
+                            ss<<"./check_results_test/body_"<<tv.tv_sec<<"/";
+                        }
+                        else
+                        {
+                            //save result and files to sample
+                            ss<<"./check_results/body_"<<tv.tv_sec<<"/";
+                        }
                         spfile_folder = ss.str();
                         string cmd_mkdir = "mkdir -p "+spfile_folder;
                         system(cmd_mkdir.c_str());
@@ -1092,7 +1127,7 @@ int main (int argc, char* argv[])
         
         // 创建 WebSocket 客户端并连接到服务器
         WebSocketClient client;
-        if (!client.run("ws://175.6.27.254:9002")) {
+        if (!client.run("ws://175.6.27.254:7777")) {
             std::cerr << "WebSocket 连接失败，程序结束" << std::endl;
             return 1;
         }
@@ -1137,12 +1172,9 @@ int main (int argc, char* argv[])
          std::cerr << "鉴权失败，无使用权限，错误码：0002" << std::endl;
         return 1;
     }
-
-    // 清理
     RSA_free(public_key);
     EVP_cleanup();
     ERR_free_strings();
-    cout<<"usage: --test for test, follow with ply file path"<<endl;
     int device = 0;
     cuda::setDevice (device);
     cuda::printShortCudaDeviceInfo (device);
@@ -1159,16 +1191,21 @@ int main (int argc, char* argv[])
     app.measure_type = "qipao";
     app.cloth_type = "tieshen";
     app.gender = "male";
-
+    std::cout<<"argc number:"<<argc<<std::endl;
     #endif
-    if(argc >= 2)
+    //if(argc >= 2)
+    //{
+    //    string filename(argv[1]);
+    //    std::cout<<app.func(filename)<<endl;
+    //    // app.measure_body(0,100);
+    //    return 0;
+    //}
+    if(argc== 2)
     {
-        string filename(argv[1]);
-        std::cout<<app.func(filename)<<endl;
-        // app.measure_body(0,100);
-        return 0;
+        app.port = std::atoi(argv[1]);
+        std::cout<<"set port to "<<app.port<<std::endl;
     }
-    else{
+    {
         // executing
         try { app.execute_ws(); }
         catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
@@ -1176,5 +1213,4 @@ int main (int argc, char* argv[])
         std::cout<<"finished"<<std::endl;
         return 0;
     }
-    
 }

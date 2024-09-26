@@ -100,11 +100,20 @@ WarpField::~WarpField()
 
 bool WarpField::get_volume_flag(const int &x, const int &y, const int &z)
 {
+    if( x<0 || x>=vdim_x || y<0 || y>= vdim_y || z<0 || z>vdim_z)
+    {
+        return true;
+    }
     return volume_flag[x + y * vdim_x + z * vdim_x*vdim_y] > 0;
 }
 
 void WarpField::expand_nodesflag(const int x, const int y, const int z, const int exp_len)
 {
+    if(x<0 ||y<0||z<0)
+    {
+        std::cout<<"volume idx < 0: "<<x<<", "<<y<<", "<<z<<std::endl;
+        return;
+    }
     int start_x, end_x, start_y, end_y, start_z, end_z;
     start_x = std::max(x-exp_len,0);
     end_x = std::min(x+exp_len, vdim_x - 1);
@@ -194,8 +203,11 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
             }
         }
     }
+    std::cout<<"build tree"<<std::endl;
     buildKDTree();
+    std::cout<<"construct edges"<<std::endl;
     construct_edge(appended_node_idxes);
+    std::cout<<"init finished"<<std::endl;
 }
 /**
  * canonical_frame
@@ -246,7 +258,9 @@ void WarpField::update_deform_node(const cv::Mat& canonical_frame, cv::Affine3f 
             }
         }
     }
+    std::cout<<"build tree"<<std::endl;
     buildKDTree();
+    std::cout<<"construct edge"<<std::endl;
     construct_edge(appended_node_idxes);
     std::cout<<"add new node number: "<<node_num<<std::endl;
 }
