@@ -7,6 +7,7 @@ import json
 import cvui
 import threading
 from imageio import imread
+import time
 # 获取深度图, 默认尺寸 424x512
 def get_last_depth():
     frame = kinect.get_last_depth_frame()
@@ -83,7 +84,7 @@ if __name__ == "__main__":
     flag_show_intrinsic = False
     WINDOW_NAME = "Kinect"
     frame = np.zeros((1920, 1080, 3), np.uint8)
-    cvui.init(WINDOW_NAME)
+    # cvui.init(WINDOW_NAME)
     male_checked = [True]
     female_checked = [False]
     gender = "female"
@@ -126,37 +127,37 @@ if __name__ == "__main__":
         # cv2.putText(showimg, show_msg, orig, font, fontscale, color, 2)
         showimg = cv2.rotate(cv2.cvtColor(last_color_frame,cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
         
-        if cvui.checkbox(showimg,50,60,"male",male_checked):
-            female_checked=[False]
-            gender = "male"
-        if cvui.checkbox(showimg,50,80,"female",female_checked):
-            male_checked = [False]
-            gender = "female"
+        # if cvui.checkbox(showimg,50,60,"male",male_checked):
+        #     female_checked=[False]
+        #     gender = "male"
+        # if cvui.checkbox(showimg,50,80,"female",female_checked):
+        #     male_checked = [False]
+        #     gender = "female"
 
-        if cvui.button(showimg, 50, 100,  button_name):
-            if button_name == "START":
-                button_name = "STOP"
-                flag_start = True
-                flag_end = False
-                show_msg = "Sending Data to Server......"
-                result_str = "None"
-            else:
-                button_name = "START"
-                flag_end = True
-                flag_start = False
-                show_msg = 'Waiting for Measuring......'
-                result_str = "None"
-        if cvui.button(showimg, 250, 100,  "EXIT"):
-            lock.acquire()
-            flag_exit = True
-            lock.release()
-            break
-        cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
-        cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
-        cvui.update()
-        cv2.imshow(WINDOW_NAME,showimg)
-        key = cv2.waitKey(30)
-
+        # if cvui.button(showimg, 50, 100,  button_name):
+        #     if button_name == "START":
+        #         button_name = "STOP"
+        #         flag_start = True
+        #         flag_end = False
+        #         show_msg = "Sending Data to Server......"
+        #         result_str = "None"
+        #     else:
+        #         button_name = "START"
+        #         flag_end = True
+        #         flag_start = False
+        #         show_msg = 'Waiting for Measuring......'
+        #         result_str = "None"
+        # if cvui.button(showimg, 250, 100,  "EXIT"):
+        #     lock.acquire()
+        #     flag_exit = True
+        #     lock.release()
+        #     break
+        # cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
+        # cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
+        # cvui.update()
+        # cv2.imshow(WINDOW_NAME,showimg)
+        # key = cv2.waitKey(30)
+        time.sleep(0.03)
         if flag_start:
             if flag_save_disk:
                 depths.append(last_depth_frame)
@@ -165,6 +166,7 @@ if __name__ == "__main__":
             encoded_image = cv2.imencode('.png', depthimg)[1]
             data = base64.b64encode(np.array(encoded_image).tobytes())
             sd = {}
+            sd["flag_test"]=True
             sd["gender"]=gender
             sd["data"] = data.decode()
             sd["cmd"]="upload"
