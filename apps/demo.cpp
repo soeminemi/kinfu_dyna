@@ -1175,50 +1175,6 @@ int main (int argc, char* argv[])
     RSA_free(public_key);
     EVP_cleanup();
     ERR_free_strings();
-    // // 向服务器注册本服务的地址和端口，并给定验证码
-    // try
-    // {
-    //     WebSocketClient client;
-    //     if (!client.run("ws://175.6.27.254:7777")) {
-    //         std::cerr << "WebSocket 注册服务连接失败，程序结束" << std::endl;
-    //         return 1;
-    //     }
-        
-    //     if (!client.send(encoded_message)) {
-    //         client.close();
-    //         std::cerr << "注册服务失败，退出" << std::endl;
-    //         return 1;
-    //     }
-
-    //     // 等待服务器响应
-    //     auto start_time = std::chrono::steady_clock::now();
-    //     while (!client.is_done()) {
-    //         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    //         auto current_time = std::chrono::steady_clock::now();
-    //         if (std::chrono::duration_cast<std::chrono::seconds>(current_time - start_time).count() > 10) {
-    //               std::cerr << "注册服务超时,退出" << std::endl;
-    //             return 1;
-    //         }
-    //     }
-    //     // 获取服务器响应
-    //     std::string server_response = client.get_received_message();
-    //     if(server_response == "ok")
-    //     {
-    //         std::cout<<"注册服务成功"<<std::endl;
-    //     }
-    //     else{
-    //         std::cout<<"注册服务失败,服务器拒绝注册"<<std::endl;
-    //         return 1;
-    //     }
-    //     client.close();
-    // }
-    // catch(const std::exception& e) {
-    //      std::cerr << "注册服务失败，发生异常: " <<e.what()<< std::endl;
-    //     return 1;
-    // }
-
-    // 清理
-
     int device = 0;
     cuda::setDevice (device);
     cuda::printShortCudaDeviceInfo (device);
