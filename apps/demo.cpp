@@ -1218,8 +1218,7 @@ int main (int argc, char* argv[])
     // }
 
     // 清理
-    
-    cout<<"usage: --test for test, follow with ply file path"<<endl;
+
     int device = 0;
     cuda::setDevice (device);
     cuda::printShortCudaDeviceInfo (device);
