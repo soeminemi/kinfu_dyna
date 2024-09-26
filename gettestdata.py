@@ -33,20 +33,20 @@ def ssh_scp_get(hostname, username, password, remote_path, local_path):
         print("可用的文件夹 (按修改时间从早到晚排序):")
         for i, (timestamp, folder) in enumerate(folders):
             time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-            print(f"{i+1}. {folder} (修改时间: {time_str})")
+            print(f"{i+1}. {os.path.basename(folder)} (修改时间: {time_str})")
         
         choice = int(input("请选择要下载的文件夹编号: ")) - 1
         selected_folder = folders[choice][1]
-        
-        # 创建本地目标文件夹
-        local_folder = os.path.join(local_path, os.path.basename(os.path.normpath(selected_folder)))
+        # 直接使用选定文件夹的名称作为本地文件夹名
+        # local_folder = os.path.join(local_path, os.path.basename(selected_folder))
+        local_folder = local_path
         os.makedirs(local_folder, exist_ok=True)
-        
-        # 使用SCP下载整个文件夹
+        print(f"将下载{selected_folder}到{local_folder},请稍等...")
+        # 使用SCP下载整个文件夹内容，而不是文件夹本身
         with SCPClient(ssh.get_transport()) as scp:
-            scp.get(selected_folder, local_folder, recursive=True)
+            scp.get(f"{selected_folder}/", local_folder, recursive=True)
         
-        print(f"文件夹 '{selected_folder}' 已成功下载到 '{local_folder}'")
+        print(f"文件夹 '{os.path.basename(selected_folder)}' 的内容已成功下载到 '{local_folder}'")
     
     except Exception as e:
         print(f"发生错误: {str(e)}")
