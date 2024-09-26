@@ -255,7 +255,7 @@ public:
     #include <fstream>
     bool execute_ws()
     {
-        bool vcode = "none"
+        string vcode = "none";
         bool flag_started = false;
         CWSServer ws;
         ws.set_port(port);
@@ -289,7 +289,10 @@ public:
                     //save result and files to sample
                     stringstream ss;
                     ss<<tv.tv_sec;
-                    ws.send_msg(a.hdl,ss.str());
+		    if(vcode == "none")
+			ws.send_msg(a.hdl, "OK");
+		    else
+			ws.send_msg(a.hdl,ss.str());
                     continue;
                 }
                 //当消息为需要处理的实际消息时，判断验证码是否对应
@@ -1233,20 +1236,21 @@ int main (int argc, char* argv[])
     app.measure_type = "qipao";
     app.cloth_type = "tieshen";
     app.gender = "male";
-
+    std::cout<<"argc number:"<<argc<<std::endl;
     #endif
-    if(argc >= 2)
-    {
-        string filename(argv[1]);
-        std::cout<<app.func(filename)<<endl;
-        // app.measure_body(0,100);
-        return 0;
-    }
-    else if(argc== 1)
+    //if(argc >= 2)
+    //{
+    //    string filename(argv[1]);
+    //    std::cout<<app.func(filename)<<endl;
+    //    // app.measure_body(0,100);
+    //    return 0;
+    //}
+    if(argc== 2)
     {
         app.port = std::atoi(argv[1]);
+        std::cout<<"set port to "<<app.port<<std::endl;
     }
-    else{
+    {
         // executing
         try { app.execute_ws(); }
         catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }

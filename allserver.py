@@ -11,8 +11,10 @@ class Server:
         self.service_status = {}  # 存储服务的状态 (忙碌或空闲)
 
     async def register(self, websocket, path):
+        print("regist")
         try:
             message = await websocket.recv()
+            print("msg regist:",message)
             data = json.loads(message)
             ip = data['ip']
             port = data['port']
@@ -30,6 +32,7 @@ class Server:
             await websocket.send(f"注册失败: {str(e)}")
 
     async def query_services(self, websocket, path):
+        print("quering")
         available_services = [
             (ip, port)
             for (ip, port) in self.services.keys()
@@ -47,6 +50,7 @@ class Server:
                 "port": selected_port,
                 "verification_code": current_timestamp
             }
+            print("query:",json.dumps(selected_port))
             self.service_status[(selected_ip, selected_port)] = "忙碌"
             await websocket.send(json.dumps(selected_service))
         else:
@@ -57,17 +61,25 @@ class Server:
             for (ip, port) in list(self.services.keys()):
                 try:
                     uri = f"ws://{ip}:{port}"
+                    print("ack:",uri)
                     async with websockets.connect(uri) as websocket:
-                        await websocket.send("ACK")
+                        ack={}
+                        ack["ack"]=str(time.time())
+                        await websocket.send(json.dumps(ack))
                         response = await websocket.recv()
+                        print("ack response:",response)
                         if response == "OK":
+                            print(uri,"空闲")
                             self.last_ack[(ip, port)] = time.time()
                             self.service_status[(ip, port)] = "空闲"
                         else:
                             self.service_status[(ip, port)] = "忙碌"
                 except:
+                    print( f"ws://{ip}:{port}", "not answer","time:", time.time() - self.last_ack.get((ip, port), 0))
+                    self.service_status[(ip, port)] = "忙碌"
                     # 如果连接失败或超过5分钟没有响应,则移除该服务
-                    if time.time() - self.last_ack.get((ip, port), 0) > 300:
+                    if time.time() - self.last_ack.get((ip, port), 0) > 20:
+                        print("delete server:",ip, port)
                         del self.services[(ip, port)]
                         del self.last_ack[(ip, port)]
                         if (ip, port) in self.service_status:
@@ -75,12 +87,13 @@ class Server:
             await asyncio.sleep(5)  # 每5秒钟检查一次
 
     async def main(self):
-        register_server = await websockets.serve(self.register, "localhost", 8765)
-        query_server = await websockets.serve(self.query_services, "localhost", 8766)
+        register_server = await websockets.serve(self.register, "175.6.27.254", 8765)
+        query_server = await websockets.serve(self.query_services, "175.6.27.254", 8766)
         ack_task = asyncio.create_task(self.send_ack())
         
         await asyncio.gather(register_server.wait_closed(), query_server.wait_closed(), ack_task)
 
 if __name__ == "__main__":
     server = Server()
+    print("running")
     asyncio.run(server.main())

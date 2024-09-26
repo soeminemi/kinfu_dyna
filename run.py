@@ -1,47 +1,48 @@
-import subprocess
+import asyncio
+import websockets
 import time
 import os
 import random
 import socket
-import websocket
 import json
+import subprocess
 from datetime import datetime
 
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # 这里不需要真正连接
-        s.connect(('10.255.255.255', 1))
+        s.connect(('8.8.8.8', 80))
         IP = s.getsockname()[0]
     except Exception:
         IP = '127.0.0.1'
+        print("exception in get local ip")
     finally:
         s.close()
     return IP
 
-def register_to_websocket(ip, port, verification_code):
-    # 这里假设 WebSocket 服务器地址为 ws://example.com:8080
-    # 实际使用时请替换为正确的地址
-    ws = websocket.WebSocket()
-    ws.connect("ws://175.6.27.254:8765")
-    
-    # 构建 JSON 格式的注册数据,包含验证码
-    register_data = {
-        "ip": ip,
-        "port": port,
-        "verification_code": verification_code
-    }
-    message = json.dumps(register_data)
-    
-    ws.send(message)
-    result = ws.recv()
-    ws.close()
-    return result == "OK"
+async def register_to_websocket(ip, port, verification_code):
+    # 替换为实际的 WebSocket 服务器地址
+    uri = "ws://175.6.27.254:8765"
+    print("try connect to ", uri)
+    async with websockets.connect(uri) as websocket:
+        print("connected")
+        register_data = {
+            "ip": ip,
+            "port": port,
+            "verification_code": verification_code
+        }
+        message = json.dumps(register_data)
+        
+        await websocket.send(message)
+        result = await websocket.recv()
+        return result == "OK"
 
-def run_demo():
+async def run_demo():
     os.makedirs('logs', exist_ok=True)
     fail_log_file = 'logs/faillog.log'
     local_ip = get_local_ip()
+    print(local_ip)
     
     while True:
         try:
@@ -53,7 +54,8 @@ def run_demo():
             
             # 向 WebSocket 服务器注册
             verification_code = str(time.time());  # 请替换为实际的验证码
-            while not register_to_websocket(local_ip, port, verification_code):
+            print("尝试注册")
+            while not await register_to_websocket(local_ip, port, verification_code):
                 print("注册失败，重新注册...")
                 port = random.randint(9001, 65535)
             
@@ -77,4 +79,4 @@ def run_demo():
         time.sleep(3)
 
 if __name__ == "__main__":
-    run_demo()
+    asyncio.run(run_demo())
