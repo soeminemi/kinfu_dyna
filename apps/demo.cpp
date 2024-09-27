@@ -269,16 +269,24 @@ public:
         pause_ = false;
         Json::Value jv;
         Json::Reader jreader;
+        static std::chrono::steady_clock::time_point lastValidMessageTime = std::chrono::steady_clock::now();
         while (true)
         {
             std::cout<<"try to achieve msg"<<std::endl;
             auto a = ws.archieve_message(flag_got);
             if(flag_got)
             {
-                
                 //start to process the message
                 // std::cout<<a.msg_str<<std::endl;
                 auto msg = a.msg->get_payload();
+                auto currentTime = std::chrono::steady_clock::now();
+                auto elapsedTime = std::chrono::duration_cast<std::chrono::minutes>(currentTime - lastValidMessageTime);
+                //处理客户端没有正常结束的情况，没有收到finish消息
+                if (vcode != "none" && elapsedTime > std::chrono::seconds(15)) {
+                    std::cout << "连接超时，重置为可用状态" << std::endl;
+                    vcode = "none";  // 超时，重置vcode
+                    lastValidMessageTime = std::chrono::steady_clock::now();
+                }
                 // std::cout<<"msg received:"<<msg<<std::endl;
                 jreader.parse(msg, jv);
                 //先处理ack消息
@@ -289,12 +297,16 @@ public:
                     //save result and files to sample
                     stringstream ss;
                     ss<<tv.tv_sec;
-		    if(vcode == "none")
-			ws.send_msg(a.hdl, "OK");
-		    else
-			ws.send_msg(a.hdl,ss.str());
+                    if(vcode == "none")
+                        ws.send_msg(a.hdl, "OK");
+                    else
+                        ws.send_msg(a.hdl,ss.str());
                     continue;
                 }
+                // 记录获得有效消息的时间
+                
+                lastValidMessageTime = std::chrono::steady_clock::now();
+
                 //当消息为需要处理的实际消息时，判断验证码是否对应
                 if(jv["vcode"].isString())
                 {
@@ -634,9 +646,6 @@ public:
                 meshFittor = &meshFittorFemale;
             }
         }
-
-        // cloth_type = "lvekuansong";
-
         cout<<"step 1. load ply file:"<<pfile<<endl;
         //step 1. load ply file
         Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Zero ();
@@ -1208,8 +1217,9 @@ int main (int argc, char* argv[])
     {
         // executing
         try { app.execute_ws(); }
-        catch (const std::bad_alloc& /*e*/) { std::cout << "Bad alloc" << std::endl; }
-        catch (const std::exception& /*e*/) { std::cout << "Exception" << std::endl; }
+        catch (const std::bad_alloc& e) { std::cout << "Bad alloc" << e.what() << std::endl; }
+        catch (const std::exception& e) { std::cout << "Exception" << e.what() << std::endl; }
+        catch (...) { std::cout << "Unknown exception" << std::endl; }
         std::cout<<"finished"<<std::endl;
         return 0;
     }

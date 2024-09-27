@@ -337,6 +337,7 @@ void kfusion::KinFu::toPlyColorFilter(cv::Mat& points, cv::Mat &normals, std::st
     nls.reserve(points.rows*points.cols);
     double thres_groud = 0;
     double min_x = 10000;
+    //groud 为x方向上的最大值
     for (size_t i = 0; i < points.rows; i++)
     {
         for (size_t j = 0; j < points.cols; j++)
@@ -360,6 +361,45 @@ void kfusion::KinFu::toPlyColorFilter(cv::Mat& points, cv::Mat &normals, std::st
             }
         }
     }
+    // 计算pt[0]小于thres_groud-0.3条件下所有点的pt[1]和pt[2]的均值
+    double sum_y = 0, sum_z = 0;
+    int count = 0;
+    for (const auto& pt : pts) {
+        if (pt[0] < thres_groud - 0.3) {
+            sum_y += pt[1];
+            sum_z += pt[2];
+            count++;
+        }
+    }
+    //判断count是否为0
+    double avg_y = sum_y / count;
+    double avg_z = sum_z / count;
+
+    // 滤除不符合条件的点
+    std::vector<cv::Vec4f> filtered_pts;
+    std::vector<cv::Vec4f> filtered_nls;
+    for (size_t i = 0; i < pts.size(); i++) {
+        const auto& pt = pts[i];
+        if (pt[0] < thres_groud - 0.3 || 
+            (pt[0] >= thres_groud - 0.3 && pt[0] <= thres_groud && 
+             std::sqrt(std::pow(pt[1] - avg_y, 2) + std::pow(pt[2] - avg_z, 2)) <= 0.4)) {
+            filtered_pts.push_back(pt);
+            filtered_nls.push_back(nls[i]);
+        }
+    }
+
+    // 用过滤后的点替换原来的点
+    pts = filtered_pts;
+    nls = filtered_nls;
+    // 重新计算thres_ground
+    // 重新计算thres_ground
+    thres_groud = -std::numeric_limits<double>::infinity();
+    for (const auto& pt : pts) {
+        if (pt[0] > thres_groud) {
+            thres_groud = pt[0];
+        }
+    }
+    
     ifstream sfile("./data/thick.txt");
     double thick;
     if(sfile.is_open())
