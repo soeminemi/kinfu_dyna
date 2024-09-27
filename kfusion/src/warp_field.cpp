@@ -179,6 +179,7 @@ void WarpField::init(const cv::Mat& first_frame, const kfusion::Vec3i &vdims, cv
                 pt_vol.x = int(pt_vol.x/voxel_size-0.5f);
                 pt_vol.y = int(pt_vol.y/voxel_size-0.5f);
                 pt_vol.z = int(pt_vol.z/voxel_size-0.5f);
+                //出现z小于0的情况导致访问越界，这个比较奇怪，查一下原因
                 if(get_volume_flag(pt_vol.x, pt_vol.y, pt_vol.z) ==  false)
                 {
                     deformation_node tnode;
