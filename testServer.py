@@ -229,13 +229,14 @@ if __name__ == "__main__":
             encoded_image = cv2.imencode('.png', depthimg)[1]
             data = base64.b64encode(np.array(encoded_image).tobytes())
             sd = {}
-            sd["flag_test"]=True
+            # sd["flag_test"]=True
             sd["gender"]=gender
             sd["data"] = data.decode()
             sd["cmd"]="upload"
             sd["img_type"]="depth"
             sd["frame_id"]=str(fid)
             sd["vcode"]=vcode
+            sd["name"]="张三"
             sdstr = json.dumps(sd)
             if flag_cache_send:
                 lock.acquire()
