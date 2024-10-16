@@ -328,14 +328,28 @@ public:
                 
                 if(jv["cmd"].asString() == "finish")
                 {
+		    std::cout<<"msg:"<<msg<<std::endl;
                     vcode = "none"; // ready to receive new process
                     if(jv["gender"].isString())
                     {
                         if(jv["gender"].asString() == "male")
-                            meshFittor = &meshFittorMale;
+			{
+			    gender = "male";
+		            meshFittor = &meshFittorMale;
+			    std::cout<<"set to male"<<std::endl;
+			}
                         else
+			{
+			    gender = "female";
                             meshFittor = &meshFittorFemale;
+			    std::cout<<"set to female"<<std::endl;
+			}
                     }
+		    else
+		    {
+			std::cout<<"failed to get gender"<<std::endl;
+		    }
+
                     if(jv["measure_type"].isString())
                     {
                         measure_type = jv["measure_type"].asString();
@@ -646,6 +660,9 @@ public:
                 meshFittor = &meshFittorFemale;
             }
         }
+
+        // cloth_type = "lvekuansong";
+
         cout<<"step 1. load ply file:"<<pfile<<endl;
         //step 1. load ply file
         Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Zero ();

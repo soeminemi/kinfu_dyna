@@ -235,6 +235,7 @@ if __name__ == "__main__":
             sd["cmd"]="upload"
             sd["img_type"]="depth"
             sd["frame_id"]=str(fid)
+            sd["name"]="张三"
             sd["vcode"]=vcode
             sdstr = json.dumps(sd)
             if flag_cache_send:
@@ -253,6 +254,7 @@ if __name__ == "__main__":
                 sd["img_type"]="color"
                 sd["frame_id"]=str(fid)
                 sd["vcode"]=vcode
+                sd["name"]="张三"
                 sdstr = json.dumps(sd)
                 if flag_cache_send:
                     lock.acquire()
@@ -268,7 +270,7 @@ if __name__ == "__main__":
             sd["data"] = ""
             sd["cmd"]="finish"
             sd["measure_type"]="qipao"
-            sd["cloth_type"] = "jinshen"
+            sd["cloth_type"] = "kuansong"
             sd["vcode"]=vcode
             sdstr = json.dumps(sd)
             if flag_cache_send:
