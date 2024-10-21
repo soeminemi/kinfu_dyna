@@ -69,7 +69,7 @@ if __name__ == "__main__":
     hostname = "175.6.27.254"
     username = "wjn"
     password = "asdfrewq"
-    remote_path = "/home/wjn/.projects/kinfu_dyna/check_results_test/"
+    remote_path = "/home/wjn/.projects/kinfu_dyna/check_results"
     local_path = "./test"
     
     # 确保test文件夹存在

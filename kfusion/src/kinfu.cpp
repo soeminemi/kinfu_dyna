@@ -84,6 +84,9 @@ kfusion::KinFu::KinFu(const KinFuParams& params) : frame_counter_(0), params_(pa
     reset();
 }
 
+void kfusion::KinFu::set_params(const kfusion::KinFuParams params)
+{  params_ = params; }
+
 const kfusion::KinFuParams& kfusion::KinFu::params() const
 { return params_; }
 
@@ -173,7 +176,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 {
     const KinFuParams& p = params_;
     const int LEVELS = icp_->getUsedLevelsNum();
-
+    std::cout<<"params.intr is: "<<p.intr.k1<<", "<<p.intr.k2<<", "<<p.intr.k3<<std::endl;
     cuda::computeDists(depth, dists_, p.intr);
     cuda::depthBilateralFilter(depth, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
 

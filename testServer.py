@@ -237,7 +237,14 @@ if __name__ == "__main__":
             sd["frame_id"]=str(fid)
             sd["name"]="张三"
             sd["vcode"]=vcode
-            sd["name"]="张三"
+            intr = {'FocalLengthX': 367.04278564453125, 'FocalLengthY': 367.04278564453125, 'PrincipalPointX': 255.80419921875, 'PrincipalPointY': 203.5063018798828, 'RadialDistortionSecondOrder': 0.09293150156736374, 'RadialDistortionFourthOrder': -0.2737075090408325, 'RadialDistortionSixthOrder': 0.09219703823328018}
+            sd['intrinsics'] = intr
+            # sd["fx"] = fx
+            # sd["fy"] = fy
+            # sd["cx"] = cx
+            # sd["cy"] = cy
+            # sd["width"]=width
+            # sd["height"]=height
             sdstr = json.dumps(sd)
             if flag_cache_send:
                 lock.acquire()

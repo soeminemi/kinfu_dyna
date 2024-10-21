@@ -54,14 +54,27 @@ def pub_msg(ws):
         time.sleep(0.01)
 
 if __name__ == "__main__":
+    print('init kinect')
     kinect = PyKinectRuntime.PyKinectRuntime(PyKinectV2.FrameSourceTypes_Depth | PyKinectV2.FrameSourceTypes_Color)
     sample_num = 1500
     flag_cache_send = True
     flag_save_disk = False
     flag_start = False
     flag_end = False
+    if False: #only for test
+        last_depth_frame = get_last_depth()
+        last_color_frame = get_last_rbg()
+        intrinsics_matrix = kinect._mapper.GetDepthCameraIntrinsics()
+        print(intrinsics_matrix.FocalLengthX,intrinsics_matrix.FocalLengthY,intrinsics_matrix.PrincipalPointX,intrinsics_matrix.PrincipalPointY,intrinsics_matrix.RadialDistortionSecondOrder,intrinsics_matrix.RadialDistortionFourthOrder,intrinsics_matrix.RadialDistortionSixthOrder)
+        while True:
+            last_color_frame = get_last_rbg()
+            intrinsics_matrix = kinect._mapper.GetDepthCameraIntrinsics()
+            print(intrinsics_matrix.FocalLengthX,intrinsics_matrix.FocalLengthY,intrinsics_matrix.PrincipalPointX,intrinsics_matrix.PrincipalPointY,intrinsics_matrix.RadialDistortionSecondOrder,intrinsics_matrix.RadialDistortionFourthOrder,intrinsics_matrix.RadialDistortionSixthOrder)
+            cv2.imshow("cap",last_color_frame)
+            cv2.waitKey(30)
     # for fid in range(sample_num):
     fid = 0
+    print('connnect to the server')
     ws_url = "ws://175.6.27.254:9099"
     ws = websocket.create_connection(ws_url)
     show_msg = "Ready"
@@ -69,7 +82,7 @@ if __name__ == "__main__":
     font = cv2.FONT_HERSHEY_SIMPLEX
     fontscale = 1
     color = (255,0,0)
-    flag_show_intrinsic = False
+    flag_show_intrinsic = True
     WINDOW_NAME = "Kinect"
     frame = np.zeros((1920, 1080, 3), np.uint8)
     cvui.init(WINDOW_NAME)

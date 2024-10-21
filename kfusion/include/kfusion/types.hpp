@@ -18,8 +18,9 @@ namespace kfusion
     struct KF_EXPORTS Intr
     {
         float fx, fy, cx, cy;
-
+        float k1, k2, k3, p1, p2;
         Intr ();
+        Intr (float fx, float fy, float cx, float cy, float k1, float k2, float k3, float p1, float p2);
         Intr (float fx, float fy, float cx, float cy);
         Intr operator()(int level_index) const;
     };

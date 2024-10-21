@@ -5,12 +5,16 @@
 /// Kinfu/types implementation
 
 kfusion::Intr::Intr () {}
-kfusion::Intr::Intr (float fx_, float fy_, float cx_, float cy_) : fx(fx_), fy(fy_), cx(cx_), cy(cy_) {}
+kfusion::Intr::Intr (float fx_, float fy_, float cx_, float cy_) : fx(fx_), fy(fy_), cx(cx_), cy(cy_) {
+  // fx = fy = cx = cy = 0;
+  k1 = k2 = p1 = p2 = 0;  
+}
+kfusion::Intr::Intr (float fx_, float fy_, float cx_, float cy_, float k1_, float k2_, float k3_, float p1_, float p2_) : fx(fx_), fy(fy_), cx(cx_), cy(cy_), k1(k1_), k2(k2_), k3(k3_), p1(p1_), p2(p2_) {}
       
 kfusion::Intr kfusion::Intr::operator()(int level_index) const
 {
   int div = 1 << level_index;
-  return (Intr (fx / div, fy / div, cx / div, cy / div));
+  return (Intr (fx / div, fy / div, cx / div, cy / div, k1, k2 ,k3, p1, p2));
 }
 
 std::ostream& operator << (std::ostream& os, const kfusion::Intr& intr)
@@ -42,7 +46,14 @@ kfusion::device::TsdfVolume::TsdfVolume(const TsdfVolume& other)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Projector host implementation
 
-kfusion::device::Projector::Projector(float fx, float fy, float cx, float cy) : f(make_float2(fx, fy)), c(make_float2(cx, cy)) {}
+kfusion::device::Projector::Projector(float fx, float fy, float cx, float cy) : f(make_float2(fx, fy)), c(make_float2(cx, cy)) 
+{
+  k.x = 0;
+  k.y = 0;
+  k.z = 0;
+}
+
+kfusion::device::Projector::Projector(float fx, float fy, float cx, float cy, float k1, float k2, float k3) : f(make_float2(fx, fy)), c(make_float2(cx, cy)), k(make_float3(k1, k2, k3)) {}
 
 //float2 kfusion::device::Projector::operator()(const float3& p) const
 //{
@@ -55,8 +66,15 @@ kfusion::device::Projector::Projector(float fx, float fy, float cx, float cy) : 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Reprojector host implementation
 
-kfusion::device::Reprojector::Reprojector(float fx, float fy, float cx, float cy) : finv(make_float2(1.f/fx, 1.f/fy)), c(make_float2(cx, cy)) {}
-
+kfusion::device::Reprojector::Reprojector(float fx, float fy, float cx, float cy) : finv(make_float2(1.f/fx, 1.f/fy)), c(make_float2(cx, cy)) 
+{
+  k.x = 0;k.y = 0;k.z=0;
+}
+kfusion::device::Reprojector::Reprojector(float fx, float fy, float cx, float cy, float k1, float k2, float k3) :  finv(make_float2(1.f/fx, 1.f/fy)), c(make_float2(cx, cy)) {
+  k.x = k1;
+  k.y = k2;
+  k.z = k3;
+}
 //float3 kfusion::device::Reprojector::operator()(int u, int v, float z) const
 //{
 //  float x = z * (u - c.x) * finv.x;

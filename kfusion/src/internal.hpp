@@ -59,8 +59,10 @@ namespace kfusion
         struct Projector
         {
             float2 f, c;
+            float3 k;
             Projector(){}
             Projector(float fx, float fy, float cx, float cy);
+            Projector(float fx, float fy, float cx, float cy, float k1, float k2, float k3);
             __kf_device__ float2 operator()(const float3& p) const;
         };
 
@@ -68,6 +70,8 @@ namespace kfusion
         {
             Reprojector() {}
             Reprojector(float fx, float fy, float cx, float cy);
+            Reprojector(float fx, float fy, float cx, float cy, float k1, float k2, float k3);
+            float3 k;
             float2 finv, c;
             __kf_device__ float3 operator()(int x, int y, float z) const;
         };

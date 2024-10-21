@@ -87,7 +87,7 @@ void kfusion::cuda::TsdfVolume::integrate(const Dists& dists, const Affine3f& ca
 {
     Affine3f vol2cam = camera_pose.inv() * pose_;
 
-    device::Projector proj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Projector proj(intr.fx, intr.fy, intr.cx, intr.cy, intr.k1, intr.k2, intr.k3);
 
     device::Vec3i dims = device_cast<device::Vec3i>(dims_);
     device::Vec3f vsz  = device_cast<device::Vec3f>(getVoxelSize());
@@ -107,7 +107,7 @@ void kfusion::cuda::TsdfVolume::raycast(const Affine3f& camera_pose, const Intr&
     device::Aff3f aff = device_cast<device::Aff3f>(cam2vol);
     device::Mat3f Rinv = device_cast<device::Mat3f>(cam2vol.rotation().inv(cv::DECOMP_SVD));
 
-    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy, intr.k1, intr.k2, intr.k3);
 
     device::Vec3i dims = device_cast<device::Vec3i>(dims_);
     device::Vec3f vsz  = device_cast<device::Vec3f>(getVoxelSize());
@@ -128,7 +128,7 @@ void kfusion::cuda::TsdfVolume::raycast(const Affine3f& camera_pose, const Intr&
     device::Aff3f aff = device_cast<device::Aff3f>(cam2vol);
     device::Mat3f Rinv = device_cast<device::Mat3f>(cam2vol.rotation().inv(cv::DECOMP_SVD));
 
-    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy, intr.k1, intr.k2, intr.k3);
 
     device::Vec3i dims = device_cast<device::Vec3i>(dims_);
     device::Vec3f vsz  = device_cast<device::Vec3f>(getVoxelSize());
@@ -231,7 +231,7 @@ std::vector<float> kfusion::cuda::TsdfVolume::psdf(const std::vector<Vec3f>& war
                                                    Dists& dists,
                                                    const Intr& intr)
 {
-    device::Projector proj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Projector proj(intr.fx, intr.fy, intr.cx, intr.cy, intr.k1, intr.k2, intr.k3);
     std::vector<float4, std::allocator<float4>> point_type(warped.size());
     for(int i = 0; i < warped.size(); i++)
     {

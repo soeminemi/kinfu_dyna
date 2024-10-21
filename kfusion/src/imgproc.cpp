@@ -22,7 +22,7 @@ void kfusion::cuda::computeNormalsAndMaskDepth(const Intr& intr, Depth& depth, N
 {
     normals.create(depth.rows(), depth.cols());
 
-    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy, intr.k1, intr.k2, intr.k3);
 
     device::Normals& n = (device::Normals&)normals;
     device::computeNormalsAndMaskDepth(reproj, depth, n);
@@ -33,7 +33,7 @@ void kfusion::cuda::computePointNormals(const Intr& intr, const Depth& depth, Cl
     points.create(depth.rows(), depth.cols());
     normals.create(depth.rows(), depth.cols());
 
-    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy,intr.k1,intr.k2,intr.k3);
 
     device::Points& p = (device::Points&)points;
     device::Normals& n = (device::Normals&)normals;
@@ -79,7 +79,7 @@ void kfusion::cuda::renderImage(const Depth& depth, const Normals& normals, cons
 
     const device::Depth& d = (const device::Depth&)depth;
     const device::Normals& n = (const device::Normals&)normals;
-    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy,intr.k1, intr.k2, intr.k3);
     device::Vec3f light = device_cast<device::Vec3f>(light_pose);
 
     device::Image& i = (device::Image&)image;
@@ -93,7 +93,7 @@ void kfusion::cuda::renderImage(const Cloud& points, const Normals& normals, con
 
     const device::Points& p = (const device::Points&)points;
     const device::Normals& n = (const device::Normals&)normals;
-    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy);
+    device::Reprojector reproj(intr.fx, intr.fy, intr.cx, intr.cy, intr.k1, intr.k2, intr.k3);
     device::Vec3f light = device_cast<device::Vec3f>(light_pose);
 
     device::Image& i = (device::Image&)image;

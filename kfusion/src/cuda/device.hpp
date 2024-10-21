@@ -2,7 +2,7 @@
 
 #include "internal.hpp"
 #include "temp_utils.hpp"
-
+#include <stdio.h>
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// TsdfVolume
 
@@ -32,8 +32,11 @@ __kf_device__ kfusion::device::TsdfVolume::elem_type* kfusion::device::TsdfVolum
 __kf_device__ float2 kfusion::device::Projector::operator()(const float3& p) const
 {
     float2 coo;
-    coo.x = __fmaf_rn(f.x, __fdividef(p.x, p.z), c.x);
-    coo.y = __fmaf_rn(f.y, __fdividef(p.y, p.z), c.y);
+    float r = __fadd_rn(__fmul_rn(p.x,p.x), __fmul_rn(p.y,p.y));
+    float frac = 1.0 + r*k.x + r * r* k.y + r * r * r * k.z;
+    // printf("frac = %f, %f, %f, %f\n", frac,k.x,k.y,k.z);
+    coo.x = __fmaf_rn(f.x, __fdividef(__fmul_rn(p.x, frac), p.z), c.x);
+    coo.y = __fmaf_rn(f.y, __fdividef(__fmul_rn(p.y, frac), p.z), c.y);
     return coo;
 }
 
@@ -44,6 +47,11 @@ __kf_device__ float3 kfusion::device::Reprojector::operator()(int u, int v, floa
 {
     float x = z * (u - c.x) * finv.x;
     float y = z * (v - c.y) * finv.y;
+    float r = x*x + y+y;
+    float frac = (1.0+k.x*r+k.y*r*r+k.z*r*r*r);
+    //  printf("frac = %f, %f, %f, %f\n", frac,k.x,k.y,k.z);
+    x = x * frac;
+    y = y * frac;
     return make_float3(x, y, z);
 }
 

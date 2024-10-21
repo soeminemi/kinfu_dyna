@@ -60,7 +60,7 @@ namespace kfusion
         typedef cv::Ptr<KinFu> Ptr;
 
         KinFu(const KinFuParams& params);
-
+        void set_params(kfusion::KinFuParams params);
         const KinFuParams& params() const;
         KinFuParams& params();
 
