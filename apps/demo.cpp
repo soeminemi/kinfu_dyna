@@ -44,7 +44,7 @@
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
-bool flag_show_image = true;
+bool flag_show_image = false;
 static const std::string base64_chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
@@ -571,7 +571,7 @@ public:
                         {
                             for (size_t j = 0; j < depth.cols; j++)
                             {
-                                if (depth.at<ushort>(i, j) > 2000)
+                                if (depth.at<ushort>(i, j) > 2500)
                                 {
                                     depth.at<ushort>(i, j) = 0;
                                 }

@@ -7,12 +7,13 @@ body_measure_path = sys.argv[1]  # 从命令行参数获取文件路径
 name = sys.argv[2]  # 从命令行参数获取姓名
 
 with open(body_measure_path, 'r') as f:  # 使用命令行参数中的路径
+    print('read model: ',body_measure_path)
     body_model = f.read()
 
 height = '170'
 gender = 'female'
 custom = 'body_measure'
-model_name = f"{gender}-{name}-{custom}-{height}.ply"
+model_name = f"{gender}-{consts.name}-{name}-{height}.ply"
 input = {
     'name': consts.name,
     'passwd': consts.passwd,
