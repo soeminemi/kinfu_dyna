@@ -41,6 +41,11 @@
 #include <string.h>
 #include <thread>
 #include <fstream>
+
+#include <opencv2/opencv.hpp>
+#include <ultralytics/yolo.h>
+#include <cmath>
+
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
@@ -210,6 +215,55 @@ std::string get_local_mac()
     return "";
 }
 
+class PoseEstimator {
+private:
+    ultralytics::YOLODetector detector;
+
+    // 计算两个向量之间的角度
+    float calculateAngle(const cv::Point2f& v1, const cv::Point2f& v2) {
+        float dot = v1.x * v2.x + v1.y * v2.y;
+        float det = v1.x * v2.y - v1.y * v2.x;
+        float angle = std::atan2(det, dot) * 180 / CV_PI;
+        return std::abs(angle);
+    }
+
+public:
+    PoseEstimator(const std::string& model_path) : detector(model_path) {}
+
+    // 估计人体姿态并计算手臂与身体之间的角度
+    void estimatePoseAndAngles(const cv::Mat& image) {
+        // 进行姿态估计
+        std::vector<ultralytics::Detection> detections = detector.detect(image);
+
+        if (!detections.empty()) {
+            const auto& keypoints = detections[0].keypoints;
+
+            // 获取关键点坐标
+            cv::Point2f leftShoulder = keypoints[5];
+            cv::Point2f rightShoulder = keypoints[6];
+            cv::Point2f leftElbow = keypoints[7];
+            cv::Point2f rightElbow = keypoints[8];
+            cv::Point2f leftWrist = keypoints[9];
+            cv::Point2f rightWrist = keypoints[10];
+
+            // 计算向量
+            cv::Point2f leftUpperArm = leftElbow - leftShoulder;
+            cv::Point2f leftLowerArm = leftWrist - leftElbow;
+            cv::Point2f rightUpperArm = rightElbow - rightShoulder;
+            cv::Point2f rightLowerArm = rightWrist - rightElbow;
+            cv::Point2f torso = (leftShoulder + rightShoulder) * 0.5f - (keypoints[11] + keypoints[12]) * 0.5f;
+
+            // 计算角度
+            float leftArmAngle = calculateAngle(leftUpperArm, torso);
+            float rightArmAngle = calculateAngle(rightUpperArm, torso);
+
+            std::cout << "左臂与身体夹角: " << leftArmAngle << "度" << std::endl;
+            std::cout << "右臂与身体夹角: " << rightArmAngle << "度" << std::endl;
+        } else {
+            std::cout << "未检测到人体姿态" << std::endl;
+        }
+    }
+};
 class KinFuApp
 {
 public:
@@ -229,6 +283,7 @@ public:
     double k1 = 0,k2 = 0,k3 = 0;
     double p1 = 0, p2 = 0;
     int port = 9099;
+    PoseEstimator estimator("yolov8n-pose.pt");
     KinFuApp() : exit_(false), iteractive_mode_(false), pause_(true)
     {
         
@@ -568,7 +623,7 @@ public:
                         {
                             depth = depth;
                         }
-                         for (size_t i = 0; i < depth.rows; i++)
+                        for (size_t i = 0; i < depth.rows; i++)
                         {
                             for (size_t j = 0; j < depth.cols; j++)
                             {
