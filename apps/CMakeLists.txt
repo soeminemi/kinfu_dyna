@@ -1,6 +1,7 @@
 find_package(PCL REQUIRED)
 find_package(Armadillo REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(ultralytics REQUIRED)
 
 include_directories(${CMAKE_SOURCE_DIR}/kfusion/include
 ${PCL_INCLUDE_DIRS}

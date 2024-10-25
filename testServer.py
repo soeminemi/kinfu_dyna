@@ -76,7 +76,7 @@ if __name__ == "__main__":
     # 查询可用服务
     def query_available_service():
         query_ws_url = "ws://175.6.27.254:8766"  # 查询服务器的WebSocket地址
-        
+        print('query available service to ', query_ws_url)
         try:
             # 创建WebSocket连接
             query_ws = websocket.create_connection(query_ws_url)
