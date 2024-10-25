@@ -421,6 +421,7 @@ public:
                         // save to file for measurement
                         std::stringstream ss;
                         ss << pfile;
+                        kinfu.toPly(cloud_host,normal_host, spfile_folder+"origin_cloud.ply");
                         kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(), 255, 0, 0);
                         // start measurement
                         auto rst = func(pfile);
