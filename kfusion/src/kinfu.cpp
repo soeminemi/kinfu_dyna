@@ -241,7 +241,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     auto d = curr_.depth_pyr[0];
     auto pts = curr_.points_pyr[0];
     auto n = curr_.normals_pyr[0];
-    std::cout<<"dynamic fusion to canonical space"<<std::endl;
+    // std::cout<<"dynamic fusion to canonical space"<<std::endl;
     // dynamicfusion(d, pts, n);
     // We do not integrate volume if camera does not move.
     float rnorm = (float)cv::norm(affine.rvec());
