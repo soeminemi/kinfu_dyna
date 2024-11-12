@@ -88,7 +88,14 @@ namespace kfusion
         void toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::string spath, uint8_t r, uint8_t g, uint8_t b);
         void dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, cuda::Normals current_normals);
         Affine3f getCameraPose (int time = -1) const;
-
+        void loopClosureOptimize(std::vector<Affine3f>& poses,
+                                std::vector<int> loop_frame_idx,
+                                std::vector<Affine3f> loop_poses);
+        void loopClosureOptimize();
+        void append_depth_image(cv::Mat depth)
+        {
+            depth_imgs_.push_back(depth);
+        }
     private:
         void allocate_buffers();
 
@@ -96,16 +103,24 @@ namespace kfusion
         KinFuParams params_;
 
         std::vector<Affine3f> poses_;
+        std::vector<Affine3f> poses_frame_;
 
         cuda::Dists dists_;
-        cuda::Frame curr_, prev_;
+        cuda::Frame curr_, prev_,first_, prev_frame_;
 
         cuda::Cloud points_;
         cuda::Normals normals_;
         cuda::Depth depths_;
 
         cv::Ptr<cuda::TsdfVolume> volume_;
+        cv::Ptr<cuda::TsdfVolume> volume_loop_;
         cv::Ptr<cuda::ProjectiveICP> icp_;
         cv::Ptr<WarpField> warp_;
+        bool flag_closed_;
+        std::vector<int> loop_frame_idx_;
+        std::vector<Affine3f> loop_poses_;
+        std::vector<cv::Mat> depth_imgs_;
+        int first_frame_idx_ = 10;
+        float first_roll_angle_ ;
     };
 }

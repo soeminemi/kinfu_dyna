@@ -109,30 +109,3 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 
-
-def save_parameters_to_mat(self, output_dir):
-        """
-        将模型参数保存为文本格式，但文件后缀为.mat，并在文件开头添加行数和列数信息
-        """
-        # 确保输出目录存在
-        os.makedirs(output_dir, exist_ok=True)
-
-        def save_array_with_header(filename, array, fmt):
-            # 获取数组的形状
-            shape = array.shape
-            # 创建头部信息
-            header = f"{shape[0]} {shape[1]}" if len(shape) > 1 else f"{shape[0]} 1"
-            # 保存数组，包括头部信息
-            np.savetxt(filename, array, fmt=fmt, header=header, comments='')
-
-        # 保存各个参数
-        save_array_with_header(os.path.join(output_dir, 'J_regressor.mat'), self.J_regressor.cpu().numpy(), fmt='%.6f')
-        save_array_with_header(os.path.join(output_dir, 'weights.mat'), self.weights.cpu().numpy(), fmt='%.6f')
-        save_array_with_header(os.path.join(output_dir, 'posedirs.mat'), self.posedirs.cpu().numpy(), fmt='%.6f')
-        save_array_with_header(os.path.join(output_dir, 'v_template.mat'), self.v_template.cpu().numpy(), fmt='%.6f')
-        save_array_with_header(os.path.join(output_dir, 'shapedirs.mat'), self.shapedirs.cpu().numpy(), fmt='%.6f')
-        save_array_with_header(os.path.join(output_dir, 'faces.mat'), self.faces.cpu().numpy(), fmt='%d')
-        save_array_with_header(os.path.join(output_dir, 'kintree_table.mat'), self.kintree_table.cpu().numpy(), fmt='%d')
-        save_array_with_header(os.path.join(output_dir, 'parent.mat'), self.parent.cpu().numpy(), fmt='%d')
-
-        print(f"所有参数已保存到 {output_dir} 目录下的.mat文件中（文本格式，包含行列数信息）")

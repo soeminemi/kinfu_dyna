@@ -1,11 +1,66 @@
 #include "precomp.hpp"
 #include "internal.hpp"
 #include "io/ply.hpp"
+// #include <ceres/ceres.h>
+#include <g2o/core/sparse_optimizer.h>
+#include <g2o/solvers/eigen/linear_solver_eigen.h>
+#include <g2o/core/optimization_algorithm_factory.h>
+#include <g2o/types/slam3d/vertex_se3.h>
+#include <g2o/types/slam3d/edge_se3.h>
+#include <g2o/core/base_vertex.h>
+#include <g2o/core/base_unary_edge.h>
+#include <g2o/core/block_solver.h>
+#include <g2o/core/optimization_algorithm_levenberg.h>
+#include <g2o/core/optimization_algorithm_gauss_newton.h>
+#include <g2o/core/optimization_algorithm_dogleg.h>
+#include <g2o/solvers/dense/linear_solver_dense.h>
+#include <memory>
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
 
 static inline float deg2rad (float alpha) { return alpha * 0.017453293f; }
+
+// class PoseGraphError {
+// public:
+//     PoseGraphError(const Eigen::Matrix4f& relative_pose) : relative_pose_(relative_pose) {}
+
+//     template <typename T>
+//     bool operator()(const T* const pose1, const T* const pose2, T* residuals) const {
+//         // 将输入的位姿转换为 Eigen 矩阵
+//         Eigen::Map<const Eigen::Matrix<T, 3, 1>> translation1(pose1 + 4);
+//         Eigen::Map<const Eigen::Matrix<T, 3, 1>> translation2(pose2 + 4);
+//         Eigen::Map<const Eigen::Matrix<T, 4, 1>> quaternion1(pose1);
+//         Eigen::Map<const Eigen::Matrix<T, 4, 1>> quaternion2(pose2);
+
+//         // 将四元数转换为旋转矩阵
+//         Eigen::Matrix<T, 3, 3> R1 = Eigen::Quaternion<T>(quaternion1[0], quaternion1[1], quaternion1[2], quaternion1[3]).toRotationMatrix();
+//         Eigen::Matrix<T, 3, 3> R2 = Eigen::Quaternion<T>(quaternion2[0], quaternion2[1], quaternion2[2], quaternion2[3]).toRotationMatrix();
+
+//         // 计算相对位姿
+//         Eigen::Matrix<T, 3, 1> t1 = translation1;
+//         Eigen::Matrix<T, 3, 1> t2 = translation2;
+//         Eigen::Matrix<T, 3, 1> t_relative = t2 - t1;
+
+//         // 计算误差
+//         Eigen::Matrix<T, 3, 1> t_error = t_relative - relative_pose_.block<3, 1>(0, 3);
+//         Eigen::Matrix<T, 3, 3> R_error = R2 * R1.transpose() - relative_pose_.block<3, 3>(0, 0);
+
+//         // 将误差存储到 residuals 中
+//         residuals[0] = t_error.norm();
+//         residuals[1] = R_error.norm();
+//         residuals[2] = R_error.norm();
+//         return true;
+//     }
+
+//     static ceres::CostFunction* Create(const Eigen::Matrix4f& relative_pose) {
+//         return new ceres::AutoDiffCostFunction<PoseGraphError, 6, 7, 7>(
+//             new PoseGraphError(relative_pose));
+//     }
+
+// private:
+//     Eigen::Matrix4f relative_pose_;
+// };
 
 kfusion::KinFuParams kfusion::KinFuParams::default_params()
 {
@@ -80,6 +135,15 @@ kfusion::KinFu::KinFu(const KinFuParams& params) : frame_counter_(0), params_(pa
     icp_->setAngleThreshold(params_.icp_angle_thres);
     icp_->setIterationsNum(params_.icp_iter_num);
 
+    volume_loop_ = cv::Ptr<cuda::TsdfVolume>(new cuda::TsdfVolume(params_.volume_dims));
+    volume_loop_->setTruncDist(params_.tsdf_trunc_dist);
+    volume_loop_->setMaxWeight(params_.tsdf_max_weight);
+    volume_loop_->setSize(params_.volume_size);
+    volume_loop_->setPose(params_.volume_pose);
+    volume_loop_->setRaycastStepFactor(params_.raycast_step_factor);
+    volume_loop_->setGradientDeltaFactor(params_.gradient_delta_factor);
+    volume_loop_->setDepthScale(params_.depth_scale);
+
     allocate_buffers();
     reset();
 }
@@ -117,21 +181,33 @@ void kfusion::KinFu::allocate_buffers()
     curr_.depth_pyr.resize(LEVELS);
     curr_.normals_pyr.resize(LEVELS);
     prev_.depth_pyr.resize(LEVELS);
-    prev_.normals_pyr.resize(LEVELS);
 
+    prev_.normals_pyr.resize(LEVELS);
+    first_.depth_pyr.resize(LEVELS);
+    first_.normals_pyr.resize(LEVELS);
+    prev_frame_.depth_pyr.resize(LEVELS);
+    prev_frame_.normals_pyr.resize(LEVELS);
+
+    first_.points_pyr.resize(LEVELS);
     curr_.points_pyr.resize(LEVELS);
     prev_.points_pyr.resize(LEVELS);
+    prev_frame_.points_pyr.resize(LEVELS);
 
     for(int i = 0; i < LEVELS; ++i)
     {
         curr_.depth_pyr[i].create(rows, cols);
         curr_.normals_pyr[i].create(rows, cols);
-
+        first_.depth_pyr[i].create(rows, cols);
+        first_.normals_pyr[i].create(rows, cols);
         prev_.depth_pyr[i].create(rows, cols);
         prev_.normals_pyr[i].create(rows, cols);
+        prev_frame_.depth_pyr[i].create(rows, cols);
+        prev_frame_.normals_pyr[i].create(rows, cols);
 
         curr_.points_pyr[i].create(rows, cols);
         prev_.points_pyr[i].create(rows, cols);
+        first_.points_pyr[i].create(rows, cols);
+        prev_frame_.points_pyr[i].create(rows, cols);
 
         cols /= 2;
         rows /= 2;
@@ -149,10 +225,22 @@ void kfusion::KinFu::reset()
     //reset the frame counter
     frame_counter_ = 0;
     poses_.clear();
-    poses_.reserve(30000);
+    poses_.reserve(3000);
     poses_.push_back(Affine3f::Identity());
+    poses_frame_.clear();
+    poses_frame_.reserve(3000);
+    poses_frame_.push_back(Affine3f::Identity());
+    loop_frame_idx_.clear();
+    loop_frame_idx_.reserve(3000);
+    loop_poses_.clear();
+    loop_poses_.reserve(3000);
+    flag_closed_ = false;
+    
     volume_->clear();
     warp_->clear();
+    depth_imgs_.clear();
+    depth_imgs_.reserve(3000);
+
 }
 
 kfusion::Affine3f kfusion::KinFu::getCameraPose (int time) const
@@ -198,6 +286,22 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     //can't perform more on first frame
     if (frame_counter_ == 0)
     {
+        cuda::depthBilateralFilter(depth, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+        if (p.icp_truncate_depth_dist > 0)
+            kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
+
+        for (int i = 1; i < LEVELS; ++i)
+            cuda::depthBuildPyramid(first_.depth_pyr[i-1], first_.depth_pyr[i], p.bilateral_sigma_depth);
+
+        for (int i = 0; i < LEVELS; ++i){
+        #if defined USE_DEPTH
+            cuda::computeNormalsAndMaskDepth(p.intr(i), first_.depth_pyr[i], first_.normals_pyr[i]);
+        #else
+            cuda::computePointNormals(p.intr(i), first_.depth_pyr[i], first_.points_pyr[i], first_.normals_pyr[i]);
+        #endif
+        }
+        cuda::waitAllDefaultStream();
+        flag_closed_ = false;
         volume_->integrate(dists_, poses_.back(), p.intr);
 #if defined USE_DEPTH
         curr_.depth_pyr.swap(prev_.depth_pyr);
@@ -205,21 +309,31 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         curr_.points_pyr.swap(prev_.points_pyr);
 #endif
         curr_.normals_pyr.swap(prev_.normals_pyr);
+
+        // //
+        // {
+        //     #if defined USE_DEPTH
+        //     curr_.depth_pyr.swap(prev_frame_.depth_pyr);
+        //     #else
+        //         curr_.points_pyr.swap(prev_frame_.points_pyr);
+        //     #endif
+        //     curr_.normals_pyr.swap(prev_frame_.normals_pyr);
+        // }
+
         //initialize the warp field 
-        cv::Mat frame_init;
-        volume_->computePoints(frame_init);
-        auto aff = volume_->getPose();
-        aff = aff.inv();
-        std::cout<<"init affine: "<<aff.rotation()<<", "<<aff.translation()<<std::endl;
-        warp_->init(frame_init, params_.volume_dims, aff);
-        auto init_nodes = warp_->getNodesAsMat();
-        toPlyVec3(init_nodes, init_nodes, "init_nodes.ply");
+        // cv::Mat frame_init;
+        // volume_->computePoints(frame_init);
+        // auto aff = volume_->getPose();
+        // aff = aff.inv();
+        // std::cout<<"init affine: "<<aff.rotation()<<", "<<aff.translation()<<std::endl;
+        // warp_->init(frame_init, params_.volume_dims, aff);
+        // auto init_nodes = warp_->getNodesAsMat();
+        // toPlyVec3(init_nodes, init_nodes, "init_nodes.ply");
         return ++frame_counter_, true;
     }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////
     // ICP
     Affine3f affine; // cuur -> prev
+    Affine3f affine_frame;
     {
         //ScopeTime time("icp");
 #if defined USE_DEPTH
@@ -233,51 +347,407 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             // return false;
         }
     }
+    // {
+        
+    //     bool ok = icp_->estimateTransform(affine_frame, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_frame_.points_pyr, prev_frame_.normals_pyr);
+    // }
     // affine = Affine3f::Identity();
     poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
-    // std::cout<<poses_.back() .rotation()<<", "<<poses_.back() .translation()<<std::endl;
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    // Volume integration
-    auto d = curr_.depth_pyr[0];
-    auto pts = curr_.points_pyr[0];
-    auto n = curr_.normals_pyr[0];
-    // std::cout<<"dynamic fusion to canonical space"<<std::endl;
-    // dynamicfusion(d, pts, n);
-    // We do not integrate volume if camera does not move.
-    float rnorm = (float)cv::norm(affine.rvec());
-    float tnorm = (float)cv::norm(affine.translation());
-    bool integrate = (rnorm + tnorm)/2 >= p.tsdf_min_camera_movement;
-    if (integrate)
+    // poses_frame_.push_back(poses_frame_.back() * affine_frame); // curr -> global， affine pre->curr
+    // 将旋转矩阵转换为欧拉角(弧度)
+    cv::Mat R = cv::Mat(poses_.back().rotation());
+    cv::Vec3f euler_angles;
+    euler_angles[0] = atan2(R.at<float>(2,1), R.at<float>(2,2));
+    euler_angles[1] = atan2(-R.at<float>(2,0), sqrt(R.at<float>(2,1)*R.at<float>(2,1) + R.at<float>(2,2)*R.at<float>(2,2)));
+    euler_angles[2] = atan2(R.at<float>(1,0), R.at<float>(0,0));
+    
+    // 转换为角度并输出
+    std::cout<<"当前帧号: "<<frame_counter_<<std::endl;
+    std::cout << "旋转角度(度): roll=" << euler_angles[0]*180/M_PI 
+              << ", pitch=" << euler_angles[1]*180/M_PI
+              << ", yaw=" << euler_angles[2]*180/M_PI << std::endl;
+    float roll_angle = euler_angles[0]*180/M_PI;
+   
+    if(fabs(roll_angle)<15 && frame_counter_>100)
     {
-        //ScopeTime time("tsdf");
-        volume_->integrate(dists_, poses_.back(), p.intr);
+        Affine3f taffine;
+        bool ok = icp_->estimateTransform(taffine, p.intr,curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
+        if(ok)
+        {
+            // 将taffine的旋转矩阵转换为欧拉角
+            cv::Mat tR = cv::Mat(taffine.rotation());
+            cv::Vec3f t_euler;
+            t_euler[0] = atan2(tR.at<float>(2,1), tR.at<float>(2,2));
+            t_euler[1] = atan2(-tR.at<float>(2,0), sqrt(tR.at<float>(2,1)*tR.at<float>(2,1) + tR.at<float>(2,2)*tR.at<float>(2,2)));
+            t_euler[2] = atan2(tR.at<float>(1,0), tR.at<float>(0,0));
+            
+            // 转换为角度并输出
+            std::cout << "taffine旋转角度(度): roll=" << t_euler[0]*180/M_PI 
+                    << ", pitch=" << t_euler[1]*180/M_PI 
+                    << ", yaw=" << t_euler[2]*180/M_PI << std::endl;
+            std::cout << "taffine: " << taffine.translation()<<endl<<", "<<taffine.rotation() << std::endl;
+            
+            flag_closed_ = true;
+            loop_frame_idx_.push_back(frame_counter_);
+            loop_poses_.push_back(taffine);
+        }
     }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////
-    // Ray casting
-    std::cout<<"start ray casting"<<std::endl;
     {
-        //ScopeTime time("ray-cast-all");
-#if defined USE_DEPTH
-        volume_->raycast(poses_.back(), p.intr, prev_.depth_pyr[0], prev_.normals_pyr[0]);
-        for (int i = 1; i < LEVELS; ++i)
-            resizeDepthNormals(prev_.depth_pyr[i-1], prev_.normals_pyr[i-1], prev_.depth_pyr[i], prev_.normals_pyr[i]);
-#else
-        volume_->raycast(poses_.back(), p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); // tsdf volume to points pyramid
-        //warp 到当前的形状, 先刚性变换到当前视角再warp还是先warp再刚性变换？这个应该是有区别的
-        // warp_->warp(prev_.points_pyr[0],prev_.normals_pyr[0]);
-        //
-        for (int i = 1; i < LEVELS; ++i)
-            resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
-#endif
-        cuda::waitAllDefaultStream();
-    } 
-    std::cout<<"END ray casting"<<std::endl;
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // Volume integration
+        auto d = curr_.depth_pyr[0];
+        auto pts = curr_.points_pyr[0];
+        auto n = curr_.normals_pyr[0];
+        // std::cout<<"dynamic fusion to canonical space"<<std::endl;
+        // dynamicfusion(d, pts, n);
+        // We do not integrate volume if camera does not move.
+        float rnorm = (float)cv::norm(affine.rvec());
+        float tnorm = (float)cv::norm(affine.translation());
+        bool integrate = (rnorm + tnorm)/2 >= p.tsdf_min_camera_movement;
+        if (true)
+        {
+            //ScopeTime time("tsdf");
+            volume_->integrate(dists_, poses_.back(), p.intr);
+        }
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // Ray casting
+        {
+            //ScopeTime time("ray-cast-all");
+    #if defined USE_DEPTH
+            volume_->raycast(poses_.back(), p.intr, prev_.depth_pyr[0], prev_.normals_pyr[0]);
+            for (int i = 1; i < LEVELS; ++i)
+                resizeDepthNormals(prev_.depth_pyr[i-1], prev_.normals_pyr[i-1], prev_.depth_pyr[i], prev_.normals_pyr[i]);
+    #else
+            volume_->raycast(poses_.back(), p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); // tsdf volume to points pyramid
+            //warp 到当前的形状, 先刚性变换到当前视角再warp还是先warp再刚性变换？这个应该是有区别的
+            // warp_->warp(prev_.points_pyr[0],prev_.normals_pyr[0]);
+            //
+            for (int i = 1; i < LEVELS; ++i)
+                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+    #endif
+            cuda::waitAllDefaultStream();
+        } 
+        if(frame_counter_ == first_frame_idx_)
+        {
+            #if defined USE_DEPTH
+            volume_->raycast(poses_.back(), p.intr, first_.depth_pyr[0], first_.normals_pyr[0]);
+            for (int i = 1; i < LEVELS; ++i)
+                resizeDepthNormals(first_.depth_pyr[i-1], first_.normals_pyr[i-1], first_.depth_pyr[i], first_.normals_pyr[i]);
+    #else
+            volume_->raycast(poses_[0], p.intr, first_.points_pyr[0], first_.normals_pyr[0]); // tsdf volume to points pyramid
+            for (int i = 1; i < LEVELS; ++i)
+                resizePointsNormals(first_.points_pyr[i-1], first_.normals_pyr[i-1], first_.points_pyr[i], first_.normals_pyr[i]);
+    #endif
+            cuda::waitAllDefaultStream();
+        }
+        // {  
+        //     //测试代码段，改为前后帧匹配 
+        //     #if defined USE_DEPTH
+        //     curr_.depth_pyr.swap(prev_frame_.depth_pyr);
+        //     #else
+        //         curr_.points_pyr.swap(prev_frame_.points_pyr);
+        //     #endif
+        //     curr_.normals_pyr.swap(prev_frame_.normals_pyr);
+        // }
+    }
     return ++frame_counter_, true;
 }
 void kfusion::KinFu::getPoints(cv::Mat& points)
 {
     prev_.points_pyr[0].download(points.ptr<void>(), points.step);
+}
+void kfusion::KinFu::loopClosureOptimize()
+{
+    if(flag_closed_)
+    {
+        loopClosureOptimize(poses_, loop_frame_idx_, loop_poses_);
+    }
+    else{
+        cout<<"no loop closure"<<endl;
+    }
+}
+void kfusion::KinFu::loopClosureOptimize(
+                                        std::vector<Affine3f>& poses,
+                                        std::vector<int> loop_frame_idx,
+                                        std::vector<Affine3f> loop_poses) {
+    std::cout << "开始闭环优化..." << std::endl;
+    std::cout << "poses大小: " << poses.size() << std::endl;
+    std::cout << "闭环帧序号: " << loop_frame_idx[0] << std::endl; 
+    std::cout << "depth images大小: " << depth_imgs_.size() << std::endl;
+    // 帧总数
+    int frame_count = poses.size();
+    for(int i=0; i<loop_frame_idx.size(); i++)
+    {
+        if(loop_frame_idx[i] >= frame_count) {
+            std::cout << "错误:闭环帧序号超出范围" << std::endl;
+        return;
+        }
+    }
+    // 构建图优化问题
+    auto cv2eigen = [](const cv::Mat& cvMat, Eigen::Matrix3d& eigenMat) {
+        for(int i = 0; i < 3; i++) {
+            for(int j = 0; j < 3; j++) {
+                eigenMat(i,j) = cvMat.at<double>(i,j);
+            }
+        }
+    };
+    auto eigen2cv = [](const Eigen::Matrix3d& eigenMat, cv::Mat& cvMat) {
+        cvMat = cv::Mat(3, 3, CV_64F);
+        for(int i = 0; i < 3; i++) {
+            for(int j = 0; j < 3; j++) {
+                cvMat.at<double>(i,j) = eigenMat(i,j);
+            }
+        }
+    };
+    // 创建优化器
+    g2o::SparseOptimizer optimizer;
+    
+    // 配置求解器
+    std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver = 
+        std::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
+    g2o::OptimizationAlgorithmLevenberg* solver = 
+        new g2o::OptimizationAlgorithmLevenberg(
+            std::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver)));
+    optimizer.setAlgorithm(solver);
+
+    // 添加顶点
+    for(int i = 0; i < frame_count; i++) {
+        g2o::VertexSE3* v = new g2o::VertexSE3();
+        v->setId(i);
+        
+        // 设置顶点初始估计值
+        Eigen::Isometry3d pose;
+        cv::Mat R;
+        cv::Mat(poses[i].rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        
+        cv2eigen(R, rotation);
+        pose.linear() = rotation;
+        pose.translation() = Eigen::Vector3d(
+            poses[i].translation()[0],
+            poses[i].translation()[1], 
+            poses[i].translation()[2]);
+        
+        v->setEstimate(pose);
+        
+        // 第一帧固定
+        if(i == 0)
+            v->setFixed(true);
+            
+        optimizer.addVertex(v);
+    }
+
+    // 添加帧间约束边
+    for(int i = 1; i < frame_count; i++) {
+        g2o::EdgeSE3* edge = new g2o::EdgeSE3();
+        edge->setId(i);
+        edge->setVertex(0, optimizer.vertex(i-1));
+        edge->setVertex(1, optimizer.vertex(i));
+        
+        // 计算相对位姿约束
+        Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
+        cv::Mat R;
+        cv::Mat((poses[i-1].inv() * poses[i]).rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        cv2eigen(R, rotation);
+        relative_pose.linear() = rotation;
+        auto t = (poses[i-1].inv() * poses[i]).translation();
+        relative_pose.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
+        
+        edge->setMeasurement(relative_pose);
+        
+        // 设置信息矩阵
+        // 计算边的长度(相对位移的模长)作为权重
+        double edge_length = relative_pose.translation().norm();
+        Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Identity() ;//* edge_length;
+        edge->setInformation(information);
+        
+        optimizer.addEdge(edge);
+    }
+
+    // 添加闭环约束边
+    for(int i=0; i<loop_frame_idx.size(); i++)
+    {
+        g2o::EdgeSE3* loop_edge = new g2o::EdgeSE3();
+        loop_edge->setVertex(0, optimizer.vertex(0));
+        loop_edge->setVertex(1, optimizer.vertex(loop_frame_idx[i])); //添加从初始帧到闭环帧的边
+        
+        // 计算闭环约束
+        Eigen::Isometry3d loop_constraint = Eigen::Isometry3d::Identity();
+        cv::Mat R;
+        cv::Mat(( loop_poses[i]).rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        cv2eigen(R, rotation);
+        loop_constraint.linear() = rotation;
+        auto t = ( loop_poses[i]).translation();
+        loop_constraint.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
+    
+        loop_edge->setMeasurement(loop_constraint);
+    
+        // 设置闭环约束的信息矩阵(权重更大)
+        Eigen::Matrix<double,6,6> loop_information = Eigen::Matrix<double,6,6>::Identity() * 0.001;
+        loop_edge->setInformation(loop_information);
+        optimizer.addEdge(loop_edge);
+    }
+
+    // 执行优化
+    cout<<"start optimization g2o"<<endl;
+    optimizer.initializeOptimization();
+    int iterations = optimizer.optimize(30);
+    cout<<"end optimization g2o"<<endl;
+    // 输出优化相关信息
+    double chi2 = optimizer.chi2();
+    std::cout << "优化信息:" << std::endl;
+    std::cout << "- 优化迭代次数: " << iterations << std::endl;
+    std::cout << "- 最终误差值: " << chi2 << std::endl;
+    std::cout << "- 边的数量: " << optimizer.edges().size() << std::endl;
+    std::cout << "- 顶点的数量: " << optimizer.vertices().size() << std::endl;
+    // 获取优化结果更新poses
+    for(int i = 0; i < frame_count; i++) {
+        g2o::VertexSE3* v = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
+        Eigen::Isometry3d pose = v->estimate();
+        
+        cv::Mat R;
+        Eigen::Matrix3d rotation = pose.rotation();
+        eigen2cv(rotation, R);
+        R.convertTo(R, CV_32F);
+        if(i==frame_count-1)
+            cout<<"origin pose: "<<poses[i].translation()<<", "<<poses[i].rotation()<<endl;
+        poses[i] = Affine3f(R, Vec3f(
+            pose.translation().x(),
+            pose.translation().y(),
+            pose.translation().z()
+        ));
+        if(i==frame_count-1)
+            cout<<"optimized pose: "<<poses[i].translation()<<", "<<poses[i].rotation()<<endl;
+        // cout<<"--------------------------------"<<endl;
+    }
+    std::cout << "最终相机位姿:" << std::endl;
+    for(int i =  poses_.size()-1; i < poses_.size(); i++) {
+        std::cout << "位姿 " << i << ": " 
+                 << "平移=" << poses_[i].translation() <<endl
+                 << ", 旋转=" << poses_[i].rotation() << std::endl;
+    }
+    // 使用新的poses重新计算TSDF体素
+    cv::Mat view_host_;
+    cuda::Image view_device_;
+    volume_->clear(); 
+    volume_loop_->clear();
+    cuda::Depth depth_device_tmp_;
+    // 重新积分每一帧到TSDF
+    cout<<"start reintegrate"<<endl;
+    auto &p = params_;
+    const int LEVELS = icp_->getUsedLevelsNum();
+    //先合成一个闭环的TSDF，用于后续位姿估计的基准
+    for(int i=0; i<frame_count; i+=22)
+    {
+        auto &depth = depth_imgs_[i];
+        depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
+        cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+        volume_loop_->integrate(dists_, poses[i], p.intr);
+        if(true)
+        { 
+            volume_loop_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+            for (int i = 1; i < LEVELS; ++i)
+                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+            cuda::waitAllDefaultStream();
+            // 在当前相机视角下进行raycast
+            renderImage(view_device_, 0);
+            view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
+            view_device_.download(view_host_.ptr<void>(), view_host_.step);
+            cv::imshow("loopSceneLoop", view_host_);
+            cv::waitKey(1);
+        }
+    }
+    cout<<"reintegrate again"<<endl;
+    for(int i = 0; i < frame_count; i++) {
+        auto &depth = depth_imgs_[i];
+        depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
+        cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+        cuda::depthBilateralFilter(depth_device_tmp_, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+        if (p.icp_truncate_depth_dist > 0)
+            kfusion::cuda::depthTruncation(curr_.depth_pyr[0], p.icp_truncate_depth_dist);
+        for (int i = 1; i < LEVELS; ++i)
+            cuda::depthBuildPyramid(curr_.depth_pyr[i-1], curr_.depth_pyr[i], p.bilateral_sigma_depth);
+        for (int i = 0; i < LEVELS; ++i)
+            cuda::computePointNormals(p.intr(i), curr_.depth_pyr[i], curr_.points_pyr[i], curr_.normals_pyr[i]);
+        cuda::waitAllDefaultStream();
+        
+        if(i==0)
+        {
+            cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+            cuda::depthBilateralFilter(depth_device_tmp_, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+            if (p.icp_truncate_depth_dist > 0)
+                kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
+            for (int i = 1; i < LEVELS; ++i)
+                cuda::depthBuildPyramid(first_.depth_pyr[i-1], first_.depth_pyr[i], p.bilateral_sigma_depth);
+            for (int i = 0; i < LEVELS; ++i)
+                cuda::computePointNormals(p.intr(i), first_.depth_pyr[i], first_.points_pyr[i], first_.normals_pyr[i]);
+            cuda::waitAllDefaultStream();
+            volume_->integrate(dists_, poses[i], p.intr);
+            continue;
+        }
+        for(int j=0; j<2; j++)
+        {
+            volume_loop_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+            for (int i = 1; i < LEVELS; ++i)
+            resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+            cuda::waitAllDefaultStream();
+            //重新估算pose
+            Affine3f affine;
+            bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
+            poses[i] = poses[i] * affine;
+        }
+        
+        // if(i<frame_count-2)
+        // {
+        //     poses[i+1] = poses[i+1] * affine;//更新下一帧的pose
+        // }
+        if(i==loop_frame_idx[0])
+        {
+            //输出闭环前后的偏差
+            Affine3f taffine;
+             icp_->estimateTransform(taffine, p.intr, curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
+            // 计算poses[i]的欧拉角
+            cv::Mat R_pose = cv::Mat(poses[i].rotation());
+            cv::Vec3f euler_pose;
+            euler_pose[0] = atan2(R_pose.at<float>(2,1), R_pose.at<float>(2,2));
+            euler_pose[1] = atan2(-R_pose.at<float>(2,0), sqrt(R_pose.at<float>(2,1)*R_pose.at<float>(2,1) + R_pose.at<float>(2,2)*R_pose.at<float>(2,2)));
+            euler_pose[2] = atan2(R_pose.at<float>(1,0), R_pose.at<float>(0,0));
+            
+            // 计算taffine的欧拉角
+            cv::Mat R_taffine = cv::Mat(taffine.rotation());
+            cv::Vec3f euler_taffine;
+            euler_taffine[0] = atan2(R_taffine.at<float>(2,1), R_taffine.at<float>(2,2));
+            euler_taffine[1] = atan2(-R_taffine.at<float>(2,0), sqrt(R_taffine.at<float>(2,1)*R_taffine.at<float>(2,1) + R_taffine.at<float>(2,2)*R_taffine.at<float>(2,2)));
+            euler_taffine[2] = atan2(R_taffine.at<float>(1,0), R_taffine.at<float>(0,0));
+            
+            // 输出角度(转换为度)
+            std::cout << "poses[" << i << "]旋转角度(度): roll=" << euler_pose[0]*180/M_PI 
+                      << ", pitch=" << euler_pose[1]*180/M_PI
+                      << ", yaw=" << euler_pose[2]*180/M_PI << std::endl;
+                      
+            std::cout << "taffine旋转角度(度): roll=" << euler_taffine[0]*180/M_PI 
+                      << ", pitch=" << euler_taffine[1]*180/M_PI
+                      << ", yaw=" << euler_taffine[2]*180/M_PI << std::endl;
+        }
+        volume_->integrate(dists_, poses[i], p.intr);
+        if(true)
+        { 
+            volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+            for (int i = 1; i < LEVELS; ++i)
+                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+            cuda::waitAllDefaultStream();
+            // 在当前相机视角下进行raycast
+            renderImage(view_device_, 0);
+            view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
+            view_device_.download(view_host_.ptr<void>(), view_host_.step);
+            cv::imshow("loopScene", view_host_);
+            cv::waitKey(30);
+        }
+    }
+    std::cout << "闭环优化完成,共处理 " << frame_count << " 帧" << std::endl;
 }
 
 void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
@@ -562,7 +1032,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     // saveToPlyColor(canonical, canonical_normals, "canonical_beforwarp.ply",255,0,0);
     // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
     // expand the nodes
-    if(true) //当warp点云的时候出现距离node过远的点时，扩展当前点云
+    if(true) //当warp点云的时候出现距离node过远的点时扩展当前点云
     {
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
@@ -617,7 +1087,6 @@ void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
 #else
     #define PASS1 prev_.points_pyr
 #endif
-    std::cout<<"render image flag: "<<flag<<std::endl;
     if (flag < 1 || flag > 3)
         cuda::renderImage(PASS1[0], prev_.normals_pyr[0], params_.intr, params_.light_pose, image);
     else if (flag == 2)
@@ -626,7 +1095,6 @@ void kfusion::KinFu::renderImage(cuda::Image& image, int flag)
     {
         DeviceArray2D<RGB> i1(p.rows, p.cols, image.ptr(), image.step());
         DeviceArray2D<RGB> i2(p.rows, p.cols, image.ptr() + p.cols, image.step());
-        std::cout<<"render image"<<std::endl;
         cuda::renderImage(PASS1[0], prev_.normals_pyr[0], params_.intr, params_.light_pose, i1);
         cuda::renderTangentColors(prev_.normals_pyr[0], i2);
     }

@@ -13,6 +13,8 @@
 #include <pcl/surface/gp3.h>
 #include <pcl/registration/icp.h>
 #include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/extract_indices.h>
 #include "bodymeasurer.h"
 #include <unistd.h>
 #include <netdb.h>     //gethostbyname
@@ -43,13 +45,12 @@
 #include <fstream>
 
 #include <opencv2/opencv.hpp>
-#include <ultralytics/yolo.h>
 #include <cmath>
 
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
-bool flag_show_image = false;
+bool flag_show_image = true;
 static const std::string base64_chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
@@ -215,55 +216,6 @@ std::string get_local_mac()
     return "";
 }
 
-class PoseEstimator {
-private:
-    ultralytics::YOLODetector detector;
-
-    // 计算两个向量之间的角度
-    float calculateAngle(const cv::Point2f& v1, const cv::Point2f& v2) {
-        float dot = v1.x * v2.x + v1.y * v2.y;
-        float det = v1.x * v2.y - v1.y * v2.x;
-        float angle = std::atan2(det, dot) * 180 / CV_PI;
-        return std::abs(angle);
-    }
-
-public:
-    PoseEstimator(const std::string& model_path) : detector(model_path) {}
-
-    // 估计人体姿态并计算手臂与身体之间的角度
-    void estimatePoseAndAngles(const cv::Mat& image) {
-        // 进行姿态估计
-        std::vector<ultralytics::Detection> detections = detector.detect(image);
-
-        if (!detections.empty()) {
-            const auto& keypoints = detections[0].keypoints;
-
-            // 获取关键点坐标
-            cv::Point2f leftShoulder = keypoints[5];
-            cv::Point2f rightShoulder = keypoints[6];
-            cv::Point2f leftElbow = keypoints[7];
-            cv::Point2f rightElbow = keypoints[8];
-            cv::Point2f leftWrist = keypoints[9];
-            cv::Point2f rightWrist = keypoints[10];
-
-            // 计算向量
-            cv::Point2f leftUpperArm = leftElbow - leftShoulder;
-            cv::Point2f leftLowerArm = leftWrist - leftElbow;
-            cv::Point2f rightUpperArm = rightElbow - rightShoulder;
-            cv::Point2f rightLowerArm = rightWrist - rightElbow;
-            cv::Point2f torso = (leftShoulder + rightShoulder) * 0.5f - (keypoints[11] + keypoints[12]) * 0.5f;
-
-            // 计算角度
-            float leftArmAngle = calculateAngle(leftUpperArm, torso);
-            float rightArmAngle = calculateAngle(rightUpperArm, torso);
-
-            std::cout << "左臂与身体夹角: " << leftArmAngle << "度" << std::endl;
-            std::cout << "右臂与身体夹角: " << rightArmAngle << "度" << std::endl;
-        } else {
-            std::cout << "未检测到人体姿态" << std::endl;
-        }
-    }
-};
 class KinFuApp
 {
 public:
@@ -283,7 +235,7 @@ public:
     double k1 = 0,k2 = 0,k3 = 0;
     double p1 = 0, p2 = 0;
     int port = 9099;
-    PoseEstimator estimator("yolov8n-pose.pt");
+
     KinFuApp() : exit_(false), iteractive_mode_(false), pause_(true)
     {
         
@@ -427,6 +379,7 @@ public:
 
                 if (jv["cmd"].asString() == "finish")
                 {
+                    kinfu.loopClosureOptimize();//执行闭环优化
                     std::cout << "msg:" << msg << std::endl;
                     vcode = "none"; // ready to receive new process
                     if (jv["gender"].isString())
@@ -476,10 +429,10 @@ public:
                         // save to file for measurement
                         std::stringstream ss;
                         ss << pfile;
-                        kinfu.toPly(cloud_host,normal_host, spfile_folder+"origin_cloud.ply");
+                        kinfu.toPlyColor(cloud_host, normal_host, spfile_folder+"origin_cloud.ply", 255, 0, 0);
                         kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(), 255, 0, 0);
                         // start measurement
-                        auto rst = func(pfile);
+                        auto rst = func(spfile_folder+"origin_cloud.ply");
                         ws.send_msg(a.hdl, rst);
 #endif
                     }
@@ -655,7 +608,7 @@ public:
                         cv::undistort(depth, undistortedDepth, cameraMatrix, distCoeffs);
                         std::cout << "undistored" << std::endl;
                         depth = undistortedDepth;
-                        cv::imwrite(depth_folder + jv["frame_id"].asString() + "_undistored.png", depth);
+                        // cv::imwrite(depth_folder + jv["frame_id"].asString() + "_undistored.png", depth);
                         // cv::medianBlur(depth, depth, 5);
                         //------------
                         cv::Mat filteredDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
@@ -689,38 +642,7 @@ public:
                             }
                         }
                         depth = filteredDepth;
-                        //------------------
-                        // cv::Mat undistortedDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type()); // 修改为与depth相同的类型
-                        // for (size_t i = 0; i < depth.rows; i++)
-                        // {
-                        //     for (size_t j = 0; j < depth.cols; j++)
-                        //     {
-                        //         float z = depth.at<ushort>(i, j);
-                        //         if (z == 0) continue; // 跳过无效深度值
-                        //         float x = (j - cx) / fx;
-                        //         float y = (i - cy) / fy;
-                        //         // 畸变矫正
-                        //         float r2 = x * x + y * y;
-                        //         float x_distorted = x * (1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2) ;
-                        //         float y_distorted = y * (1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2) ;
-                        //         // 重投影到图像
-                        //         int new_j = cv::saturate_cast<int>(x_distorted * fx + cx);
-                        //         int new_i = cv::saturate_cast<int>(y_distorted * fy + cy);
-                        //         if (new_i >= 0 && new_i < depth.rows && new_j >= 0 && new_j < depth.cols)
-                        //         {
-                        //             undistortedDepth.at<ushort>(new_i, new_j) =  depth.at<ushort>(i, j);
-                        //         }
-                        //         std::cout << "Before correction: (" << i << ", " << j << ")" << std::endl;
-                        //         std::cout << "After correction: (" << new_i << ", " << new_j << ")" << std::endl;
-                        //     }
-                        // }
-                        
-                        // depth = undistortedDepth;
-                        // cv::imwrite(depth_folder + jv["frame_id"].asString() + "_undistored.png", depth);
-                       
-                        // cv::Rect maskroi(0,0,200,720);
-                        // depth(maskroi) = 0;
-                        ////////////////////////END//////////////////////////
+                        kinfu.append_depth_image(depth);
                         depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
                         // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
                         {
@@ -728,24 +650,12 @@ public:
                             (void)fps;
                             has_image = kinfu(depth_device_);
                         }
-
-                        if (has_image)
-                            show_raycasted(kinfu);
-
-                        // show_depth(depth);
                         if (flag_show_image)
                         {
+                            if (has_image)
+                                show_raycasted(kinfu);
                             cv::imshow("Image", depth);
                             int key = cv::waitKey(pause_ ? 0 : 3);
-
-                            // switch(key)
-                            // {
-                            // case 't': case 'T' : take_cloud(kinfu); break;
-                            // case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
-                            // case 's':pause_ = false;break;
-                            // case 27: exit_ = true; break;
-                            // case 'p': pause_ = !pause_; break;
-                            // }
                         }
                     }
                     std::cout << "image received: " << jv["img_type"].asString() << std::endl;
@@ -753,7 +663,8 @@ public:
             }
             else
             {
-                std::cout << "achieve msg failed" << std::endl;
+                // std::cout << "achieve msg failed" << std::endl;
+                ;
             }
         }
 
@@ -964,6 +875,63 @@ public:
         }
         std::cout << "ply file loaded, try to filter the data" << std::endl;
         pcl::transformPointCloudWithNormals(*cloud_orig, *cloud, transformation_matrix);
+
+
+        // 使用RANSAC方法找到地面平面
+        pcl::SACSegmentation<pcl::PointXYZRGBNormal> seg;
+        pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+        pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+        
+        // 配置RANSAC参数
+        seg.setInputCloud(cloud);
+        seg.setOptimizeCoefficients(true);
+        seg.setModelType(pcl::SACMODEL_PLANE);  // 设置模型为平面
+        seg.setMethodType(pcl::SAC_RANSAC);     // 使用RANSAC方法
+        seg.setDistanceThreshold(0.02);         // 设置内点阈值为2cm
+        seg.segment(*inliers, *coefficients);
+
+        // 检查是否找到地面平面
+        if (inliers->indices.size() == 0)
+        {
+            PCL_ERROR("无法在数据集中估计出平面模型.\n");
+        }
+        else
+        {
+            // 创建新的点云来存储过滤后的结果
+            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+            
+            // 获取平面方程系数 ax + by + cz + d = 0
+            float a = coefficients->values[0];
+            float b = coefficients->values[1];
+            float c = coefficients->values[2];
+            float d = coefficients->values[3];
+            
+            // 遍历所有点,保留距离地面6cm以上的点
+            for (size_t i = 0; i < cloud->points.size(); ++i)
+            {
+                const auto& point = cloud->points[i];
+                // 计算点到平面的距离
+                float distance = std::abs(a * point.x + b * point.y + c * point.z + d) / 
+                            std::sqrt(a * a + b * b + c * c);
+                
+                // 如果点距离地面大于6cm,则保留该点
+                if (distance > 0.06) // 6cm = 0.06m
+                {
+                    filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
+                }
+            }
+            
+            filtered_cloud->width = filtered_cloud->points.size();
+            filtered_cloud->height = 1;
+            filtered_cloud->is_dense = false;
+            
+            // 更新点云
+            cloud = filtered_cloud;
+
+            // 保存去除地平面后的点云
+            pcl::io::savePLYFile("./results/no_ground.ply", *cloud);
+        }
+
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         // for(size_t i = 0;i<cloud->size();i++)
         // {
@@ -973,17 +941,24 @@ public:
         //     tp.normal_z = -tp.normal_z;
         // }
 
-        // step 2 filter the outlier points
-        cout << "set transformed" << endl;
+        
+        cout<<"step 2 filter the outlier points"<<endl;
         pcl::RadiusOutlierRemoval<pcl::PointXYZRGBNormal> sor;
         sor.setInputCloud(cloud);
-        sor.setRadiusSearch(0.05);
-        sor.setMinNeighborsInRadius(20);
+        sor.setRadiusSearch(0.08);  // 增大搜索半径到8cm
+        sor.setMinNeighborsInRadius(20);  // 增加最小邻居点数到20个
         sor.setNegative(false);
-        cout << "start filter" << endl;
         sor.filter(*cloud_filtered);
-
-        pcl::io::savePLYFile("./results/aft_filter.ply", *cloud_filtered);
+        
+        // 进行第二次过滤以进一步去除离群点
+        pcl::RadiusOutlierRemoval<pcl::PointXYZRGBNormal> sor2;
+        sor2.setInputCloud(cloud_filtered);
+        sor2.setRadiusSearch(0.05);  // 使用较小的搜索半径进行精细过滤
+        sor2.setMinNeighborsInRadius(15);  // 设置适中的邻居点数阈值
+        sor2.setNegative(false);
+        sor2.filter(*cloud_filtered);
+        
+        pcl::io::savePLYFile("./results/aft_filter.ply",*cloud_filtered);
 
         pcl::PointCloud<pcl::PointXYZRGBNormal> scan;
         scan = *cloud_filtered;
@@ -1014,7 +989,11 @@ public:
         cout << "reset parameters" << endl;
         meshFittor->resetParameters();
         cout << "start mainprocess" << endl;
+        auto start_mp = std::chrono::high_resolution_clock::now();
         meshFittor->mainProcess(scan);
+        auto end_mp  = std::chrono::high_resolution_clock::now();
+        auto duration_mp = std::chrono::duration_cast<std::chrono::milliseconds>(end_mp - start_mp);
+        std::cout << "主处理过程耗时: " << duration_mp.count() << " 毫秒" << std::endl;
         cout << "start measure" << endl;
         auto rst = measure_body(minz, maxz);
         auto end = std::chrono::high_resolution_clock::now();

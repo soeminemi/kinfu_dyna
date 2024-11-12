@@ -94,7 +94,7 @@ void kfusion::cuda::TsdfVolume::integrate(const Dists& dists, const Affine3f& ca
     device::Aff3f aff = device_cast<device::Aff3f>(vol2cam);
 
     device::TsdfVolume volume(data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
-    printf("intr params: %f,%f,%f,%f\n",intr.fx, intr.fy, intr.cx, intr.cy);
+    // printf("intr params: %f,%f,%f,%f\n",intr.fx, intr.fy, intr.cx, intr.cy);
     device::integrate(dists, volume, aff, proj);
 }
 
@@ -120,10 +120,7 @@ void kfusion::cuda::TsdfVolume::raycast(const Affine3f& camera_pose, const Intr&
 {
     device::Normals& n = (device::Normals&)normals;
     device::Points& p = (device::Points&)points;
-    std::cout<<"raycast pose_ : "<<pose_.translation()<<", "<<pose_.rotation()<<std::endl;
     Affine3f cam2vol = pose_.inv() * camera_pose;
-    std::cout<<"camera pose:"<<camera_pose.translation()<<", "<<camera_pose.rotation()<<std::endl;
-    std::cout<<"camera to vol:"<<cam2vol.translation()<<", "<<cam2vol.rotation()<<std::endl;
 
     device::Aff3f aff = device_cast<device::Aff3f>(cam2vol);
     device::Mat3f Rinv = device_cast<device::Mat3f>(cam2vol.rotation().inv(cv::DECOMP_SVD));
