@@ -50,7 +50,7 @@
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
-bool flag_show_image = true;
+bool flag_show_image = false;
 static const std::string base64_chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
@@ -289,8 +289,11 @@ public:
         // ss<<"./results/rst"<<frame_idx<<".ply";
         // kinfu.toPly(points_host_,ss.str());
         view_device_.download(view_host_.ptr<void>(), view_host_.step);
-        if (flag_show_image)
-            cv::imshow("Scene", view_host_);
+        if (flag_show_image){
+            cv::Mat rotated_view;
+            cv::rotate(view_host_, rotated_view, cv::ROTATE_90_CLOCKWISE);
+            cv::imshow("Scene", rotated_view);
+        }
     }
 
     void take_cloud(KinFu &kinfu)
@@ -401,7 +404,15 @@ public:
                     {
                         std::cout << "failed to get gender" << std::endl;
                     }
-
+                    if(jv["weight"].isDouble())
+                    {
+                        double weight = jv["weight"].asDouble();
+                        meshFittor->setWeight(weight,true);
+                    }
+                    else{
+                        std::cout << "failed to get weight" << std::endl;
+                        meshFittor->setWeight(50.0,false);
+                    }
                     if (jv["measure_type"].isString())
                     {
                         measure_type = jv["measure_type"].asString();
@@ -654,7 +665,7 @@ public:
                         {
                             if (has_image)
                                 show_raycasted(kinfu);
-                            cv::imshow("Image", depth);
+                            // cv::imshow("Image", depth);
                             int key = cv::waitKey(pause_ ? 0 : 3);
                         }
                     }

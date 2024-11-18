@@ -15,6 +15,9 @@
 #include <g2o/core/optimization_algorithm_dogleg.h>
 #include <g2o/solvers/dense/linear_solver_dense.h>
 #include <memory>
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/io/ply_io.h>
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
@@ -262,9 +265,9 @@ kfusion::WarpField &kfusion::KinFu::getWarp()
 // main procedure of dynamic fusion
 bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion::cuda::Image& /*image*/)
 {
+    cout<<"frame_counter_ is: "<<frame_counter_<<endl;
     const KinFuParams& p = params_;
     const int LEVELS = icp_->getUsedLevelsNum();
-    std::cout<<"params.intr is: "<<p.intr.k1<<", "<<p.intr.k2<<", "<<p.intr.k3<<std::endl;
     cuda::computeDists(depth, dists_, p.intr);
     cuda::depthBilateralFilter(depth, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
 
@@ -286,6 +289,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     //can't perform more on first frame
     if (frame_counter_ == 0)
     {
+        cout<<"first frame, try to integrate"<<endl;
         cuda::depthBilateralFilter(depth, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
         if (p.icp_truncate_depth_dist > 0)
             kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
@@ -331,9 +335,12 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         // toPlyVec3(init_nodes, init_nodes, "init_nodes.ply");
         return ++frame_counter_, true;
     }
+    if(flag_closed_)
+    {
+        return ++frame_counter_, true;
+    }
     // ICP
     Affine3f affine; // cuur -> prev
-    Affine3f affine_frame;
     {
         //ScopeTime time("icp");
 #if defined USE_DEPTH
@@ -344,16 +351,10 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         if (!ok)
         {
             return reset(), false;
-            // return false;
         }
     }
-    // {
-        
-    //     bool ok = icp_->estimateTransform(affine_frame, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_frame_.points_pyr, prev_frame_.normals_pyr);
-    // }
-    // affine = Affine3f::Identity();
+    cout<<"try to push back pose"<<endl;
     poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
-    // poses_frame_.push_back(poses_frame_.back() * affine_frame); // curr -> global， affine pre->curr
     // 将旋转矩阵转换为欧拉角(弧度)
     cv::Mat R = cv::Mat(poses_.back().rotation());
     cv::Vec3f euler_angles;
@@ -387,11 +388,15 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
                     << ", yaw=" << t_euler[2]*180/M_PI << std::endl;
             std::cout << "taffine: " << taffine.translation()<<endl<<", "<<taffine.rotation() << std::endl;
             
-            flag_closed_ = true;
             loop_frame_idx_.push_back(frame_counter_);
             loop_poses_.push_back(taffine);
         }
+        if(loop_frame_idx_.size()>10)
+        {
+            flag_closed_ = true;
+        }
     }
+    if(flag_closed_ == false)
     {
         ///////////////////////////////////////////////////////////////////////////////////////////
         // Volume integration
@@ -450,6 +455,10 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         //     #endif
         //     curr_.normals_pyr.swap(prev_frame_.normals_pyr);
         // }
+    }
+    else
+    {
+        ;
     }
     return ++frame_counter_, true;
 }
@@ -586,7 +595,7 @@ void kfusion::KinFu::loopClosureOptimize(
         loop_edge->setMeasurement(loop_constraint);
     
         // 设置闭环约束的信息矩阵(权重更大)
-        Eigen::Matrix<double,6,6> loop_information = Eigen::Matrix<double,6,6>::Identity() * 0.001;
+        Eigen::Matrix<double,6,6> loop_information = Eigen::Matrix<double,6,6>::Identity() * 0.1;
         loop_edge->setInformation(loop_information);
         optimizer.addEdge(loop_edge);
     }
@@ -640,15 +649,19 @@ void kfusion::KinFu::loopClosureOptimize(
     auto &p = params_;
     const int LEVELS = icp_->getUsedLevelsNum();
     //先合成一个闭环的TSDF，用于后续位姿估计的基准
-    for(int i=0; i<frame_count; i+=22)
+    for(int i=0; i<frame_count; i++)
     {
+        // 稀疏帧合成作为锚点，再次基础上进行闭环优化
+        int j=i%40;
+        if(j>3)
+            continue;
         auto &depth = depth_imgs_[i];
         depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
-        volume_loop_->integrate(dists_, poses[i], p.intr);
-        if(true)
+        volume_->integrate(dists_, poses[i], p.intr);
+        if(false)
         { 
-            volume_loop_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+            volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
                 resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
             cuda::waitAllDefaultStream();
@@ -688,9 +701,9 @@ void kfusion::KinFu::loopClosureOptimize(
             volume_->integrate(dists_, poses[i], p.intr);
             continue;
         }
-        for(int j=0; j<2; j++)
+        for(int j=0; j<1; j++)
         {
-            volume_loop_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+            volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
             cuda::waitAllDefaultStream();
@@ -733,7 +746,7 @@ void kfusion::KinFu::loopClosureOptimize(
                       << ", yaw=" << euler_taffine[2]*180/M_PI << std::endl;
         }
         volume_->integrate(dists_, poses[i], p.intr);
-        if(true)
+        if(false)
         { 
             volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
@@ -743,11 +756,69 @@ void kfusion::KinFu::loopClosureOptimize(
             renderImage(view_device_, 0);
             view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
             view_device_.download(view_host_.ptr<void>(), view_host_.step);
-            cv::imshow("loopScene", view_host_);
-            cv::waitKey(30);
+            cv::Mat rotated_view;
+            cv::rotate(view_host_, rotated_view, cv::ROTATE_90_CLOCKWISE);
+            cv::imshow("loopScene", rotated_view);
+            cv::waitKey(10);
         }
     }
+    // // 每30帧获取一次点云并转换到世界坐标系
+    // std::vector<pcl::PointXYZRGB> all_points;
+    // for(int i = 0; i < frame_count; i += 30) {
+    //     // 生成随机颜色
+    //     uint8_t r = rand() % 256;
+    //     uint8_t g = rand() % 256; 
+    //     uint8_t b = rand() % 256;
+
+    //     cv::Mat depth = depth_imgs_[i];
+        
+    //     // 遍历深度图的每个像素
+    //     for(int y = 0; y < depth.rows; y++) {
+    //         for(int x = 0; x < depth.cols; x++) {
+    //             float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
+    //             if(z > 0) {
+    //                 // 反投影到相机坐标系
+    //                 float x_cam = (x - p.intr.cx) * z / p.intr.fx;
+    //                 float y_cam = (y - p.intr.cy) * z / p.intr.fy;
+                    
+    //                 // 转换到世界坐标系
+    //                 cv::Mat pt_cam = (cv::Mat_<float>(4,1) << x_cam, y_cam, z, 1);
+    //                 cv::Mat pt_world = cv::Mat::zeros(4, 4, CV_32F);
+    //                 // 将pt_world的左上3x3赋值为旋转矩阵
+    //                 auto rot = poses[i].rotation();
+    //                 for(int r = 0; r < 3; r++) {
+    //                     for(int c = 0; c < 3; c++) {
+    //                         pt_world.at<float>(r,c) = rot(r,c);
+    //                     }
+    //                 }
+                    
+    //                 // 将pt_world的右上3x1赋值为平移向量
+    //                 pt_world(cv::Rect(3, 0, 1, 3)) = poses[i].translation();
+    //                 cv::Mat pt_wd = pt_world * pt_cam;
+    //                 // 添加到点云
+    //                 pcl::PointXYZRGB point;
+    //                 point.x = pt_wd.at<float>(0);
+    //                 point.y = pt_wd.at<float>(1); 
+    //                 point.z = pt_wd.at<float>(2);
+    //                 point.r = r;
+    //                 point.g = g;
+    //                 point.b = b;
+    //                 all_points.push_back(point);
+    //             }
+    //         }
+    //     }
+    // }
+
+    // // 保存为PLY文件
+    // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    // std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>> cloud_points;
+    // cloud_points = std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>>(all_points.begin(), all_points.end());
+    // cloud->points = cloud_points;
+    // cloud->width = all_points.size();
+    // cloud->height = 1;
+    // pcl::io::savePLYFile("world_points.ply", *cloud);
     std::cout << "闭环优化完成,共处理 " << frame_count << " 帧" << std::endl;
+    std::cout<<"图像总数量为: "<<depth_imgs_.size()<<"闭环重建帧数:"<<frame_count<<std::endl;
 }
 
 void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
@@ -1032,7 +1103,7 @@ void kfusion::KinFu::dynamicfusion(cuda::Depth& depth, cuda::Cloud live_frame, c
     // saveToPlyColor(canonical, canonical_normals, "canonical_beforwarp.ply",255,0,0);
     // warp_->warp(canonical, canonical_normals, false); // warp the vertices and affine to live frame
     // expand the nodes
-    if(true) //当warp点云的时候出现距离node过远的点时扩展当前点云
+    if(false) //当warp点云的时候出现距离node过远的点时扩展当前点云
     {
         cv::Mat frame_init;
         volume_->computePoints(frame_init);
