@@ -339,6 +339,7 @@ public:
                     std::cout << "连接超时，重置为可用状态" << std::endl;
                     vcode = "none"; // 超时，重置vcode
                     lastValidMessageTime = std::chrono::steady_clock::now();
+                    kinfu.reset();
                 }
                 // std::cout<<"msg received:"<<msg<<std::endl;
                 jreader.parse(msg, jv);
@@ -573,6 +574,7 @@ public:
                     }
                     else
                     {
+                        cout<<"process "<<jv["frame_id"].asString()<<endl;
                         std::string ws_str = base64_decode_str(jv["data"].asString());
                         std::cout << "base 64 decoded" << std::endl;
                         std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
@@ -642,7 +644,7 @@ public:
                                         }
                                     }
                                 }
-                                if (maxDepth - minDepth > 80) // 如果深度最大值和最小值的差异过大
+                                if (maxDepth - minDepth > 30) // 如果深度最大值和最小值的差异过大
                                 {
                                     filteredDepth.at<ushort>(i, j) = 0;
                                 }
@@ -652,6 +654,47 @@ public:
                                 }
                             }
                         }
+                        // 对深度图进行噪声过滤
+                        // depth = filteredDepth;
+                        // cv::Mat noiseFilteredDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
+                        // const int windowSize = 5; // 使用5x5的窗口
+                        // const int halfWindow = windowSize / 2;
+                        // const float stdDevThreshold = 5.0f; // 标准差阈值
+                        
+                        // for(int i = halfWindow; i < depth.rows-halfWindow; i++) {
+                        //     for(int j = halfWindow; j < depth.cols-halfWindow; j++) {
+                        //         // 计算窗口内的均值和标准差
+                        //         float sum = 0;
+                        //         float sqSum = 0;
+                        //         int count = 0;
+                                
+                        //         for(int m = -halfWindow; m <= halfWindow; m++) {
+                        //             for(int n = -halfWindow; n <= halfWindow; n++) {
+                        //                 ushort val = depth.at<ushort>(i+m, j+n);
+                        //                 if(val > 0) { // 只考虑有效深度值
+                        //                     sum += val;
+                        //                     sqSum += val * val;
+                        //                     count++;
+                        //                 }
+                        //             }
+                        //         }
+                                
+                        //         if(count > 0) {
+                        //             float mean = sum / count;
+                        //             float variance = (sqSum / count) - (mean * mean);
+                        //             float stdDev = sqrt(variance);
+                                    
+                        //             // 如果标准差大于阈值，认为是噪声区域
+                        //             if(stdDev > stdDevThreshold) {
+                        //                 noiseFilteredDepth.at<ushort>(i,j) = 0;
+                        //             } else {
+                        //                 noiseFilteredDepth.at<ushort>(i,j) = depth.at<ushort>(i,j);
+                        //             }
+                        //         }
+                        //     }
+                        // }
+                        
+                        // filteredDepth = noiseFilteredDepth;
                         depth = filteredDepth;
                         kinfu.append_depth_image(depth);
                         depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
@@ -877,7 +920,7 @@ public:
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_orig(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
         if (pcl::io::loadPLYFile<pcl::PointXYZRGBNormal>(bodypath, *cloud_orig) == -1)
         {
-            PCL_ERROR("Could not read file \n");
+            return "{\"error\":\"can not load point cloud\"}";
         }
 
         if (cloud_orig->size() < 10000)
@@ -904,7 +947,7 @@ public:
         // 检查是否找到地面平面
         if (inliers->indices.size() == 0)
         {
-            PCL_ERROR("无法在数据集中估计出平面模型.\n");
+            return "{\"error\":\"can not find ground plane\"}";
         }
         else
         {
@@ -926,7 +969,7 @@ public:
                             std::sqrt(a * a + b * b + c * c);
                 
                 // 如果点距离地面大于6cm,则保留该点
-                if (distance > 0.06) // 6cm = 0.06m
+                if (distance > 0.045) // 6cm = 0.06m
                 {
                     filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
                 }

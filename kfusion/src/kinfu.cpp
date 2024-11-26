@@ -285,7 +285,9 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 #endif
 
     cuda::waitAllDefaultStream();
-
+    float last_angle = 0;
+    Affine3f last_affine;
+    bool flag_integrate = false;
     //can't perform more on first frame
     if (frame_counter_ == 0)
     {
@@ -396,7 +398,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             flag_closed_ = true;
         }
     }
-    if(flag_closed_ == false)
+    if(flag_closed_ == false )
     {
         ///////////////////////////////////////////////////////////////////////////////////////////
         // Volume integration
