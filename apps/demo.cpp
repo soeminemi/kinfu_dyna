@@ -964,12 +964,12 @@ public:
             for (size_t i = 0; i < cloud->points.size(); ++i)
             {
                 const auto& point = cloud->points[i];
-                // 计算点到平面的距离
-                float distance = std::abs(a * point.x + b * point.y + c * point.z + d) / 
+                // 计算点到平面的距离,带符号
+                float distance = (a * point.x + b * point.y + c * point.z + d) / 
                             std::sqrt(a * a + b * b + c * c);
                 
-                // 如果点距离地面大于6cm,则保留该点
-                if (distance > 0.045) // 6cm = 0.06m
+                // 只保留平面上方的点
+                if (distance < -0.05)
                 {
                     filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
                 }

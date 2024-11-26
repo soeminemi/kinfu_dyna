@@ -156,12 +156,17 @@ if __name__ == "__main__":
     # 从命令行参数获取重量
     import sys
     weight = 50.0  # 默认值
+    flag_weight_set = False
     if len(sys.argv) >= 3:
         try:
             weight = float(sys.argv[2])
+            flag_weight_set = True
         except ValueError:
             print("无效的重量参数,使用默认值50.0")
-    print("当前设置的重量为:", weight)
+    if flag_weight_set:
+        print("当前设置的重量为:", weight)
+    else:
+        print("未设置体重参数")
     global msgs
     msgs = []
     if flag_cache_send:
@@ -240,7 +245,8 @@ if __name__ == "__main__":
             sd = {}
             # sd["flag_test"]=True
             sd["gender"]=gender
-            sd["weight"]=50.0
+            if flag_weight_set:
+                sd["weight"]=50.0
             sd["data"] = data.decode()
             sd["cmd"]="upload"
             sd["img_type"]="depth"
@@ -273,7 +279,7 @@ if __name__ == "__main__":
                 sd["img_type"]="color"
                 sd["frame_id"]=str(fid)
                 sd["vcode"]=vcode
-                sd["name"]="张三"
+                sd["name"]="test"
                 sdstr = json.dumps(sd)
                 if flag_cache_send:
                     lock.acquire()
@@ -291,7 +297,8 @@ if __name__ == "__main__":
             sd["measure_type"]="qipao"
             sd["cloth_type"] = "kuansong"
             sd["vcode"]=vcode
-            sd["weight"]=weight
+            if flag_weight_set:
+                sd["weight"]=weight
             sdstr = json.dumps(sd)
             if flag_cache_send:
                 lock.acquire()

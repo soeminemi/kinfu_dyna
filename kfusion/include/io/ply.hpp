@@ -3,6 +3,8 @@
 #include <string>
 #include <opencv2/opencv.hpp>
 #include <fstream>
+#include <pcl/point_types.h>
+#include <pcl/io/ply_io.h>
 using namespace std;
 #define SAVE_PLY
 //save points to ply
@@ -11,27 +13,24 @@ void saveToPly(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &normals
     #ifndef SAVE_PLY
     return;
     #endif
-    int num = 0;
-    for(auto &v:vertices)
-    {
-        if(!std::isnan(v[0]))
-        {
-            num++;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    
+    for(const auto &v : vertices) {
+        if(!std::isnan(v[0])) {
+            pcl::PointXYZ point;
+            point.x = v[0];
+            point.y = v[1];
+            point.z = v[2];
+            cloud->points.push_back(point);
         }
     }
-    cout<<"saving the point cloud to the file"<<endl;
-    ofstream fscan(name);
-    fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment Created by Wang Junnan"<<endl;
-    fscan<<"element vertex "<<num<<endl;
-    fscan<<"property float x"<<endl<<"property float y"<<endl<<"property float z"<<endl;
-    fscan<<"end_header"<<endl;
-
-    for(int i=0;i<vertices.size();i++){
-        if(std::isnan(vertices[i][0]))
-            continue;
-        fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<endl;
-    }
-    fscan.close();
+    
+    cloud->width = cloud->points.size();
+    cloud->height = 1;
+    cloud->is_dense = false;
+    
+    std::cout << "保存点云到文件" << std::endl;
+    pcl::io::savePLYFile(name, *cloud);
 }
 
 void saveToPlyColor(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &normals,std::string name, uint r, uint g, uint b)
@@ -39,31 +38,30 @@ void saveToPlyColor(std::vector<cv::Vec4f> &vertices, std::vector<cv::Vec4f> &no
     #ifndef SAVE_PLY
     return;
     #endif
-    int num = 0;
-    for(auto &v:vertices)
-    {
-        if(!std::isnan(v[0]))
-        {
-            num++;
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+
+    for(size_t i = 0; i < vertices.size(); ++i) {
+        if(!std::isnan(vertices[i][0])) {
+            pcl::PointXYZRGBNormal point;
+            point.x = vertices[i][0];
+            point.y = vertices[i][1];
+            point.z = vertices[i][2];
+            point.normal_x = normals[i][0];
+            point.normal_y = normals[i][1];
+            point.normal_z = normals[i][2];
+            point.r = r;
+            point.g = g;
+            point.b = b;
+            cloud->points.push_back(point);
         }
     }
-    cout<<"saving the point cloud to the file"<<endl;
-    ofstream fscan(name);
-    fscan<<"ply"<<endl<<"format ascii 1.0"<<endl<<"comment VCGLIB generated"<<endl;
-    fscan<<"element vertex "<<num<<endl;
-    fscan<<"property float x"<<endl<<"property float y"<<endl<<"property float z"<<endl;
-    fscan<<"property float nx"<<endl<<"property float ny"<<endl<<"property float nz"<<endl;
-    fscan<<"property uchar red"<<endl<<"property uchar blue"<<endl<<"property uchar green"<<endl;
-    fscan<<"property uchar alpha"<<endl;
-    fscan<<"end_header"<<endl;
 
+    cloud->width = cloud->points.size();
+    cloud->height = 1;
+    cloud->is_dense = false;
 
-    for(int i=0;i<vertices.size();i++){
-        if(std::isnan(vertices[i][0]))
-            continue;
-        fscan<<vertices[i][0]<<" "<<vertices[i][1]<<" "<<vertices[i][2]<<" "<<normals[i][0]<<" "<<normals[i][1]<<" "<<normals[i][2]<<" "<<r<<" "<<g<<" "<<b<<" "<<255<<endl;
-    }
-    fscan.close();
+    std::cout << "正在保存点云到文件" << std::endl;
+    pcl::io::savePLYFile(name, *cloud);
 }
 
 void saveToPly(std::vector<cv::Vec3f> &vertices, std::vector<cv::Vec3f> &normals,std::string name)
