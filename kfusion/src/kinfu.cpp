@@ -367,8 +367,8 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         }
     }
     
-    std::cout << "Before Kalman Filtering, Affine变换矩阵:" << affine.rotation() << std::endl;
-    std::cout << "Before Kalman Filtering, 平移向量:" << affine.translation() << std::endl;
+    // std::cout << "Before Kalman Filtering, Affine变换矩阵:" << affine.rotation() << std::endl;
+    // std::cout << "Before Kalman Filtering, 平移向量:" << affine.translation() << std::endl;
     cv::Vec3f t = cv::Vec3f(affine.translation()[0], affine.translation()[1], affine.translation()[2]);
     cv::Mat rot = cv::Mat(affine.rotation());
     cv::Vec3f euler;
@@ -441,10 +441,9 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     filtered_rot.copyTo(rotMat);
     affine = Affine3f(rotMat, filtered_t);
     
-    std::cout << "After Kalman Filtering, Affine变换矩阵:" << affine.rotation() << std::endl;
-    std::cout << "After Kalman Filtering, 平移向量:" << affine.translation() << std::endl;
+    // std::cout << "After Kalman Filtering, Affine变换矩阵:" << affine.rotation() << std::endl;
+    // std::cout << "After Kalman Filtering, 平移向量:" << affine.translation() << std::endl;
     
-    cout<<"try to push back pose"<<endl;
     poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
     // 将旋转矩阵转换为欧拉角(弧度)
     cv::Mat R = cv::Mat(poses_.back().rotation());
@@ -477,17 +476,13 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             std::cout << "taffine旋转角度(度): roll=" << t_euler[0]*180/M_PI 
                     << ", pitch=" << t_euler[1]*180/M_PI 
                     << ", yaw=" << t_euler[2]*180/M_PI << std::endl;
-            std::cout << "taffine: " << taffine.translation()<<endl<<", "<<taffine.rotation() << std::endl;
             
             loop_frame_idx_.push_back(frame_counter_);
             loop_poses_.push_back(taffine);
         }
-        if(loop_frame_idx_.size()>10)
-        {
-            flag_closed_ = true;
-        }
+        flag_closed_ = true;
     }
-    if(flag_closed_ == false )
+    if(flag_closed_ == false || loop_frame_idx_.size()<10)
     {
         ///////////////////////////////////////////////////////////////////////////////////////////
         // Volume integration

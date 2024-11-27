@@ -941,7 +941,7 @@ public:
         seg.setOptimizeCoefficients(true);
         seg.setModelType(pcl::SACMODEL_PLANE);  // 设置模型为平面
         seg.setMethodType(pcl::SAC_RANSAC);     // 使用RANSAC方法
-        seg.setDistanceThreshold(0.02);         // 设置内点阈值为2cm
+        seg.setDistanceThreshold(0.05);         // 设置内点阈值为2cm
         seg.segment(*inliers, *coefficients);
 
         // 检查是否找到地面平面
@@ -969,7 +969,7 @@ public:
                             std::sqrt(a * a + b * b + c * c);
                 
                 // 只保留平面上方的点
-                if (distance < -0.06)
+                if (distance < -0.045)
                 {
                     filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
                 }
@@ -981,7 +981,49 @@ public:
             
             // 更新点云
             cloud = filtered_cloud;
-
+            // 找到最小y值
+            float min_y = std::numeric_limits<float>::max();
+            float sum_x = 0, sum_z = 0;
+            int point_count = 0;
+            
+            for(const auto& point : filtered_cloud->points) {
+                if(point.y < min_y) {
+                    min_y = point.y;
+                }
+            }
+            for(const auto& point : filtered_cloud->points) {
+                if(point.y > min_y + 0.1) { // 只统计y值在min_y+10cm以上的点
+                    sum_x += point.x;
+                    sum_z += point.z;
+                    point_count++;
+                }
+            }
+            // 计算中心点坐标
+            float center_x = sum_x / point_count;
+            float center_z = sum_z / point_count;
+            
+            // 创建新的点云来存储过滤后的结果
+            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr circle_filtered(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+            
+            // 过滤掉y值小于min_y+10cm的点和距离中心30cm以外的点
+            for(const auto& point : filtered_cloud->points) {
+                { // y值需要大于min_y+10cm
+                    float dx = point.x - center_x;
+                    float dz = point.z - center_z;
+                    float distance = std::sqrt(dx*dx + dz*dz);
+                    
+                    if(distance <= 0.3 || point.y > min_y + 0.1) { // 距离中心30cm以内的点
+                        circle_filtered->points.push_back(point);
+                    }
+                }
+            }
+            
+            circle_filtered->width = circle_filtered->points.size();
+            circle_filtered->height = 1;
+            circle_filtered->is_dense = false;
+            
+            // 更新点云
+            cloud = circle_filtered;
             // 保存去除地平面后的点云
             pcl::io::savePLYFile("./results/no_ground.ply", *cloud);
         }
@@ -1078,9 +1120,9 @@ public:
         }
         // step 4. measure the body
         Json::Value jmeasure, jmeasure_add;
-        string body_file = "./results/body_measure.ply";
-        bm.loadMeasureBody("./results/body_measure.ply");
-        rt["body_model"] = (readFileIntoString("./results/body_measure.ply").c_str());
+        string body_file = "./results/deformed_rbody.ply";
+        bm.loadMeasureBody("./results/deformed_rbody.ply");
+        rt["body_model"] = (readFileIntoString("./results/deformed_rbody.ply").c_str());
         // bm.loadMeasureBody_pcl("./results/scan.ply", body_file.c_str(), "./results/corres_idxes.mat");
         // load the config file
         Json::Value jval;
