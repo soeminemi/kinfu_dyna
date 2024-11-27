@@ -288,9 +288,20 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     float last_angle = 0;
     Affine3f last_affine;
     bool flag_integrate = false;
+    // 对affine进行卡尔曼滤波处理
+    static cv::Mat Pk = cv::Mat::eye(6, 6, CV_32F) * 1000;  // 初始协方差矩阵
+    static cv::Mat Qk = cv::Mat::eye(6, 6, CV_32F) * 0.1;   // 过程噪声
+    static cv::Mat Rk = cv::Mat::eye(6, 6, CV_32F) * 0.1;   // 测量噪声
+    static cv::Mat xk = cv::Mat::zeros(6, 1, CV_32F);       // 状态向量 [x,y,z,rx,ry,rz]
     //can't perform more on first frame
     if (frame_counter_ == 0)
     {
+        // 对affine进行卡尔曼滤波处理
+        // 使用OpenCV初始化卡尔曼滤波器的状态
+        cv::Mat Pk = cv::Mat::eye(6, 6, CV_32F) * 1000;  // 初始协方差矩阵
+        cv::Mat Qk = cv::Mat::eye(6, 6, CV_32F) * 0.1;   // 过程噪声
+        cv::Mat Rk = cv::Mat::eye(6, 6, CV_32F) * 0.1;   // 测量噪声
+        cv::Mat xk = cv::Mat::zeros(6, 1, CV_32F);       // 状态向量 [x,y,z,rx,ry,rz]
         cout<<"first frame, try to integrate"<<endl;
         cuda::depthBilateralFilter(depth, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
         if (p.icp_truncate_depth_dist > 0)
@@ -355,6 +366,84 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             return reset(), false;
         }
     }
+    
+    std::cout << "Before Kalman Filtering, Affine变换矩阵:" << affine.rotation() << std::endl;
+    std::cout << "Before Kalman Filtering, 平移向量:" << affine.translation() << std::endl;
+    cv::Vec3f t = cv::Vec3f(affine.translation()[0], affine.translation()[1], affine.translation()[2]);
+    cv::Mat rot = cv::Mat(affine.rotation());
+    cv::Vec3f euler;
+    rot.convertTo(rot, CV_32F);
+    
+    // 定义rotationMatrixToEulerAngles函数
+    // 辅助函数
+    auto rotationMatrixToEulerAngles = [](cv::Mat &R) -> cv::Vec3f {
+        float sy = sqrt(R.at<float>(0,0) * R.at<float>(0,0) +  R.at<float>(1,0) * R.at<float>(1,0) );
+        bool singular = sy < 1e-6;
+        float x, y, z;
+        if (!singular)
+        {
+            x = atan2(R.at<float>(2,1) , R.at<float>(2,2));
+            y = atan2(-R.at<float>(2,0), sy);
+            z = atan2(R.at<float>(1,0), R.at<float>(0,0));
+        }
+        else
+        {
+            x = atan2(-R.at<float>(1,2), R.at<float>(1,1));
+            y = atan2(-R.at<float>(2,0), sy);
+            z = 0;
+        }
+        return cv::Vec3f(x, y, z);
+    };
+    
+    auto eulerAnglesToRotationMatrix = [](cv::Vec3f &theta) -> cv::Mat {
+        cv::Mat R_x = (cv::Mat_<float>(3,3) <<
+                       1,       0,              0,
+                       0,       cos(theta[0]),   -sin(theta[0]),
+                       0,       sin(theta[0]),   cos(theta[0])
+                       );
+        cv::Mat R_y = (cv::Mat_<float>(3,3) <<
+                       cos(theta[1]),    0,      sin(theta[1]),
+                       0,               1,      0,
+                       -sin(theta[1]),   0,      cos(theta[1])
+                       );
+        cv::Mat R_z = (cv::Mat_<float>(3,3) <<
+                       cos(theta[2]),    -sin(theta[2]),      0,
+                       sin(theta[2]),    cos(theta[2]),       0,
+                       0,               0,                  1);
+        cv::Mat R = R_z * R_y * R_x;
+        return R;
+    };
+    
+    euler = rotationMatrixToEulerAngles(rot);
+    
+    // 测量向量
+    cv::Mat z = (cv::Mat_<float>(6,1) << t[0], t[1], t[2], euler[0], euler[1], euler[2]);
+    
+    // 预测步骤
+    cv::Mat F = cv::Mat::eye(6, 6, CV_32F); // 状态转移矩阵
+    xk = F * xk;  // 预测状态
+    Pk = F * Pk * F.t() + Qk;  // 预测协方差
+    
+    // 更新步骤
+    cv::Mat H = cv::Mat::eye(6, 6, CV_32F); // 观测矩阵
+    cv::Mat S = H * Pk * H.t() + Rk;
+    cv::Mat K = Pk * H.t() * S.inv(); // 卡尔曼增益
+    
+    xk = xk + K * (z - H * xk);  // 更新状态
+    Pk = (cv::Mat::eye(6, 6, CV_32F) - K * H) * Pk;  // 更新协方差
+    
+    // 将滤波后的结果转换回Affine3f
+    cv::Vec3f filtered_t(xk.at<float>(0), xk.at<float>(1), xk.at<float>(2));
+    cv::Vec3f filtered_euler_angles(xk.at<float>(3), xk.at<float>(4), xk.at<float>(5));
+    cv::Mat filtered_rot = eulerAnglesToRotationMatrix(filtered_euler_angles);
+    
+    cv::Matx33f rotMat;
+    filtered_rot.copyTo(rotMat);
+    affine = Affine3f(rotMat, filtered_t);
+    
+    std::cout << "After Kalman Filtering, Affine变换矩阵:" << affine.rotation() << std::endl;
+    std::cout << "After Kalman Filtering, 平移向量:" << affine.translation() << std::endl;
+    
     cout<<"try to push back pose"<<endl;
     poses_.push_back(poses_.back() * affine); // curr -> global， affine pre->curr
     // 将旋转矩阵转换为欧拉角(弧度)

@@ -969,7 +969,7 @@ public:
                             std::sqrt(a * a + b * b + c * c);
                 
                 // 只保留平面上方的点
-                if (distance < -0.05)
+                if (distance < -0.06)
                 {
                     filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
                 }
