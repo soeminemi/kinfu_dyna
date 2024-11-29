@@ -598,6 +598,23 @@ void kfusion::KinFu::loopClosureOptimize(
             }
         }
     };
+    std::ofstream ply_file1("poses_and_circle1.ply");
+    ply_file1 << "ply\n";
+    ply_file1 << "format ascii 1.0\n";
+    ply_file1 << "element vertex " << (frame_count) << "\n";
+    ply_file1 << "property float x\n";
+    ply_file1 << "property float y\n";
+    ply_file1 << "property float z\n";
+    ply_file1 << "property uchar red\n";
+    ply_file1 << "property uchar green\n";
+    ply_file1 << "property uchar blue\n";
+    ply_file1 << "end_header\n";
+    for(int i = 0; i < frame_count; i++) {
+        cv::Vec3f p = poses[i].translation();
+        ply_file1 << p[0] << " " << p[1] << " " << p[2] << " 255 255 0\n";
+    }
+    
+    ply_file1.close();
     // 创建优化器
     g2o::SparseOptimizer optimizer;
     
@@ -688,40 +705,35 @@ void kfusion::KinFu::loopClosureOptimize(
         loop_edge->setInformation(loop_information);
         optimizer.addEdge(loop_edge);
     }
-
-    // 添加圆周运动约束
-    CircularMotionConstraint motion_constraint;
-    motion_constraint.estimateFromTrajectory(poses);  // 从轨迹估计圆心和半径
-    
-    std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
-    std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
-    double sum_error = 0;
-    for(int i = 0; i < frame_count; i++) {
-        cv::Vec3f p = poses[i].translation();
-        cv::Vec3f center = motion_constraint.getCenter();
-        double dist = cv::norm(p - center);
-        double error = std::abs(dist - motion_constraint.getRadius());
-        sum_error += error;
-    }
-    double mean_error = sum_error / frame_count;
-    std::cout << "Mean error of camera poses to circle center: " << mean_error << std::endl;
-
+    // // //添加圆周运动约束
+    // CircularMotionConstraint motion_constraint;
+    // motion_constraint.estimateFromTrajectory(poses);
+    // // 从轨迹估计圆心和半径
+    // std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
+    // std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
+    // double sum_error = 0;
+    // for(int i = 0; i < frame_count; i++) {
+    //     cv::Vec3f p = poses[i].translation();
+    //     cv::Vec3f center = motion_constraint.getCenter();
+    //     double dist = cv::norm(p - center);
+    //     double error = std::abs(dist - motion_constraint.getRadius());
+    //     sum_error += error;
+    // }
+    // double mean_error = sum_error / frame_count;
+    // std::cout << "Mean error of camera poses to circle center: " << mean_error << std::endl;
     // // 为相邻帧添加圆周运动约束
-    for(int i = 0; i < frame_count-1; i++) {
-        g2o::EdgeCircularMotion* circular_edge = new g2o::EdgeCircularMotion();
-        circular_edge->setVertex(0, optimizer.vertex(i));
-        circular_edge->setVertex(1, optimizer.vertex(i+1));
-        circular_edge->setMeasurement(motion_constraint);
-        
-        // 设置信息矩阵（约束权重）
-        Eigen::Matrix3d information = Eigen::Matrix3d::Identity();
-        information(0,0) = information(1,1) = 100.0;  // 距离约束权重
-        information(2,2) = 0.0;                      // 切向约束权重
-        circular_edge->setInformation(information);
-        
-        optimizer.addEdge(circular_edge);
-    }
-    
+    // for(int i = 0; i < frame_count-1; i++) {
+    //     g2o::EdgeCircularMotion* circular_edge = new g2o::EdgeCircularMotion();
+    //     circular_edge->setVertex(0, optimizer.vertex(i));
+    //     circular_edge->setVertex(1, optimizer.vertex(i+1));
+    //     circular_edge->setMeasurement(motion_constraint);
+    //     // 设置信息矩阵（约束权重）
+    //     Eigen::Matrix3d information = Eigen::Matrix3d::Identity();
+    //     information(0,0) = information(1,1) = 100.0;  // 距离约束权重
+    //     information(2,2) = 0.0;  // 切向约束权重
+    //     circular_edge->setInformation(information);
+    //     optimizer.addEdge(circular_edge);
+    // }
     // 执行优化
     cout<<"start optimization g2o"<<endl;
     optimizer.initializeOptimization();
@@ -745,7 +757,7 @@ void kfusion::KinFu::loopClosureOptimize(
         R.convertTo(R, CV_32F);
         if(i==frame_count-1)
             cout<<"origin pose: "<<poses[i].translation()<<", "<<poses[i].rotation()<<endl;
-        poses[i] = Affine3f(R, cv::Vec3f(
+            poses[i] = Affine3f(R, cv::Vec3f(
             pose.translation().x(),
             pose.translation().y(),
             pose.translation().z()
@@ -754,13 +766,144 @@ void kfusion::KinFu::loopClosureOptimize(
             cout<<"optimized pose: "<<poses[i].translation()<<", "<<poses[i].rotation()<<endl;
         // cout<<"--------------------------------"<<endl;
     }
-<<<<<<< HEAD
-    std::cout << "最终相机位姿:" << std::endl;
-    for(int i =  poses_.size()-1; i < poses_.size(); i++) {
-        std::cout << "位姿 " << i << ": " 
-                 << "平移=" << poses_[i].translation() <<endl
-                 << ", 旋转=" << poses_[i].rotation() << std::endl;
+    
+
+    optimizer.clear();
+    // 添加g2o顶点
+    for(int i = 0; i < frame_count; i++) {
+         g2o::VertexSE3* v = new g2o::VertexSE3();
+        v->setId(i);
+        
+        // 设置顶点初始估计值
+        Eigen::Isometry3d pose;
+        cv::Mat R;
+        cv::Mat(poses[i].rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        
+        cv2eigen(R, rotation);
+        pose.linear() = rotation;
+        pose.translation() = Eigen::Vector3d(
+            poses[i].translation()[0],
+            poses[i].translation()[1], 
+            poses[i].translation()[2]);
+        
+        v->setEstimate(pose);
+        
+        // 第一帧固定
+        if(i == 0)
+            v->setFixed(true);
+            
+        optimizer.addVertex(v);
     }
+    // 添加帧间约束边
+    for(int i = 1; i < frame_count; i++) {
+        g2o::EdgeSE3* edge = new g2o::EdgeSE3();
+        edge->setId(i);
+        edge->setVertex(0, optimizer.vertex(i-1));
+        edge->setVertex(1, optimizer.vertex(i));
+        
+        // 计算相对位姿约束
+        Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
+        cv::Mat R;
+        cv::Mat((poses[i-1].inv() * poses[i]).rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        cv2eigen(R, rotation);
+        relative_pose.linear() = rotation;
+        auto t = (poses[i-1].inv() * poses[i]).translation();
+        relative_pose.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
+        edge->setMeasurement(relative_pose);
+        // 设置信息矩阵
+        // 计算边的长度(相对位移的模长)作为权重
+        double edge_length = cv::norm(cv::Vec3f(t[0], t[1], t[2]));
+        Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Identity() ;//* edge_length;
+        edge->setInformation(information);
+        optimizer.addEdge(edge);
+    }
+
+    // 添加闭环约束边
+    for(int i=0; i<loop_frame_idx.size(); i++)
+    {
+        g2o::EdgeSE3* loop_edge = new g2o::EdgeSE3();
+        loop_edge->setVertex(0, optimizer.vertex(0));
+        loop_edge->setVertex(1, optimizer.vertex(loop_frame_idx[i])); //添加从初始帧到闭环帧的边
+        // 计算闭环约束
+        Eigen::Isometry3d loop_constraint = Eigen::Isometry3d::Identity();
+        cv::Mat R;
+        cv::Mat(( loop_poses[i]).rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        cv2eigen(R, rotation);
+        loop_constraint.linear() = rotation;
+        auto t = ( loop_poses[i]).translation();
+        loop_constraint.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
+    
+        loop_edge->setMeasurement(loop_constraint);
+    
+        // 设置闭环约束的信息矩阵(权重更大)
+        Eigen::Matrix<double,6,6> loop_information = Eigen::Matrix<double,6,6>::Identity() * 0.1;
+        loop_edge->setInformation(loop_information);
+        optimizer.addEdge(loop_edge);
+    }
+    // 添加圆周运动约束
+    CircularMotionConstraint motion_constraint;
+    motion_constraint.estimateFromTrajectory(poses);
+    // 从轨迹估计圆心和半径
+    std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
+    std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
+    double sum_error = 0;
+    for(int i = 0; i < frame_count; i++) {
+        cv::Vec3f p = poses[i].translation();
+        cv::Vec3f center = motion_constraint.getCenter();
+        double dist = cv::norm(p - center);
+        double error = std::abs(dist - motion_constraint.getRadius());
+        sum_error += error;
+    }
+    double mean_error = sum_error / frame_count;
+    std::cout << "Mean error of camera poses to circle center: " << mean_error << std::endl;
+    // 为相邻帧添加圆周运动约束
+    for(int i = 0; i < frame_count-1; i++) {
+        g2o::EdgeCircularMotion* circular_edge = new g2o::EdgeCircularMotion();
+        circular_edge->setVertex(0, optimizer.vertex(i));
+        circular_edge->setVertex(1, optimizer.vertex(i+1));
+        circular_edge->setMeasurement(motion_constraint);
+        // 设置信息矩阵（约束权重）
+        Eigen::Matrix3d information = Eigen::Matrix3d::Identity();
+        information(0,0) = information(1,1) = 100.0;  // 距离约束权重
+        information(2,2) = 0.0;  // 切向约束权重
+        circular_edge->setInformation(information);
+        optimizer.addEdge(circular_edge);
+    }
+    // 执行优化
+    cout<<"start optimization g2o circular motion"<<endl;
+    optimizer.initializeOptimization();
+    iterations = optimizer.optimize(30);
+    cout<<"end optimization g2o circular motion"<<endl;
+    // 输出优化相关信息
+    chi2 = optimizer.chi2();
+    std::cout << "优化信息:" << std::endl;
+    std::cout << "- 优化迭代次数: " << iterations << std::endl;
+    std::cout << "- 最终误差值: " << chi2 << std::endl;
+    std::cout << "- 边的数量: " << optimizer.edges().size() << std::endl;
+    std::cout << "- 顶点的数量: " << optimizer.vertices().size() << std::endl;
+    // 获取优化结果更新poses
+    for(int i = 0; i < frame_count; i++) {
+        g2o::VertexSE3* v = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
+        Eigen::Isometry3d pose = v->estimate();
+        
+        cv::Mat R;
+        Eigen::Matrix3d rotation = pose.rotation();
+        eigen2cv(rotation, R);
+        R.convertTo(R, CV_32F);
+        poses[i] = Affine3f(R, cv::Vec3f(
+            pose.translation().x(),
+            pose.translation().y(),
+            pose.translation().z()
+        ));
+    }
+    CircularMotionConstraint motion_constraint1;
+    motion_constraint1.estimateFromTrajectory(poses);
+    // 从轨迹估计圆心和半径
+    std::cout << "After circular motion Estimated circle center: " << motion_constraint1.getCenter() << std::endl;
+    std::cout << "After circular motion Estimated circle radius: " << motion_constraint1.getRadius() << std::endl;
     // 计算优化后半径偏离的平均值
     double sum_deviation = 0;
     for(int i = 0; i < frame_count; i++) {
@@ -772,9 +915,39 @@ void kfusion::KinFu::loopClosureOptimize(
     }
     double mean_deviation = sum_deviation / frame_count;
     std::cout << "Mean deviation of optimized camera poses to circle radius: " << mean_deviation << std::endl;
+    // 保存相机位姿及圆周的点到ply文件中
+    // 将相机圆周运动的拟合圆周离散化
+    std::vector<cv::Vec3f> points;
+    double radius = motion_constraint1.getRadius();
+    cv::Vec3f center = motion_constraint1.getCenter();
+    int num_points = 200;
+    double step = 2 * 3.14159 / num_points;
+    for(int i = 0; i < num_points; i++) {
+        double theta = i * step;
+        cv::Vec3f p;
+        p[0] = center[0] + radius * cos(theta);
+        p[1] = center[1] + radius * sin(theta);
+        p[2] = center[2];
+        points.push_back(p);
+    }
 
-=======
->>>>>>> 424969070c75475525dcab43ed5ded701e45566a
+    std::ofstream ply_file("poses_and_circle_2.ply");
+    ply_file << "ply\n";
+    ply_file << "format ascii 1.0\n";
+    ply_file << "element vertex " << (frame_count) << "\n";
+    ply_file << "property float x\n";
+    ply_file << "property float y\n";
+    ply_file << "property float z\n";
+    ply_file << "property uchar red\n";
+    ply_file << "property uchar green\n";
+    ply_file << "property uchar blue\n";
+    ply_file << "end_header\n";
+    for(int i = 0; i < frame_count; i++) {
+        cv::Vec3f p = poses[i].translation();
+        ply_file << p[0] << " " << p[1] << " " << p[2] << " 0 0 255\n";
+    }
+    
+    ply_file.close();
     // 使用新的poses重新计算TSDF体素
     cv::Mat view_host_;
     cuda::Image view_device_;
@@ -800,7 +973,7 @@ void kfusion::KinFu::loopClosureOptimize(
         { 
             volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
-                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+            resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
             cuda::waitAllDefaultStream();
             // 在当前相机视角下进行raycast
             renderImage(view_device_, 0);
@@ -842,7 +1015,7 @@ void kfusion::KinFu::loopClosureOptimize(
         {
             volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
-            resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
             cuda::waitAllDefaultStream();
             //重新估算pose
             Affine3f affine;
