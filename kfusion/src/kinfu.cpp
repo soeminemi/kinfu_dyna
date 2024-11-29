@@ -18,6 +18,8 @@
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/io/ply_io.h>
+#include "kfusion/circular_motion_constraint.hpp"
+#include "kfusion/edge_circular_motion.hpp"
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
@@ -474,7 +476,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             
             // 转换为角度并输出
             std::cout << "taffine旋转角度(度): roll=" << t_euler[0]*180/M_PI 
-                    << ", pitch=" << t_euler[1]*180/M_PI 
+                    << ", pitch=" << t_euler[1]*180/M_PI
                     << ", yaw=" << t_euler[2]*180/M_PI << std::endl;
             
             loop_frame_idx_.push_back(frame_counter_);
@@ -654,7 +656,7 @@ void kfusion::KinFu::loopClosureOptimize(
         
         // 设置信息矩阵
         // 计算边的长度(相对位移的模长)作为权重
-        double edge_length = relative_pose.translation().norm();
+        double edge_length = cv::norm(cv::Vec3f(t[0], t[1], t[2]));
         Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Identity() ;//* edge_length;
         edge->setInformation(information);
         
@@ -686,6 +688,39 @@ void kfusion::KinFu::loopClosureOptimize(
         optimizer.addEdge(loop_edge);
     }
 
+    // 添加圆周运动约束
+    CircularMotionConstraint motion_constraint;
+    motion_constraint.estimateFromTrajectory(poses);  // 从轨迹估计圆心和半径
+    
+    std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
+    std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
+    double sum_error = 0;
+    for(int i = 0; i < frame_count; i++) {
+        cv::Vec3f p = poses[i].translation();
+        cv::Vec3f center = motion_constraint.getCenter();
+        double dist = cv::norm(p - center);
+        double error = std::abs(dist - motion_constraint.getRadius());
+        sum_error += error;
+    }
+    double mean_error = sum_error / frame_count;
+    std::cout << "Mean error of camera poses to circle center: " << mean_error << std::endl;
+
+    // // 为相邻帧添加圆周运动约束
+    for(int i = 0; i < frame_count-1; i++) {
+        g2o::EdgeCircularMotion* circular_edge = new g2o::EdgeCircularMotion();
+        circular_edge->setVertex(0, optimizer.vertex(i));
+        circular_edge->setVertex(1, optimizer.vertex(i+1));
+        circular_edge->setMeasurement(motion_constraint);
+        
+        // 设置信息矩阵（约束权重）
+        Eigen::Matrix3d information = Eigen::Matrix3d::Identity();
+        information(0,0) = information(1,1) = 100.0;  // 距离约束权重
+        information(2,2) = 0.0;                      // 切向约束权重
+        circular_edge->setInformation(information);
+        
+        optimizer.addEdge(circular_edge);
+    }
+    
     // 执行优化
     cout<<"start optimization g2o"<<endl;
     optimizer.initializeOptimization();
@@ -709,7 +744,7 @@ void kfusion::KinFu::loopClosureOptimize(
         R.convertTo(R, CV_32F);
         if(i==frame_count-1)
             cout<<"origin pose: "<<poses[i].translation()<<", "<<poses[i].rotation()<<endl;
-        poses[i] = Affine3f(R, Vec3f(
+        poses[i] = Affine3f(R, cv::Vec3f(
             pose.translation().x(),
             pose.translation().y(),
             pose.translation().z()
@@ -724,6 +759,18 @@ void kfusion::KinFu::loopClosureOptimize(
                  << "平移=" << poses_[i].translation() <<endl
                  << ", 旋转=" << poses_[i].rotation() << std::endl;
     }
+    // 计算优化后半径偏离的平均值
+    double sum_deviation = 0;
+    for(int i = 0; i < frame_count; i++) {
+        cv::Vec3f p = poses[i].translation();
+        cv::Vec3f center = motion_constraint.getCenter();
+        double dist = cv::norm(p - center);
+        double deviation = std::abs(dist - motion_constraint.getRadius());
+        sum_deviation += deviation;
+    }
+    double mean_deviation = sum_deviation / frame_count;
+    std::cout << "Mean deviation of optimized camera poses to circle radius: " << mean_deviation << std::endl;
+
     // 使用新的poses重新计算TSDF体素
     cv::Mat view_host_;
     cuda::Image view_device_;
@@ -1342,5 +1389,3 @@ void kfusion::KinFu::renderImage(cuda::Image& image, const Affine3f& pose, int f
 //        return Eigen::Vector3d(rx, ry, rz).cast<float>();
 //    }
 //}
-
-
