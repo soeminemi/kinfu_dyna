@@ -298,10 +298,11 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     {
         // 对affine进行卡尔曼滤波处理
         // 使用OpenCV初始化卡尔曼滤波器的状态
-        cv::Mat Pk = cv::Mat::eye(6, 6, CV_32F) * 1000;  // 初始协方差矩阵
-        cv::Mat Qk = cv::Mat::eye(6, 6, CV_32F) * 0.1;   // 过程噪声
-        cv::Mat Rk = cv::Mat::eye(6, 6, CV_32F) * 0.1;   // 测量噪声
+        cv::Mat Pk = cv::Mat::eye(6, 6, CV_32F) * 10;  // 初始协方差矩阵, 
+        cv::Mat Qk = cv::Mat::eye(6, 6, CV_32F) * 0.01;   // 过程噪声协方差矩阵 - 较小的值使预测更平滑
+        cv::Mat Rk = cv::Mat::eye(6, 6, CV_32F) * 0.01;   // 测量噪声
         cv::Mat xk = cv::Mat::zeros(6, 1, CV_32F);       // 状态向量 [x,y,z,rx,ry,rz]
+      
         cout<<"first frame, try to integrate"<<endl;
         cuda::depthBilateralFilter(depth, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
         if (p.icp_truncate_depth_dist > 0)
@@ -348,7 +349,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         // toPlyVec3(init_nodes, init_nodes, "init_nodes.ply");
         return ++frame_counter_, true;
     }
-    if(flag_closed_)
+    if(flag_closed_ && loop_frame_idx_.size() >=10)
     {
         return ++frame_counter_, true;
     }
@@ -718,12 +719,6 @@ void kfusion::KinFu::loopClosureOptimize(
             cout<<"optimized pose: "<<poses[i].translation()<<", "<<poses[i].rotation()<<endl;
         // cout<<"--------------------------------"<<endl;
     }
-    std::cout << "最终相机位姿:" << std::endl;
-    for(int i =  poses_.size()-1; i < poses_.size(); i++) {
-        std::cout << "位姿 " << i << ": " 
-                 << "平移=" << poses_[i].translation() <<endl
-                 << ", 旋转=" << poses_[i].rotation() << std::endl;
-    }
     // 使用新的poses重新计算TSDF体素
     cv::Mat view_host_;
     cuda::Image view_device_;
@@ -738,9 +733,9 @@ void kfusion::KinFu::loopClosureOptimize(
     for(int i=0; i<frame_count; i++)
     {
         // 稀疏帧合成作为锚点，再次基础上进行闭环优化
-        int j=i%40;
-        if(j>3)
-            continue;
+        // int j=i%40;
+        // if(j>3)
+        //     continue;
         auto &depth = depth_imgs_[i];
         depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
@@ -797,13 +792,14 @@ void kfusion::KinFu::loopClosureOptimize(
             Affine3f affine;
             bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
             poses[i] = poses[i] * affine;
+          
         }
         
         // if(i<frame_count-2)
         // {
         //     poses[i+1] = poses[i+1] * affine;//更新下一帧的pose
         // }
-        if(i==loop_frame_idx[0])
+        if(i==poses.size()-1)
         {
             //输出闭环前后的偏差
             Affine3f taffine;

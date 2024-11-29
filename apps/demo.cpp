@@ -50,7 +50,7 @@
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
-bool flag_show_image = false;
+bool flag_show_image = true;
 static const std::string base64_chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
@@ -939,9 +939,15 @@ public:
         // 配置RANSAC参数
         seg.setInputCloud(cloud);
         seg.setOptimizeCoefficients(true);
-        seg.setModelType(pcl::SACMODEL_PLANE);  // 设置模型为平面
+        seg.setModelType(pcl::SACMODEL_PERPENDICULAR_PLANE);  // 设置模型为垂直平面
         seg.setMethodType(pcl::SAC_RANSAC);     // 使用RANSAC方法
-        seg.setDistanceThreshold(0.05);         // 设置内点阈值为2cm
+        seg.setDistanceThreshold(0.05);         // 设置内点阈值为5cm
+        
+        // 设置平面法向约束,使其接近y轴方向
+        Eigen::Vector3f axis = Eigen::Vector3f(0.0, 1.0, 0.0);
+        seg.setAxis(axis);
+        seg.setEpsAngle(30.0f * (M_PI/180.0f)); // 允许30度的偏差
+        
         seg.segment(*inliers, *coefficients);
 
         // 检查是否找到地面平面
@@ -1120,9 +1126,18 @@ public:
         }
         // step 4. measure the body
         Json::Value jmeasure, jmeasure_add;
-        string body_file = "./results/deformed_rbody.ply";
-        bm.loadMeasureBody("./results/deformed_rbody.ply");
-        rt["body_model"] = (readFileIntoString("./results/deformed_rbody.ply").c_str());
+        if(measure_type == "tieshen")
+        {
+            string body_file = "./results/deformed_rbody.ply";
+            bm.loadMeasureBody("./results/deformed_rbody.ply");
+            rt["body_model"] = (readFileIntoString("./results/deformed_rbody.ply").c_str());
+        }
+        else
+        {
+            string body_file = "./results/rbody.ply";
+            bm.loadMeasureBody("./results/rbody.ply");
+            rt["body_model"] = (readFileIntoString("./results/rbody.ply").c_str());
+        }
         // bm.loadMeasureBody_pcl("./results/scan.ply", body_file.c_str(), "./results/corres_idxes.mat");
         // load the config file
         Json::Value jval;
