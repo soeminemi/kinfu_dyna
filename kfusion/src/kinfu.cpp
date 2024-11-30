@@ -1074,60 +1074,61 @@ void kfusion::KinFu::loopClosureOptimize(
         }
     }
     // // 每30帧获取一次点云并转换到世界坐标系
-    // std::vector<pcl::PointXYZRGB> all_points;
-    // for(int i = 0; i < frame_count; i += 30) {
-    //     // 生成随机颜色
-    //     uint8_t r = rand() % 256;
-    //     uint8_t g = rand() % 256; 
-    //     uint8_t b = rand() % 256;
+    std::vector<pcl::PointXYZRGB> all_points;
+    for(int i = 0; i < frame_count; i += 30) {
+        // 生成随机颜色
+        uint8_t r = rand() % 256;
+        uint8_t g = rand() % 256; 
+        uint8_t b = rand() % 256;
 
-    //     cv::Mat depth = depth_imgs_[i];
+        cv::Mat depth = depth_imgs_[i];
         
-    //     // 遍历深度图的每个像素
-    //     for(int y = 0; y < depth.rows; y++) {
-    //         for(int x = 0; x < depth.cols; x++) {
-    //             float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
-    //             if(z > 0) {
-    //                 // 反投影到相机坐标系
-    //                 float x_cam = (x - p.intr.cx) * z / p.intr.fx;
-    //                 float y_cam = (y - p.intr.cy) * z / p.intr.fy;
+        Affine3f real_pose = params_.volume_pose * poses[i];
+        // 遍历深度图的每个像素
+        for(int y = 0; y < depth.rows; y++) {
+            for(int x = 0; x < depth.cols; x++) {
+                float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
+                if(z > 0) {
+                    // 反投影到相机坐标系
+                    float x_cam = (x - p.intr.cx) * z / p.intr.fx;
+                    float y_cam = (y - p.intr.cy) * z / p.intr.fy;
                     
-    //                 // 转换到世界坐标系
-    //                 cv::Mat pt_cam = (cv::Mat_<float>(4,1) << x_cam, y_cam, z, 1);
-    //                 cv::Mat pt_world = cv::Mat::zeros(4, 4, CV_32F);
-    //                 // 将pt_world的左上3x3赋值为旋转矩阵
-    //                 auto rot = poses[i].rotation();
-    //                 for(int r = 0; r < 3; r++) {
-    //                     for(int c = 0; c < 3; c++) {
-    //                         pt_world.at<float>(r,c) = rot(r,c);
-    //                     }
-    //                 }
+                    // 转换到世界坐标系
+                    cv::Mat pt_cam = (cv::Mat_<float>(4,1) << x_cam, y_cam, z, 1);
+                    cv::Mat pt_world = cv::Mat::zeros(4, 4, CV_32F);
+                    // 将pt_world的左上3x3赋值为旋转矩阵
+                    auto rot = real_pose.rotation();
+                    for(int r = 0; r < 3; r++) {
+                        for(int c = 0; c < 3; c++) {
+                            pt_world.at<float>(r,c) = rot(r,c);
+                        }
+                    }
                     
-    //                 // 将pt_world的右上3x1赋值为平移向量
-    //                 pt_world(cv::Rect(3, 0, 1, 3)) = poses[i].translation();
-    //                 cv::Mat pt_wd = pt_world * pt_cam;
-    //                 // 添加到点云
-    //                 pcl::PointXYZRGB point;
-    //                 point.x = pt_wd.at<float>(0);
-    //                 point.y = pt_wd.at<float>(1); 
-    //                 point.z = pt_wd.at<float>(2);
-    //                 point.r = r;
-    //                 point.g = g;
-    //                 point.b = b;
-    //                 all_points.push_back(point);
-    //             }
-    //         }
-    //     }
-    // }
+                    // 将pt_world的右上3x1赋值为平移向量
+                    pt_world(cv::Rect(3, 0, 1, 3)) = real_pose.translation();
+                    cv::Mat pt_wd = pt_world * pt_cam;
+                    // 添加到点云
+                    pcl::PointXYZRGB point;
+                    point.x = pt_wd.at<float>(0);
+                    point.y = pt_wd.at<float>(1); 
+                    point.z = pt_wd.at<float>(2);
+                    point.r = r;
+                    point.g = g;
+                    point.b = b;
+                    all_points.push_back(point);
+                }
+            }
+        }
+    }
 
-    // // 保存为PLY文件
-    // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-    // std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>> cloud_points;
-    // cloud_points = std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>>(all_points.begin(), all_points.end());
-    // cloud->points = cloud_points;
-    // cloud->width = all_points.size();
-    // cloud->height = 1;
-    // pcl::io::savePLYFile("world_points.ply", *cloud);
+    // 保存为PLY文件
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>> cloud_points;
+    cloud_points = std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>>(all_points.begin(), all_points.end());
+    cloud->points = cloud_points;
+    cloud->width = all_points.size();
+    cloud->height = 1;
+    pcl::io::savePLYFile("world_points.ply", *cloud);
     std::cout << "闭环优化完成,共处理 " << frame_count << " 帧" << std::endl;
     std::cout<<"图像总数量为: "<<depth_imgs_.size()<<"闭环重建帧数:"<<frame_count<<std::endl;
 }
