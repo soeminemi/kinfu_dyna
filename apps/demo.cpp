@@ -50,7 +50,7 @@
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
-bool flag_show_image = false;
+bool flag_show_image = true;
 static const std::string base64_chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
