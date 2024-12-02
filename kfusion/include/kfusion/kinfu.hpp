@@ -92,6 +92,7 @@ namespace kfusion
                                 std::vector<int> loop_frame_idx,
                                 std::vector<Affine3f> loop_poses);
         void loopClosureOptimize();
+        void loopPoseOptimization(std::vector<cv::Mat>& depth_imgs, std::vector<Affine3f>& poses);
         void append_depth_image(cv::Mat depth)
         {
             depth_imgs_.push_back(depth);
@@ -122,5 +123,7 @@ namespace kfusion
         std::vector<cv::Mat> depth_imgs_;
         int first_frame_idx_ = 10;
         float first_roll_angle_ ;
+        
+        Affine3f affine_prev_; 
     };
 }
