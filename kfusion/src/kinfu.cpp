@@ -377,78 +377,81 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         }
     }
     affine = affine * affine_prev_;
-    cv::Vec3f t = cv::Vec3f(affine.translation()[0], affine.translation()[1], affine.translation()[2]);
-    cv::Mat rot = cv::Mat(affine.rotation());
-    cv::Vec3f euler;
-    rot.convertTo(rot, CV_32F);
-    
-    // 定义rotationMatrixToEulerAngles函数
-    // 辅助函数
-    auto rotationMatrixToEulerAngles = [](cv::Mat &R) -> cv::Vec3f {
-        float sy = sqrt(R.at<float>(0,0) * R.at<float>(0,0) +  R.at<float>(1,0) * R.at<float>(1,0) );
-        bool singular = sy < 1e-6;
-        float x, y, z;
-        if (!singular)
-        {
-            x = atan2(R.at<float>(2,1) , R.at<float>(2,2));
-            y = atan2(-R.at<float>(2,0), sy);
-            z = atan2(R.at<float>(1,0), R.at<float>(0,0));
-        }
-        else
-        {
-            x = atan2(-R.at<float>(1,2), R.at<float>(1,1));
-            y = atan2(-R.at<float>(2,0), sy);
-            z = 0;
-        }
-        return cv::Vec3f(x, y, z);
-    };
-    
-    auto eulerAnglesToRotationMatrix = [](cv::Vec3f &theta) -> cv::Mat {
-        cv::Mat R_x = (cv::Mat_<float>(3,3) <<
-                       1,       0,              0,
-                       0,       cos(theta[0]),   -sin(theta[0]),
-                       0,       sin(theta[0]),   cos(theta[0])
-                       );
-        cv::Mat R_y = (cv::Mat_<float>(3,3) <<
-                       cos(theta[1]),    0,      sin(theta[1]),
-                       0,               1,      0,
-                       -sin(theta[1]),   0,      cos(theta[1])
-                       );
-        cv::Mat R_z = (cv::Mat_<float>(3,3) <<
-                       cos(theta[2]),    -sin(theta[2]),      0,
-                       sin(theta[2]),    cos(theta[2]),       0,
-                       0,               0,                  1);
-        cv::Mat R = R_z * R_y * R_x;
-        return R;
-    };
-    
-    euler = rotationMatrixToEulerAngles(rot);
-    
-    // 测量向量
-    cv::Mat z = (cv::Mat_<float>(6,1) << t[0], t[1], t[2], euler[0], euler[1], euler[2]);
-    
-    // 预测步骤
-    cv::Mat F = cv::Mat::eye(6, 6, CV_32F); // 状态转移矩阵
-    xk = F * xk;  // 预测状态
-    Pk = F * Pk * F.t() + Qk;  // 预测协方差
-    
-    // 更新步骤
-    cv::Mat H = cv::Mat::eye(6, 6, CV_32F); // 观测矩阵
-    cv::Mat S = H * Pk * H.t() + Rk;
-    cv::Mat K = Pk * H.t() * S.inv(); // 卡尔曼增益
-    
-    xk = xk + K * (z - H * xk);  // 更新状态
-    Pk = (cv::Mat::eye(6, 6, CV_32F) - K * H) * Pk;  // 更新协方差
-    
-    // 将滤波后的结果转换回Affine3f
-    cv::Vec3f filtered_t(xk.at<float>(0), xk.at<float>(1), xk.at<float>(2));
-    cv::Vec3f filtered_euler_angles(xk.at<float>(3), xk.at<float>(4), xk.at<float>(5));
-    cv::Mat filtered_rot = eulerAnglesToRotationMatrix(filtered_euler_angles);
-    
-    cv::Matx33f rotMat;
-    filtered_rot.copyTo(rotMat);
-    affine = Affine3f(rotMat, filtered_t);
-    std::cout << "xk:" << xk << std::endl;
+    // 是否进行kalman滤波
+    if(false){
+        cv::Vec3f t = cv::Vec3f(affine.translation()[0], affine.translation()[1], affine.translation()[2]);
+        cv::Mat rot = cv::Mat(affine.rotation());
+        cv::Vec3f euler;
+        rot.convertTo(rot, CV_32F);
+        
+        // 定义rotationMatrixToEulerAngles函数
+        // 辅助函数
+        auto rotationMatrixToEulerAngles = [](cv::Mat &R) -> cv::Vec3f {
+            float sy = sqrt(R.at<float>(0,0) * R.at<float>(0,0) +  R.at<float>(1,0) * R.at<float>(1,0) );
+            bool singular = sy < 1e-6;
+            float x, y, z;
+            if (!singular)
+            {
+                x = atan2(R.at<float>(2,1) , R.at<float>(2,2));
+                y = atan2(-R.at<float>(2,0), sy);
+                z = atan2(R.at<float>(1,0), R.at<float>(0,0));
+            }
+            else
+            {
+                x = atan2(-R.at<float>(1,2), R.at<float>(1,1));
+                y = atan2(-R.at<float>(2,0), sy);
+                z = 0;
+            }
+            return cv::Vec3f(x, y, z);
+        };
+        
+        auto eulerAnglesToRotationMatrix = [](cv::Vec3f &theta) -> cv::Mat {
+            cv::Mat R_x = (cv::Mat_<float>(3,3) <<
+                        1,       0,              0,
+                        0,       cos(theta[0]),   -sin(theta[0]),
+                        0,       sin(theta[0]),   cos(theta[0])
+                        );
+            cv::Mat R_y = (cv::Mat_<float>(3,3) <<
+                        cos(theta[1]),    0,      sin(theta[1]),
+                        0,               1,      0,
+                        -sin(theta[1]),   0,      cos(theta[1])
+                        );
+            cv::Mat R_z = (cv::Mat_<float>(3,3) <<
+                        cos(theta[2]),    -sin(theta[2]),      0,
+                        sin(theta[2]),    cos(theta[2]),       0,
+                        0,               0,                  1);
+            cv::Mat R = R_z * R_y * R_x;
+            return R;
+        };
+        
+        euler = rotationMatrixToEulerAngles(rot);
+        
+        // 测量向量
+        cv::Mat z = (cv::Mat_<float>(6,1) << t[0], t[1], t[2], euler[0], euler[1], euler[2]);
+        
+        // 预测步骤
+        cv::Mat F = cv::Mat::eye(6, 6, CV_32F); // 状态转移矩阵
+        xk = F * xk;  // 预测状态
+        Pk = F * Pk * F.t() + Qk;  // 预测协方差
+        
+        // 更新步骤
+        cv::Mat H = cv::Mat::eye(6, 6, CV_32F); // 观测矩阵
+        cv::Mat S = H * Pk * H.t() + Rk;
+        cv::Mat K = Pk * H.t() * S.inv(); // 卡尔曼增益
+        
+        xk = xk + K * (z - H * xk);  // 更新状态
+        Pk = (cv::Mat::eye(6, 6, CV_32F) - K * H) * Pk;  // 更新协方差
+        
+        // 将滤波后的结果转换回Affine3f
+        cv::Vec3f filtered_t(xk.at<float>(0), xk.at<float>(1), xk.at<float>(2));
+        cv::Vec3f filtered_euler_angles(xk.at<float>(3), xk.at<float>(4), xk.at<float>(5));
+        cv::Mat filtered_rot = eulerAnglesToRotationMatrix(filtered_euler_angles);
+        
+        cv::Matx33f rotMat;
+        filtered_rot.copyTo(rotMat);
+        affine = Affine3f(rotMat, filtered_t);
+        std::cout << "xk:" << xk << std::endl;
+    }
     affine_prev_ = affine;
     
     // std::cout << "After Kalman Filtering, Affine变换矩阵:" << affine.rotation() << std::endl;
@@ -464,12 +467,11 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     
     // 转换为角度并输出
     std::cout<<"当前帧号: "<<frame_counter_<<std::endl;
-    std::cout << "旋转角度(度): roll=" << euler_angles[0]*180/M_PI 
-              << ", pitch=" << euler_angles[1]*180/M_PI
-              << ", yaw=" << euler_angles[2]*180/M_PI << std::endl;
+    std::cout << "旋转角度(度): roll=" << euler_angles[0]*180/M_PI << std::endl;
+             
     float roll_angle = euler_angles[0]*180/M_PI;
    
-    if(fabs(roll_angle)<5 && frame_counter_>100 && loop_frame_idx_.size() == 0)
+    if(fabs(roll_angle)<15 && frame_counter_>100)
     {
         Affine3f taffine;
         // bool ok = icp_->estimateTransform(taffine, p.intr,curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
@@ -485,194 +487,195 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             t_euler[2] = atan2(tR.at<float>(1,0), tR.at<float>(0,0));
             
             // 转换为角度并输出
-            std::cout << "taffine旋转角度(度): roll=" << t_euler[0]*180/M_PI 
-                    << ", pitch=" << t_euler[1]*180/M_PI
-                    << ", yaw=" << t_euler[2]*180/M_PI << std::endl;
+            std::cout << "taffine旋转角度(度): roll=" << t_euler[0]*180/M_PI << std::endl;
             da = t_euler[0]*180/M_PI;
+            std::cout << "角度差:" << da-roll_angle << std::endl;
+            // 加入到闭环信息队列
             // loop_frame_idx_.push_back(frame_counter_);
             // loop_poses_.push_back(Affine3f::Identity());
         }
-        auto cur_image = depth_imgs_.back();
-        auto first_image = depth_imgs_[0];
-        pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr cur_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr first_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-        for(int y = 0; y < cur_image.rows; y++) {
-            for(int x = 0; x < cur_image.cols; x++) {
-                float z = cur_image.at<ushort>(y,x) * 0.001f;
-                if(z > 0 && z<2.5f) {
-                    pcl::PointXYZRGB point;
-                    point.x = (x - p.intr.cx) * z / p.intr.fx;
-                    point.y = (y - p.intr.cy) * z / p.intr.fy;
-                    if(point.x < -1.2f )
-                        continue;
-                    point.z = z;
-                    point.r = 0;
-                    point.g = 255;
-                    point.b = 0;
-                    cur_cloud->points.push_back(point);
-                }
-            }
-        }
-        for(int y = 0; y < first_image.rows; y++) {
-            for(int x = 0; x < first_image.cols; x++) {
-                float z = first_image.at<ushort>(y,x) * 0.001f;
-                if(z > 0 && z <2.5f) {
-                    pcl::PointXYZRGB point;
-                    point.x = (x - p.intr.cx) * z / p.intr.fx;
-                    if(point.x < -1.2f)
-                        continue;
-                    point.y = (y - p.intr.cy) * z / p.intr.fy;
-                    point.z = z;
-                    point.r = 255;
-                    point.g = 0;
-                    point.b = 0;
-                    first_cloud->points.push_back(point);
-                }
-            }
-        }
+
+        // auto cur_image = depth_imgs_.back();
+        // auto first_image = depth_imgs_[0];
+        // pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
+        // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cur_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        // pcl::PointCloud<pcl::PointXYZRGB>::Ptr first_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        // for(int y = 0; y < cur_image.rows; y++) {
+        //     for(int x = 0; x < cur_image.cols; x++) {
+        //         float z = cur_image.at<ushort>(y,x) * 0.001f;
+        //         if(z > 0 && z<2.5f) {
+        //             pcl::PointXYZRGB point;
+        //             point.x = (x - p.intr.cx) * z / p.intr.fx;
+        //             point.y = (y - p.intr.cy) * z / p.intr.fy;
+        //             if(point.x < -1.2f )
+        //                 continue;
+        //             point.z = z;
+        //             point.r = 0;
+        //             point.g = 255;
+        //             point.b = 0;
+        //             cur_cloud->points.push_back(point);
+        //         }
+        //     }
+        // }
+        // for(int y = 0; y < first_image.rows; y++) {
+        //     for(int x = 0; x < first_image.cols; x++) {
+        //         float z = first_image.at<ushort>(y,x) * 0.001f;
+        //         if(z > 0 && z <2.5f) {
+        //             pcl::PointXYZRGB point;
+        //             point.x = (x - p.intr.cx) * z / p.intr.fx;
+        //             if(point.x < -1.2f)
+        //                 continue;
+        //             point.y = (y - p.intr.cy) * z / p.intr.fy;
+        //             point.z = z;
+        //             point.r = 255;
+        //             point.g = 0;
+        //             point.b = 0;
+        //             first_cloud->points.push_back(point);
+        //         }
+        //     }
+        // }
        
-        // 将原来的ICP部分替换为：
-        pcl::GeneralizedIterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> gicp;
-        // 设置GICP参数
-        gicp.setMaxCorrespondenceDistance(0.05);  // 5cm，可以根据实际情况调整
-        gicp.setMaximumIterations(100);           // 最大迭代次数
-        gicp.setTransformationEpsilon(1e-8);      // 转换矩阵epsilon
-        gicp.setEuclideanFitnessEpsilon(0.01);       // 收敛条件
-        gicp.setRANSACIterations(15);             // RANSAC迭代次数，有助于处理异常值
+        // // 将原来的ICP部分替换为：
+        // pcl::GeneralizedIterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> gicp;
+        // // 设置GICP参数
+        // gicp.setMaxCorrespondenceDistance(0.05);  // 5cm，可以根据实际情况调整
+        // gicp.setMaximumIterations(100);           // 最大迭代次数
+        // gicp.setTransformationEpsilon(1e-8);      // 转换矩阵epsilon
+        // gicp.setEuclideanFitnessEpsilon(0.01);       // 收敛条件
+        // gicp.setRANSACIterations(15);             // RANSAC迭代次数，有助于处理异常值
         
-        // pcl::IterativeClosestPointNonLinear<pcl::PointXYZRGB, pcl::PointXYZRGB> gicp;
-        // gicp.setMaxCorrespondenceDistance(0.05);
-        // gicp.setMaximumIterations(50);          // 通常需要的迭代次数较少
-        // gicp.setTransformationEpsilon(1e-7);    // 可以设置稍大的阈值
-        // gicp.setEuclideanFitnessEpsilon(0.1);   // 可以设置稍大的阈值
+        // // pcl::IterativeClosestPointNonLinear<pcl::PointXYZRGB, pcl::PointXYZRGB> gicp;
+        // // gicp.setMaxCorrespondenceDistance(0.05);
+        // // gicp.setMaximumIterations(50);          // 通常需要的迭代次数较少
+        // // gicp.setTransformationEpsilon(1e-7);    // 可以设置稍大的阈值
+        // // gicp.setEuclideanFitnessEpsilon(0.1);   // 可以设置稍大的阈值
 
-        gicp.setInputSource(cur_cloud);
-        gicp.setInputTarget(first_cloud);
+        // gicp.setInputSource(cur_cloud);
+        // gicp.setInputTarget(first_cloud);
 
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-        gicp.align(*aligned_cloud);
+        // pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+        // gicp.align(*aligned_cloud);
 
-        if(gicp.hasConverged())
-        {
-            std::cout << "GICP converged successfully." << std::endl;
-            std::cout << "Fitness score: " << gicp.getFitnessScore() << std::endl;
-            Eigen::Matrix4f transformation = gicp.getFinalTransformation();
-            std::cout << "=========================Transformation Matrix: \n" << transformation << std::endl;
-            // 计算transformation对应的欧拉角
-            Eigen::Vector3f euler_angles = transformation.topLeftCorner<3,3>().eulerAngles(0, 1, 2);
-            std::cout << "=========================Euler Angles (roll, pitch, yaw): \n" << euler_angles << std::endl;
+        // if(gicp.hasConverged())
+        // {
+        //     std::cout << "GICP converged successfully." << std::endl;
+        //     std::cout << "Fitness score: " << gicp.getFitnessScore() << std::endl;
+        //     Eigen::Matrix4f transformation = gicp.getFinalTransformation();
+        //     std::cout << "=========================Transformation Matrix: \n" << transformation << std::endl;
+        //     // 计算transformation对应的欧拉角
+        //     Eigen::Vector3f euler_angles = transformation.topLeftCorner<3,3>().eulerAngles(0, 1, 2);
+        //     std::cout << "=========================Euler Angles (roll, pitch, yaw): \n" << euler_angles << std::endl;
 
-            // 保存点云
-            pcl::io::savePLYFileBinary("aligned_cloud.ply", *aligned_cloud);
-            pcl::io::savePLYFileBinary("first_cloud.ply", *first_cloud);
-            pcl::io::savePLYFileBinary("cur_cloud.ply", *cur_cloud);
-            cv::Matx33f rotMat;
-            rotMat(0,0) = transformation(0,0);
-            rotMat(0,1) = transformation(0,1);
-            rotMat(0,2) = transformation(0,2);
-            rotMat(1,0) = transformation(1,0);
-            rotMat(1,1) = transformation(1,1);
-            rotMat(1,2) = transformation(1,2);
-            rotMat(2,0) = transformation(2,0);
-            rotMat(2,1) = transformation(2,1);
-            rotMat(2,2) = transformation(2,2);
-            cv::Vec3f tran(transformation(0,3),transformation(1,3),transformation(2,3));
+        //     // 保存点云
+        //     pcl::io::savePLYFileBinary("aligned_cloud.ply", *aligned_cloud);
+        //     pcl::io::savePLYFileBinary("first_cloud.ply", *first_cloud);
+        //     pcl::io::savePLYFileBinary("cur_cloud.ply", *cur_cloud);
+        //     cv::Matx33f rotMat;
+        //     rotMat(0,0) = transformation(0,0);
+        //     rotMat(0,1) = transformation(0,1);
+        //     rotMat(0,2) = transformation(0,2);
+        //     rotMat(1,0) = transformation(1,0);
+        //     rotMat(1,1) = transformation(1,1);
+        //     rotMat(1,2) = transformation(1,2);
+        //     rotMat(2,0) = transformation(2,0);
+        //     rotMat(2,1) = transformation(2,1);
+        //     rotMat(2,2) = transformation(2,2);
+        //     cv::Vec3f tran(transformation(0,3),transformation(1,3),transformation(2,3));
 
-            Affine3f taffine = Affine3f(rotMat, tran);
+        //     Affine3f taffine = Affine3f(rotMat, tran);
 
-            loop_frame_idx_.push_back(frame_counter_);
-            loop_poses_.push_back(taffine);
+        //     loop_frame_idx_.push_back(frame_counter_);
+        //     loop_poses_.push_back(taffine);
 
-            cv::Mat tR = cv::Mat(taffine.rotation());
-            cv::Vec3f t_euler;
-            t_euler[0] = atan2(tR.at<float>(2,1), tR.at<float>(2,2));
-            t_euler[1] = atan2(-tR.at<float>(2,0), sqrt(tR.at<float>(2,1)*tR.at<float>(2,1) + tR.at<float>(2,2)*tR.at<float>(2,2)));
-            t_euler[2] = atan2(tR.at<float>(1,0), tR.at<float>(0,0));
+        //     cv::Mat tR = cv::Mat(taffine.rotation());
+        //     cv::Vec3f t_euler;
+        //     t_euler[0] = atan2(tR.at<float>(2,1), tR.at<float>(2,2));
+        //     t_euler[1] = atan2(-tR.at<float>(2,0), sqrt(tR.at<float>(2,1)*tR.at<float>(2,1) + tR.at<float>(2,2)*tR.at<float>(2,2)));
+        //     t_euler[2] = atan2(tR.at<float>(1,0), tR.at<float>(0,0));
             
-            // 转换为角度并输出
-            std::cout<<"tR: "<<endl<<tR<<endl;
-            std::cout << "ICP taffine旋转角度(度): roll=" << t_euler[0]*180/M_PI <<std::endl;
+        //     // 转换为角度并输出
+        //     std::cout<<"tR: "<<endl<<tR<<endl;
+        //     std::cout << "ICP taffine旋转角度(度): roll=" << t_euler[0]*180/M_PI <<std::endl;
 
-        }
-        else
-        {
-            std::cout << "GICP alignment failed." << std::endl;
-        }
-        // #include "kfusion/human_detection.hpp"
-        // HumanDetector human_detector_;
-        // human_detector_.detectHumanBody(first_cloud);
-        // pcl::io::savePLYFileBinary("human_cloud.ply", *first_cloud);
-        // if(fabs(da)<=1)
-        {
-            //保存闭环点云
-            std::vector<pcl::PointXYZRGB> all_points;
-            // 生成随机颜色
-            auto depth = depth_imgs_.back();
-            Affine3f real_pose = params_.volume_pose * taffine;
-            // 遍历深度图的每个像素
-            for(int y = 0; y < depth.rows; y++) {
-                for(int x = 0; x < depth.cols; x++) {
-                    float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
-                    if(z > 0) {
-                        // 反投影到相机坐标系
-                        float x_cam = (x - p.intr.cx) * z / p.intr.fx;
-                        float y_cam = (y - p.intr.cy) * z / p.intr.fy;
+        // }
+        // else
+        // {
+        //     std::cout << "GICP alignment failed." << std::endl;
+        // }
+        // // #include "kfusion/human_detection.hpp"
+        // // HumanDetector human_detector_;
+        // // human_detector_.detectHumanBody(first_cloud);
+        // // pcl::io::savePLYFileBinary("human_cloud.ply", *first_cloud);
+        // // if(fabs(da)<=1)
+        // {
+        //     //保存闭环点云
+        //     std::vector<pcl::PointXYZRGB> all_points;
+        //     // 生成随机颜色
+        //     auto depth = depth_imgs_.back();
+        //     Affine3f real_pose = params_.volume_pose * taffine;
+        //     // 遍历深度图的每个像素
+        //     for(int y = 0; y < depth.rows; y++) {
+        //         for(int x = 0; x < depth.cols; x++) {
+        //             float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
+        //             if(z > 0) {
+        //                 // 反投影到相机坐标系
+        //                 float x_cam = (x - p.intr.cx) * z / p.intr.fx;
+        //                 float y_cam = (y - p.intr.cy) * z / p.intr.fy;
                         
                     
-                        cv::Vec3f pt_cam = cv::Vec3f(x_cam, y_cam, z);
-                        cv::Vec3f pt_wd = real_pose * pt_cam;
-                        // 添加到点云
-                        pcl::PointXYZRGB point;
-                        point.x = pt_wd[0];
-                        point.y = pt_wd[1]; 
-                        point.z = pt_wd[2];
-                        point.r = 0;
-                        point.g = 255;
-                        point.b = 0;
-                        all_points.push_back(point);
-                    }
-                }
-            }
-            depth = depth_imgs_[0];
-            real_pose = params_.volume_pose;
-            // 遍历深度图的每个像素
-            for(int y = 0; y < depth.rows; y++) {
-                for(int x = 0; x < depth.cols; x++) {
-                    float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
-                    if(z > 0) {
-                        // 反投影到相机坐标系
-                        float x_cam = (x - p.intr.cx) * z / p.intr.fx;
-                        float y_cam = (y - p.intr.cy) * z / p.intr.fy;
+        //                 cv::Vec3f pt_cam = cv::Vec3f(x_cam, y_cam, z);
+        //                 cv::Vec3f pt_wd = real_pose * pt_cam;
+        //                 // 添加到点云
+        //                 pcl::PointXYZRGB point;
+        //                 point.x = pt_wd[0];
+        //                 point.y = pt_wd[1]; 
+        //                 point.z = pt_wd[2];
+        //                 point.r = 0;
+        //                 point.g = 255;
+        //                 point.b = 0;
+        //                 all_points.push_back(point);
+        //             }
+        //         }
+        //     }
+        //     depth = depth_imgs_[0];
+        //     real_pose = params_.volume_pose;
+        //     // 遍历深度图的每个像素
+        //     for(int y = 0; y < depth.rows; y++) {
+        //         for(int x = 0; x < depth.cols; x++) {
+        //             float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
+        //             if(z > 0) {
+        //                 // 反投影到相机坐标系
+        //                 float x_cam = (x - p.intr.cx) * z / p.intr.fx;
+        //                 float y_cam = (y - p.intr.cy) * z / p.intr.fy;
                         
                     
-                        cv::Vec3f pt_cam = cv::Vec3f(x_cam, y_cam, z);
-                        cv::Vec3f pt_wd = real_pose * pt_cam;
-                        // 添加到点云
-                        pcl::PointXYZRGB point;
-                        point.x = pt_wd[0];
-                        point.y = pt_wd[1]; 
-                        point.z = pt_wd[2];
-                        point.r = 255;
-                        point.g = 0;
-                        point.b = 0;
-                        all_points.push_back(point);
-                    }
-                }
-            }
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
-            std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>> cloud_points;
-            cloud_points = std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>>(all_points.begin(), all_points.end());
-            cloud->points = cloud_points;
-            cloud->width = all_points.size();
-            cloud->height = 1;
-            pcl::io::savePLYFile("closeloop_points.ply", *cloud);
+        //                 cv::Vec3f pt_cam = cv::Vec3f(x_cam, y_cam, z);
+        //                 cv::Vec3f pt_wd = real_pose * pt_cam;
+        //                 // 添加到点云
+        //                 pcl::PointXYZRGB point;
+        //                 point.x = pt_wd[0];
+        //                 point.y = pt_wd[1]; 
+        //                 point.z = pt_wd[2];
+        //                 point.r = 255;
+        //                 point.g = 0;
+        //                 point.b = 0;
+        //                 all_points.push_back(point);
+        //             }
+        //         }
+        //     }
+        //     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+        //     std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>> cloud_points;
+        //     cloud_points = std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>>(all_points.begin(), all_points.end());
+        //     cloud->points = cloud_points;
+        //     cloud->width = all_points.size();
+        //     cloud->height = 1;
+        //     pcl::io::savePLYFile("closeloop_points.ply", *cloud);
             
 
-        }
+        // }
         flag_closed_ = true;
     }
-    if(flag_closed_ == false || loop_frame_idx_.size()<=1)
+    if(flag_closed_ == false || loop_frame_idx_.size()<=10)
     {
         ///////////////////////////////////////////////////////////////////////////////////////////
         // Volume integration
