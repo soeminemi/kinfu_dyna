@@ -871,17 +871,18 @@ void kfusion::KinFu::loopClosureOptimize(
     for(int i = 1; i < frame_count; i++) {
         g2o::EdgeSE3* edge = new g2o::EdgeSE3();
         edge->setId(i);
-        edge->setVertex(0, optimizer.vertex(i-1));
-        edge->setVertex(1, optimizer.vertex(i));
+        edge->setVertex(1, optimizer.vertex(i-1));//测试，原来是0，1，按照情况应该是1，0
+        edge->setVertex(0, optimizer.vertex(i));
         
         // 计算相对位姿约束
         Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
         cv::Mat R;
-        cv::Mat((poses[i-1].inv() * poses[i]).rotation()).convertTo(R, CV_64F);
+        auto af = poses[i-1].inv() * poses[i]; // transform from i to i-1
+        cv::Mat(af.rotation()).convertTo(R, CV_64F);
         Eigen::Matrix3d rotation;
         cv2eigen(R, rotation);
         relative_pose.linear() = rotation;
-        auto t = (poses[i-1].inv() * poses[i]).translation();
+        auto t = af.translation();
         relative_pose.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
         
         edge->setMeasurement(relative_pose);
@@ -899,8 +900,8 @@ void kfusion::KinFu::loopClosureOptimize(
     for(int i=0; i<loop_frame_idx.size(); i++)
     {
         g2o::EdgeSE3* loop_edge = new g2o::EdgeSE3();
-        loop_edge->setVertex(0, optimizer.vertex(0));
-        loop_edge->setVertex(1, optimizer.vertex(loop_frame_idx[i])); //添加从初始帧到闭环帧的边
+        loop_edge->setVertex(1, optimizer.vertex(0));
+        loop_edge->setVertex(0, optimizer.vertex(loop_frame_idx[i])); //添加从初始帧到闭环帧的边
         
         // 计算闭环约束
         Eigen::Isometry3d loop_constraint = Eigen::Isometry3d::Identity();
@@ -999,7 +1000,7 @@ void kfusion::KinFu::loopClosureOptimize(
         depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
         volume_->integrate(dists_, poses[i], p.intr);
-        if(false)
+        if(true)
         { 
             volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
@@ -1174,6 +1175,7 @@ void kfusion::KinFu::loopClosureOptimize(
         pcl::io::savePLYFile(filename, *clouds[i]);
         std::cout << "Saved cloud " << i << " to " << filename << std::endl;
     }
+    //累积变换
     std::vector<Eigen::Affine3f> cumulative_transforms(clouds.size(), Eigen::Affine3f::Identity());
     {
         // Iteratively perform loop closure pose optimization
