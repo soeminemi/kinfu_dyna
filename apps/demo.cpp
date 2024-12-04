@@ -50,7 +50,7 @@
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
-bool flag_show_image = true;
+bool flag_show_image = false;
 static const std::string base64_chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
@@ -283,7 +283,7 @@ public:
             kinfu.renderImage(view_device_, mode);
 
         view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
-        points_host_.create(view_device_.rows(), view_device_.cols(), CV_32FC4);
+        // points_host_.create(view_device_.rows(), view_device_.cols(), CV_32FC4);
         // kinfu.getPoints(points_host_);
         // std::stringstream ss;
         // ss<<"./results/rst"<<frame_idx<<".ply";

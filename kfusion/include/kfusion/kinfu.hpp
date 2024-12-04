@@ -121,9 +121,12 @@ namespace kfusion
         std::vector<int> loop_frame_idx_;
         std::vector<Affine3f> loop_poses_;
         std::vector<cv::Mat> depth_imgs_;
-        int first_frame_idx_ = 10;
+        int first_frame_idx_ = 20;
         float first_roll_angle_ ;
         
         Affine3f affine_prev_; 
+
+        Affine3f min_affine;
+        int min_frame_idx = 0;
     };
 }

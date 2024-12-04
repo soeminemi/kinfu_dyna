@@ -132,7 +132,7 @@ public:
         float center_x = -a / 2;
         float center_y = -b_val / 2;
         radius_ = std::sqrt(center_x * center_x + center_y * center_y - c);
-
+        // radius_ = radius_; // 降低圆周半径的误差
         // 将圆心从2D投影空间转回3D空间
         cv::Vec3f mean_vec(mean.at<float>(0), mean.at<float>(1), mean.at<float>(2));
         cv::Vec3f center_3d = mean_vec + 
