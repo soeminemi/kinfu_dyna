@@ -1325,9 +1325,8 @@ void kfusion::KinFu::loopClosureOptimize(
     //     for (size_t i = 0; i < clouds.size(); ++i) {
     //         auto vertex = new g2o::VertexSE3();
     //         vertex->setId(i);
-    //         if (i == 0) {
+    //         if (i == 0)
     //             vertex->setFixed(true); // 第一个顶点固定
-    //         }
     //         optimizer.addVertex(vertex);
     //     }
 
@@ -1399,12 +1398,16 @@ void kfusion::KinFu::loopClosureOptimize(
     //     aligned_cloud->reserve(clouds[0]->size());
     //     for (size_t i = 0; i < clouds.size(); ++i) {
     //         auto vertex = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
-    //         Eigen::Affine3d optimized_pose = vertex->estimate();
-    //         Eigen::Affine3f current_transform = optimized_pose.cast<float>();
-    //         pcl::transformPointCloudWithNormals(*clouds[i], *clouds[i], current_transform);
-
-    //         // Update cumulative transformation
-    //         cumulative_transforms[i] = cumulative_transforms[i] * current_transform;
+    //         Eigen::Isometry3d pose = vertex->estimate();
+    //         for (const auto& point : clouds[i]->points) {
+    //             pcl::PointXYZRGB aligned_point = point;
+    //             Eigen::Vector3d p(point.x, point.y, point.z);
+    //             p = pose * p;
+    //             aligned_point.x = p.x();
+    //             aligned_point.y = p.y();
+    //             aligned_point.z = p.z();
+    //             aligned_cloud->push_back(aligned_point);
+    //         }
     //     }
 
     //     // 保存为PLY文件
@@ -1887,3 +1890,56 @@ void kfusion::KinFu::renderImage(cuda::Image& image, const Affine3f& pose, int f
     }
 #undef PASS1
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//namespace pcl
+//{
+//    Eigen::Vector3f rodrigues2(const Eigen::Matrix3f& matrix)
+//    {
+//        Eigen::JacobiSVD<Eigen::Matrix3f> svd(matrix, Eigen::ComputeFullV | Eigen::ComputeFullU);
+//        Eigen::Matrix3f R = svd.matrixU() * svd.matrixV().transpose();
+
+//        double rx = R(2, 1) - R(1, 2);
+//        double ry = R(0, 2) - R(2, 0);
+//        double rz = R(1, 0) - R(0, 1);
+
+//        double s = sqrt((rx*rx + ry*ry + rz*rz)*0.25);
+//        double c = (R.trace() - 1) * 0.5;
+//        c = c > 1. ? 1. : c < -1. ? -1. : c;
+
+//        double theta = acos(c);
+
+//        if( s < 1e-5 )
+//        {
+//            double t;
+
+//            if( c > 0 )
+//                rx = ry = rz = 0;
+//            else
+//            {
+//                t = (R(0, 0) + 1)*0.5;
+//                rx = sqrt( std::max(t, 0.0) );
+//                t = (R(1, 1) + 1)*0.5;
+//                ry = sqrt( std::max(t, 0.0) ) * (R(0, 1) < 0 ? -1.0 : 1.0);
+//                t = (R(2, 2) + 1)*0.5;
+//                rz = sqrt( std::max(t, 0.0) ) * (R(0, 2) < 0 ? -1.0 : 1.0);
+
+//                if( fabs(rx) < fabs(ry) && fabs(rx) < fabs(rz) && (R(1, 2) > 0) != (ry*rz > 0) )
+//                    rz = -rz;
+//                theta /= sqrt(rx*rx + ry*ry + rz*rz);
+//                rx *= theta;
+//                ry *= theta;
+//                rz *= theta;
+//            }
+//        }
+//        else
+//        {
+//            double vth = 1/(2*s);
+//            vth *= theta;
+//            rx *= vth; ry *= vth; rz *= vth;
+//        }
+//        return Eigen::Vector3d(rx, ry, rz).cast<float>();
+//    }
+//}
