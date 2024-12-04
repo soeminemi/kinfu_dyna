@@ -128,5 +128,6 @@ namespace kfusion
 
         Affine3f min_affine;
         int min_frame_idx = 0;
+        bool flag_second_loop;
     };
 }
