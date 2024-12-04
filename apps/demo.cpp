@@ -443,6 +443,8 @@ public:
                         ss << pfile;
                         kinfu.toPlyColor(cloud_host, normal_host, spfile_folder+"origin_cloud.ply", 255, 0, 0);
                         kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(), 255, 0, 0);
+                        string scmd = "cp ./results/origin_cloud.ply "+spfile_folder+"origin_cloud.ply";
+                        system(scmd.c_str());
                         // start measurement
                         auto rst = func(spfile_folder+"origin_cloud.ply");
                         ws.send_msg(a.hdl, rst);
@@ -946,13 +948,14 @@ public:
         // 设置平面法向约束,使其接近y轴方向
         Eigen::Vector3f axis = Eigen::Vector3f(0.0, 1.0, 0.0);
         seg.setAxis(axis);
-        seg.setEpsAngle(30.0f * (M_PI/180.0f)); // 允许30度的偏差
+        seg.setEpsAngle(10.0f * (M_PI/180.0f)); // 允许30度的偏差
         
         seg.segment(*inliers, *coefficients);
 
         // 检查是否找到地面平面
         if (inliers->indices.size() == 0)
         {
+            std::cout << "No ground plane found." << std::endl;
             return "{\"error\":\"can not find ground plane\"}";
         }
         else
@@ -975,7 +978,7 @@ public:
                             std::sqrt(a * a + b * b + c * c);
                 
                 // 只保留平面上方的点
-                if (distance < -0.045)
+                if (distance < -0.01)
                 {
                     filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
                 }

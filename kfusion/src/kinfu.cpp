@@ -977,35 +977,7 @@ void kfusion::KinFu::loopClosureOptimize(
         ));
         if(i==frame_count-1)
             cout<<"optimized pose: "<<poses[i].translation()<<", "<<poses[i].rotation()<<endl;
-        // cout<<"--------------------------------"<<endl;
     }
-    
-    std::ofstream ply_file("poses_and_circle_2.ply");
-    ply_file << "ply\n";
-    ply_file << "format ascii 1.0\n";
-    ply_file << "element vertex " << (frame_count) << "\n";
-    ply_file << "property float x\n";
-    ply_file << "property float y\n";
-    ply_file << "property float z\n";
-    ply_file << "property uchar red\n";
-    ply_file << "property uchar green\n";
-    ply_file << "property uchar blue\n";
-    ply_file << "end_header\n";
-    for(int i = 0; i < frame_count; i++) {
-        cv::Vec3f p = poses[i].translation();
-        if(i==0)
-        {
-            ply_file << p[0] << " " << p[1] << " " << p[2] << " 0 255 0\n";
-        }
-        else if(i==loop_frame_idx[0])
-        {
-            ply_file << p[0] << " " << p[1] << " " << p[2] << " 255 0 255\n";
-        }
-        else
-            ply_file << p[0] << " " << p[1] << " " << p[2] << " 0 0 255\n";
-    }
-    
-    ply_file.close();
     // 使用新的poses重新计算TSDF体素
     cv::Mat view_host_;
     cuda::Image view_device_;
@@ -1041,251 +1013,404 @@ void kfusion::KinFu::loopClosureOptimize(
             cv::waitKey(10);
         }
     }
-    cout<<"reintegrate again"<<endl;
-    for(int i = 0; i < frame_count; i++) {
-        auto &depth = depth_imgs_[i];
-        depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
-        cuda::computeDists(depth_device_tmp_, dists_, p.intr);
-        cuda::depthBilateralFilter(depth_device_tmp_, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
-        if (p.icp_truncate_depth_dist > 0)
-            kfusion::cuda::depthTruncation(curr_.depth_pyr[0], p.icp_truncate_depth_dist);
-        for (int i = 1; i < LEVELS; ++i)
-            cuda::depthBuildPyramid(curr_.depth_pyr[i-1], curr_.depth_pyr[i], p.bilateral_sigma_depth);
-        for (int i = 0; i < LEVELS; ++i)
-            cuda::computePointNormals(p.intr(i), curr_.depth_pyr[i], curr_.points_pyr[i], curr_.normals_pyr[i]);
-        cuda::waitAllDefaultStream();
+    // cout<<"reintegrate again"<<endl;
+    // for(int i = 0; i < frame_count; i++) {
+    //     auto &depth = depth_imgs_[i];
+    //     depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
+    //     cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+    //     cuda::depthBilateralFilter(depth_device_tmp_, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+    //     if (p.icp_truncate_depth_dist > 0)
+    //         kfusion::cuda::depthTruncation(curr_.depth_pyr[0], p.icp_truncate_depth_dist);
+    //     for (int i = 1; i < LEVELS; ++i)
+    //         cuda::depthBuildPyramid(curr_.depth_pyr[i-1], curr_.depth_pyr[i], p.bilateral_sigma_depth);
+    //     for (int i = 0; i < LEVELS; ++i)
+    //         cuda::computePointNormals(p.intr(i), curr_.depth_pyr[i], curr_.points_pyr[i], curr_.normals_pyr[i]);
+    //     cuda::waitAllDefaultStream();
         
-        if(i==0)
-        {
-            cuda::computeDists(depth_device_tmp_, dists_, p.intr);
-            cuda::depthBilateralFilter(depth_device_tmp_, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
-            if (p.icp_truncate_depth_dist > 0)
-                kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
-            for (int i = 1; i < LEVELS; ++i)
-                cuda::depthBuildPyramid(first_.depth_pyr[i-1], first_.depth_pyr[i], p.bilateral_sigma_depth);
-            for (int i = 0; i < LEVELS; ++i)
-                cuda::computePointNormals(p.intr(i), first_.depth_pyr[i], first_.points_pyr[i], first_.normals_pyr[i]);
-            cuda::waitAllDefaultStream();
-            volume_->integrate(dists_, poses[i], p.intr);
-            continue;
-        }
-        for(int j=0; j<1; j++)
-        {
-            volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
-            for (int i = 1; i < LEVELS; ++i)
-                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
-            cuda::waitAllDefaultStream();
-            //重新估算pose
-            Affine3f affine;
-            bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
-            poses[i] = poses[i] * affine;//更新当前帧的pose
+    //     if(i==0)
+    //     {
+    //         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+    //         cuda::depthBilateralFilter(depth_device_tmp_, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+    //         if (p.icp_truncate_depth_dist > 0)
+    //             kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
+    //         for (int i = 1; i < LEVELS; ++i)
+    //             cuda::depthBuildPyramid(first_.depth_pyr[i-1], first_.depth_pyr[i], p.bilateral_sigma_depth);
+    //         for (int i = 0; i < LEVELS; ++i)
+    //             cuda::computePointNormals(p.intr(i), first_.depth_pyr[i], first_.points_pyr[i], first_.normals_pyr[i]);
+    //         cuda::waitAllDefaultStream();
+    //         volume_->integrate(dists_, poses[i], p.intr);
+    //         continue;
+    //     }
+    //     for(int j=0; j<1; j++)
+    //     {
+    //         volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+    //         for (int i = 1; i < LEVELS; ++i)
+    //             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+    //         cuda::waitAllDefaultStream();
+    //         //重新估算pose
+    //         Affine3f affine;
+    //         bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
+    //         poses[i] = poses[i] * affine;//更新当前帧的pose
           
-        }
+    //     }
         
-        // if(i<frame_count-2)
-        // {
-        //     poses[i+1] = poses[i+1] * affine;//更新下一帧的pose
-        // }
-        if(i==poses.size()-1)
-        {
-            //输出闭环前后的偏差
-            Affine3f taffine;
-             icp_->estimateTransform(taffine, p.intr, curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
-            // 计算poses[i]的欧拉角
-            cv::Mat R_pose = cv::Mat(poses[i].rotation());
-            cv::Vec3f euler_pose;
-            euler_pose[0] = atan2(R_pose.at<float>(2,1), R_pose.at<float>(2,2));
-            euler_pose[1] = atan2(-R_pose.at<float>(2,0), sqrt(R_pose.at<float>(2,1)*R_pose.at<float>(2,1) + R_pose.at<float>(2,2)*R_pose.at<float>(2,2)));
-            euler_pose[2] = atan2(R_pose.at<float>(1,0), R_pose.at<float>(0,0));
+    //     // if(i<frame_count-2)
+    //     // {
+    //     //     poses[i+1] = poses[i+1] * affine;//更新下一帧的pose
+    //     // }
+    //     if(i==poses.size()-1)
+    //     {
+    //         //输出闭环前后的偏差
+    //         Affine3f taffine;
+    //          icp_->estimateTransform(taffine, p.intr, curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
+    //         // 计算poses[i]的欧拉角
+    //         cv::Mat R_pose = cv::Mat(poses[i].rotation());
+    //         cv::Vec3f euler_pose;
+    //         euler_pose[0] = atan2(R_pose.at<float>(2,1), R_pose.at<float>(2,2));
+    //         euler_pose[1] = atan2(-R_pose.at<float>(2,0), sqrt(R_pose.at<float>(2,1)*R_pose.at<float>(2,1) + R_pose.at<float>(2,2)*R_pose.at<float>(2,2)));
+    //         euler_pose[2] = atan2(R_pose.at<float>(1,0), R_pose.at<float>(0,0));
             
-            // 计算taffine的欧拉角
-            cv::Mat R_taffine = cv::Mat(taffine.rotation());
-            cv::Vec3f euler_taffine;
-            euler_taffine[0] = atan2(R_taffine.at<float>(2,1), R_taffine.at<float>(2,2));
-            euler_taffine[1] = atan2(-R_taffine.at<float>(2,0), sqrt(R_taffine.at<float>(2,1)*R_taffine.at<float>(2,1) + R_taffine.at<float>(2,2)*R_taffine.at<float>(2,2)));
-            euler_taffine[2] = atan2(R_taffine.at<float>(1,0), R_taffine.at<float>(0,0));
+    //         // 计算taffine的欧拉角
+    //         cv::Mat R_taffine = cv::Mat(taffine.rotation());
+    //         cv::Vec3f euler_taffine;
+    //         euler_taffine[0] = atan2(R_taffine.at<float>(2,1), R_taffine.at<float>(2,2));
+    //         euler_taffine[1] = atan2(-R_taffine.at<float>(2,0), sqrt(R_taffine.at<float>(2,1)*R_taffine.at<float>(2,1) + R_taffine.at<float>(2,2)*R_taffine.at<float>(2,2)));
+    //         euler_taffine[2] = atan2(R_taffine.at<float>(1,0), R_taffine.at<float>(0,0));
             
-            // 输出角度(转换为度)
-            std::cout << "poses[" << i << "]旋转角度(度): roll=" << euler_pose[0]*180/M_PI 
-                      << ", pitch=" << euler_pose[1]*180/M_PI
-                      << ", yaw=" << euler_pose[2]*180/M_PI << std::endl;
+    //         // 输出角度(转换为度)
+    //         std::cout << "poses[" << i << "]旋转角度(度): roll=" << euler_pose[0]*180/M_PI 
+    //                   << ", pitch=" << euler_pose[1]*180/M_PI
+    //                   << ", yaw=" << euler_pose[2]*180/M_PI << std::endl;
                       
-            std::cout << "taffine旋转角度(度): roll=" << euler_taffine[0]*180/M_PI 
-                      << ", pitch=" << euler_taffine[1]*180/M_PI
-                      << ", yaw=" << euler_taffine[2]*180/M_PI << std::endl;
+    //         std::cout << "taffine旋转角度(度): roll=" << euler_taffine[0]*180/M_PI 
+    //                   << ", pitch=" << euler_taffine[1]*180/M_PI
+    //                   << ", yaw=" << euler_taffine[2]*180/M_PI << std::endl;
+    //     }
+    //     volume_->integrate(dists_, poses[i], p.intr);
+    //     if(false)
+    //     { 
+    //         volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+    //         for (int i = 1; i < LEVELS; ++i)
+    //             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+    //         cuda::waitAllDefaultStream();
+    //         // 在当前相机视角下进行raycast
+    //         renderImage(view_device_, 0);
+    //         view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
+    //         view_device_.download(view_host_.ptr<void>(), view_host_.step);
+    //         cv::Mat rotated_view;
+    //         cv::rotate(view_host_, rotated_view, cv::ROTATE_90_CLOCKWISE);
+    //         cv::imshow("loopScene", rotated_view);
+    //         cv::waitKey(10);
+    //     }
+    // }
+    //离散获取volume对应的点云，并用于后续的闭环优化
+    std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> clouds;
+    volume_loop_->clear();
+    std::vector<int> anchor_frame_idx;
+    for(int i=20; i<frame_count; i+=30)
+    {
+        anchor_frame_idx.push_back(i);
+        volume_loop_->clear();
+        for (size_t j = i-20; j < i+20; j++)
+        {
+            if (j<0 || j>=frame_count)
+                continue;
+            auto &depth = depth_imgs_[j];
+            depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
+            cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+            volume_loop_->integrate(dists_, poses[j], p.intr);
         }
-        volume_->integrate(dists_, poses[i], p.intr);
-        if(false)
-        { 
-            volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
-            for (int i = 1; i < LEVELS; ++i)
-                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
-            cuda::waitAllDefaultStream();
-            // 在当前相机视角下进行raycast
-            renderImage(view_device_, 0);
-            view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
-            view_device_.download(view_host_.ptr<void>(), view_host_.step);
-            cv::Mat rotated_view;
-            cv::rotate(view_host_, rotated_view, cv::ROTATE_90_CLOCKWISE);
-            cv::imshow("loopScene", rotated_view);
-            cv::waitKey(10);
-        }
-    }
-    // // 每30帧获取一次点云并转换到世界坐标系
-    std::vector<pcl::PointXYZRGB> all_points;
-
-    // Store all point clouds
-    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
-    
-    for(int i = 0; i < frame_count; i += 30) {
-        // 生成随机颜色
-        uint8_t r = rand() % 256;
-        uint8_t g = rand() % 256;
-        uint8_t b = rand() % 256;
-        cv::Mat depth = depth_imgs_[i];
+        //获取当前的点云，并保存
+        cuda::DeviceArray<Point> cloud_buffer;
+        cuda::DeviceArray<Normal> normal_buffer;
+        cuda::DeviceArray<Point> tcloud;
+        cuda::DeviceArray<Normal> tnormal;
+        tcloud = volume_loop_->fetchCloud(cloud_buffer);
         
-        Affine3f real_pose = params_.volume_pose * poses[i];
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-        // 遍历深度图的每个像素
-        for(int y = 0; y < depth.rows; y++) {
-            for(int x = 0; x < depth.cols; x++) {
-                float z = depth.at<ushort>(y,x) * 0.001f; // 转换为米
-                if(z > 0) {
-                    // 反投影到相机坐标系
-                    float x_cam = (x - p.intr.cx) * z / p.intr.fx;
-                    float y_cam = (y - p.intr.cy) * z / p.intr.fy;
-                    
-                  
-                    cv::Vec3f pt_cam = cv::Vec3f(x_cam, y_cam, z);
-                    cv::Vec3f pt_wd = real_pose * pt_cam;
-                    // 添加到点云
-                    pcl::PointXYZRGB point;
-                    point.x = pt_wd[0];
-                    point.y = pt_wd[1]; 
-                    point.z = pt_wd[2];
-                    point.r = r;
-                    point.g = g;
+        cv::Mat cloud_host(1, (int)tcloud.size(), CV_32FC4);
+        tcloud.download(cloud_host.ptr<Point>());
+        if(tcloud.size() > 0)
+        {
+            volume_loop_->fetchNormals(tcloud, normal_buffer);
+            cv::Mat normal_host(1, (int)tcloud.size(), CV_32FC4);
+            normal_buffer.download(normal_host.ptr<Point>());
+        
+            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr pcl_first_cloud_p(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+            pcl_first_cloud_p->points.clear();
+            auto b = static_cast<uint8_t>(rand() % 256);
+            auto g = static_cast<uint8_t>(rand() % 256);
+            auto r = static_cast<uint8_t>(rand() % 256);
+            for (int y = 0; y < cloud_host.rows; ++y) {
+                for (int x = 0; x < cloud_host.cols; ++x) {
+                    cv::Vec4f pt = cloud_host.at<cv::Vec4f>(y, x);
+                    cv::Vec4f nl = normal_host.at<cv::Vec4f>(y, x);
+                    pcl::PointXYZRGBNormal point;
+                    point.x = pt[0];
+                    point.y = pt[1];
+                    point.z = pt[2];
+                    point.normal_x = nl[0];
+                    point.normal_y = nl[1];
+                    point.normal_z = nl[2];
                     point.b = b;
-                    cloud->points.push_back(point);
+                    point.g = g;
+                    point.r = r;
+                    
+                    if(!std::isnan(pt[0]) && !std::isnan(nl[0])) //同时具有点和法向量
+                    {
+                        pcl_first_cloud_p->points.push_back(point);
+                    }
                 }
             }
+            clouds.push_back(pcl_first_cloud_p);
         }
-        cloud->width = cloud->points.size();
-        cloud->height = 1;
-        clouds.push_back(cloud);
+        else
+        {
+            std::cout<<"cloud is empty"<<std::endl;
+        }
     }
-
-    // Perform sequential registration
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-    *aligned_cloud = *clouds[0]; // Start with first cloud
+    // Store each point cloud in 'clouds' as a PLY file
+    for (size_t i = 0; i < clouds.size(); ++i) {
+        std::string filename = "cloud_" + std::to_string(i) + ".ply";
+        pcl::io::savePLYFile(filename, *clouds[i]);
+        std::cout << "Saved cloud " << i << " to " << filename << std::endl;
+    }
+    std::vector<Eigen::Affine3f> cumulative_transforms(clouds.size(), Eigen::Affine3f::Identity());
     {
-        // 创建优化器
-        g2o::SparseOptimizer optimizer;
-        optimizer.setVerbose(false);
+        // Iteratively perform loop closure pose optimization
+        
+        for (int iteration = 0; iteration < 5; ++iteration) {
+            std::cout << "Iteration: " << iteration << std::endl;
+            // Initialize optimizer for each iteration
+            g2o::SparseOptimizer optimizer;
+            optimizer.setVerbose(true);
 
-        // 选择线性求解器
-        std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver = 
-            std::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
+            // Configure linear solver
+            std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver = 
+                std::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
 
-        // 设置优化算法
-        g2o::OptimizationAlgorithmLevenberg* solver = 
-            new g2o::OptimizationAlgorithmLevenberg(
-                std::make_unique<g2o::BlockSolverX>(std::move(linearSolver)));
-        optimizer.setAlgorithm(solver);
+            // Set optimization algorithm
+            g2o::OptimizationAlgorithmLevenberg* solver = 
+                new g2o::OptimizationAlgorithmLevenberg(
+                    std::make_unique<g2o::BlockSolverX>(std::move(linearSolver)));
+            optimizer.setAlgorithm(solver);
 
-        // 添加顶点
-        for (size_t i = 0; i < clouds.size(); ++i) {
-            auto vertex = new g2o::VertexSE3();
-            vertex->setId(i);
-            if (i == 0)
-                vertex->setFixed(true); // 第一个顶点固定
-            optimizer.addVertex(vertex);
-        }
-
-        // 添加边
-        for (size_t i = 1; i < clouds.size(); ++i) {
-            pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
-            icp.setMaxCorrespondenceDistance(0.05);
-            icp.setMaximumIterations(50);
-            icp.setTransformationEpsilon(1e-8);
-            icp.setEuclideanFitnessEpsilon(0.01);
-
-            icp.setInputSource(clouds[i]);
-            icp.setInputTarget(clouds[i-1]);
-
-            pcl::PointCloud<pcl::PointXYZRGB> aligned;
-            icp.align(aligned);
-
-            if (icp.hasConverged()) {
-                Eigen::Matrix4f transformation = icp.getFinalTransformation();
-                Eigen::Isometry3d iso(transformation.cast<double>());
-
-                auto edge = new g2o::EdgeSE3();
-                edge->setVertex(0, optimizer.vertex(i-1));
-                edge->setVertex(1, optimizer.vertex(i));
-                edge->setMeasurement(iso);
-                edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity());
-                optimizer.addEdge(edge);
+            // Add vertices (poses) to the graph
+            for (size_t i = 0; i < clouds.size(); ++i) {
+                g2o::VertexSE3* vertex = new g2o::VertexSE3();
+                vertex->setId(i);
+                if (i == 0) {
+                    vertex->setFixed(true); // Fix the first pose
+                }
+                optimizer.addVertex(vertex);
             }
-            else {
-                std::cerr << "ICP did not converge." << std::endl;
-            }
-        }
 
-        // 添加闭环检测
-        for (size_t i = 0; i < clouds.size(); ++i) {
-            for (size_t j = i + 10; j < clouds.size(); ++j) { // example loop detection condition
-                pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
-                icp.setMaxCorrespondenceDistance(0.1);
-                icp.setMaximumIterations(100);
+            // Add edges (transformations) between consecutive poses
+            for (size_t i = 1; i < clouds.size(); ++i) {
+                pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
+                icp.setMaxCorrespondenceDistance(0.05);
+                icp.setMaximumIterations(50);
                 icp.setTransformationEpsilon(1e-8);
                 icp.setEuclideanFitnessEpsilon(0.01);
-
-                icp.setInputSource(clouds[j]);
+            // icp.setUseReciprocalCorrespondences(true);
+                icp.setInputSource(clouds[i-1]);
                 icp.setInputTarget(clouds[i]);
-
-                pcl::PointCloud<pcl::PointXYZRGB> aligned;
-                icp.align(aligned);
-
+                pcl::PointCloud<pcl::PointXYZRGBNormal> Final;
+                icp.align(Final);
                 if (icp.hasConverged()) {
-                    Eigen::Matrix4f transformation = icp.getFinalTransformation();
-                    Eigen::Isometry3d iso(transformation.cast<double>());
-
-                    auto edge = new g2o::EdgeSE3();
+                    Eigen::Matrix4f transform_matrix = icp.getFinalTransformation().matrix();
+                    Eigen::Isometry3d transform;
+                    transform.matrix() = transform_matrix.cast<double>();
+                    g2o::EdgeSE3* edge = new g2o::EdgeSE3();
+                    edge->setVertex(1, optimizer.vertex(i-1));
                     edge->setVertex(0, optimizer.vertex(i));
-                    edge->setVertex(1, optimizer.vertex(j));
-                    edge->setMeasurement(iso);
+                    edge->setMeasurement(transform);
                     edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity());
                     optimizer.addEdge(edge);
                 }
             }
-        }
 
-        // 进行优化
-        optimizer.initializeOptimization();
-        optimizer.optimize(10);
+            // Loop closure: Add edge between the last and first pose
+            pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> loop_icp;
+            loop_icp.setMaxCorrespondenceDistance(0.1);
+            loop_icp.setMaximumIterations(100);
+            loop_icp.setTransformationEpsilon(1e-8);
+            loop_icp.setEuclideanFitnessEpsilon(0.01);
+            loop_icp.setUseReciprocalCorrespondences(true);
+            loop_icp.setInputSource(clouds.back());
+            loop_icp.setInputTarget(clouds.front());
+            pcl::PointCloud<pcl::PointXYZRGBNormal> loop_final;
+            loop_icp.align(loop_final);
+            pcl::io::savePLYFileBinary("loop_aligned_cloud"+std::to_string(iteration)+".ply", loop_final);
+            if (loop_icp.hasConverged()) {
+                Eigen::Matrix4f transform_matrix = loop_icp.getFinalTransformation().matrix();
+                Eigen::Isometry3d loop_transform;
+                loop_transform.matrix() = transform_matrix.cast<double>();
 
-        // 提取优化后的点云
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-        aligned_cloud->reserve(clouds[0]->size());
-        for (size_t i = 0; i < clouds.size(); ++i) {
-            auto vertex = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
-            Eigen::Isometry3d pose = vertex->estimate();
-            for (const auto& point : clouds[i]->points) {
-                pcl::PointXYZRGB aligned_point = point;
-                Eigen::Vector3d p(point.x, point.y, point.z);
-                p = pose * p;
-                aligned_point.x = p.x();
-                aligned_point.y = p.y();
-                aligned_point.z = p.z();
-                aligned_cloud->push_back(aligned_point);
+                g2o::EdgeSE3* loop_edge = new g2o::EdgeSE3();
+                loop_edge->setVertex(1, optimizer.vertex(clouds.size() - 1));
+                loop_edge->setVertex(0, optimizer.vertex(0));
+                loop_edge->setMeasurement(loop_transform);
+                loop_edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity() * 100);
+                optimizer.addEdge(loop_edge);
+            }
+
+            // Optimize the graph to refine the poses
+            optimizer.initializeOptimization();
+            optimizer.optimize(50);
+            // Update each point cloud with the optimized pose
+            for (size_t i = 0; i < clouds.size(); ++i) {
+                g2o::VertexSE3* vertex = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
+                Eigen::Affine3d optimized_pose = vertex->estimate();
+                Eigen::Affine3f current_transform = optimized_pose.cast<float>();
+                pcl::transformPointCloudWithNormals(*clouds[i], *clouds[i], current_transform);
+
+                // Update cumulative transformation
+                cumulative_transforms[i] = cumulative_transforms[i] * current_transform;
             }
         }
 
-        // 保存为PLY文件
-        pcl::io::savePLYFile("aligned_world_points.ply", *aligned_cloud);
-        std::cout << "对齐后的点云已保存到aligned_world_points.ply文件中." << std::endl;
+        // Save cumulative transforms
+        for (size_t i = 0; i < cumulative_transforms.size(); ++i) {
+            std::string filename = "cumulative_transform_" + std::to_string(i) + ".txt";
+            std::ofstream file(filename);
+            if (file.is_open()) {
+                file << cumulative_transforms[i].matrix() << std::endl;
+                file.close();
+                std::cout << "Saved cumulative transform for cloud " << i << " to " << filename << std::endl;
+            }
+        }
+        // Merge all aligned clouds into one
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        for (size_t i = 0; i < clouds.size(); ++i) {
+            *merged_cloud += *clouds[i];
+        }
+        pcl::io::savePLYFileBinary("./results/origin_cloud.ply", *merged_cloud);
+        
     }
+    for (size_t i = 0; i < anchor_frame_idx.size(); i++)
+    {
+        // Convert Eigen::Affine3f to cv::Affine3f
+        const Eigen::Matrix4f& eigen_mat = cumulative_transforms[i].matrix();
+        cv::Matx44f cv_mat;
+        for(int r = 0; r < 4; r++)
+            for(int c = 0; c < 4; c++)
+                cv_mat(r,c) = eigen_mat(r,c);
+                
+        Affine3f cumu_trans = Affine3f(cv_mat);
+        Affine3f anchor_pose = poses[anchor_frame_idx[i]] * cumu_trans;
+
+        loop_poses.push_back(anchor_pose);
+        loop_frame_idx.push_back(anchor_frame_idx[i]);
+    }
+    
+    // // Perform sequential registration
+    // pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    // *aligned_cloud = *clouds[0]; // Start with first cloud
+    // {
+    //     // 创建优化器
+    //     g2o::SparseOptimizer optimizer;
+    //     optimizer.setVerbose(false);
+
+    //     // 选择线性求解器
+    //     std::unique_ptr<g2o::BlockSolverX::LinearSolverType> linearSolver = 
+    //         std::make_unique<g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>>();
+
+    //     // 设置优化算法
+    //     g2o::OptimizationAlgorithmLevenberg* solver = 
+    //         new g2o::OptimizationAlgorithmLevenberg(
+    //             std::make_unique<g2o::BlockSolverX>(std::move(linearSolver)));
+    //     optimizer.setAlgorithm(solver);
+
+    //     // 添加顶点
+    //     for (size_t i = 0; i < clouds.size(); ++i) {
+    //         auto vertex = new g2o::VertexSE3();
+    //         vertex->setId(i);
+    //         if (i == 0) {
+    //             vertex->setFixed(true); // 第一个顶点固定
+    //         }
+    //         optimizer.addVertex(vertex);
+    //     }
+
+    //     // 添加边
+    //     for (size_t i = 1; i < clouds.size(); ++i) {
+    //         pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
+    //         icp.setMaxCorrespondenceDistance(0.05);
+    //         icp.setMaximumIterations(50);
+    //         icp.setTransformationEpsilon(1e-8);
+    //         icp.setEuclideanFitnessEpsilon(0.01);
+
+    //         icp.setInputSource(clouds[i]);
+    //         icp.setInputTarget(clouds[i-1]);
+
+    //         pcl::PointCloud<pcl::PointXYZRGB> aligned;
+    //         icp.align(aligned);
+
+    //         if (icp.hasConverged()) {
+    //             Eigen::Matrix4f transformation = icp.getFinalTransformation();
+    //             Eigen::Isometry3d iso(transformation.cast<double>());
+
+    //             auto edge = new g2o::EdgeSE3();
+    //             edge->setVertex(0, optimizer.vertex(i-1));
+    //             edge->setVertex(1, optimizer.vertex(i));
+    //             edge->setMeasurement(iso);
+    //             edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity());
+    //             optimizer.addEdge(edge);
+    //         }
+    //         else {
+    //             std::cerr << "ICP did not converge." << std::endl;
+    //         }
+    //     }
+
+    //     // 添加闭环检测
+    //     for (size_t i = 0; i < clouds.size(); ++i) {
+    //         for (size_t j = i + 10; j < clouds.size(); ++j) { // example loop detection condition
+    //             pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
+    //             icp.setMaxCorrespondenceDistance(0.1);
+    //             icp.setMaximumIterations(100);
+    //             icp.setTransformationEpsilon(1e-8);
+    //             icp.setEuclideanFitnessEpsilon(0.01);
+
+    //             icp.setInputSource(clouds[j]);
+    //             icp.setInputTarget(clouds[i]);
+
+    //             pcl::PointCloud<pcl::PointXYZRGB> aligned;
+    //             icp.align(aligned);
+
+    //             if (icp.hasConverged()) {
+    //                 Eigen::Matrix4f transformation = icp.getFinalTransformation();
+    //                 Eigen::Isometry3d iso(transformation.cast<double>());
+
+    //                 auto edge = new g2o::EdgeSE3();
+    //                 edge->setVertex(0, optimizer.vertex(i));
+    //                 edge->setVertex(1, optimizer.vertex(j));
+    //                 edge->setMeasurement(iso);
+    //                 edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity());
+    //                 optimizer.addEdge(edge);
+    //             }
+    //         }
+    //     }
+
+    //     // 进行优化
+    //     optimizer.initializeOptimization();
+    //     optimizer.optimize(10);
+
+    //     // 提取优化后的点云
+    //     pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    //     aligned_cloud->reserve(clouds[0]->size());
+    //     for (size_t i = 0; i < clouds.size(); ++i) {
+    //         auto vertex = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
+    //         Eigen::Affine3d optimized_pose = vertex->estimate();
+    //         Eigen::Affine3f current_transform = optimized_pose.cast<float>();
+    //         pcl::transformPointCloudWithNormals(*clouds[i], *clouds[i], current_transform);
+
+    //         // Update cumulative transformation
+    //         cumulative_transforms[i] = cumulative_transforms[i] * current_transform;
+    //     }
+
+    //     // 保存为PLY文件
+    //     pcl::io::savePLYFile("aligned_world_points.ply", *aligned_cloud);
+    //     std::cout << "对齐后的点云已保存到aligned_world_points.ply文件中." << std::endl;
+    // }
     // // 保存为PLY文件
     // pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
     // std::vector<pcl::PointXYZRGB, Eigen::aligned_allocator<pcl::PointXYZRGB>> cloud_points;
@@ -1294,7 +1419,6 @@ void kfusion::KinFu::loopClosureOptimize(
     // cloud->width = all_points.size();
     // cloud->height = 1;
     // pcl::io::savePLYFile("world_points.ply", *cloud);
-    std::cout << "闭环优化完成,共处理 " << frame_count << " 帧" << std::endl;
     std::cout<<"图像总数量为: "<<depth_imgs_.size()<<"闭环重建帧数:"<<frame_count<<std::endl;
 }
 void kfusion::KinFu::loopPoseOptimization(std::vector<cv::Mat>& depth_imgs, std::vector<Affine3f>& poses)
@@ -1763,56 +1887,3 @@ void kfusion::KinFu::renderImage(cuda::Image& image, const Affine3f& pose, int f
     }
 #undef PASS1
 }
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//namespace pcl
-//{
-//    Eigen::Vector3f rodrigues2(const Eigen::Matrix3f& matrix)
-//    {
-//        Eigen::JacobiSVD<Eigen::Matrix3f> svd(matrix, Eigen::ComputeFullV | Eigen::ComputeFullU);
-//        Eigen::Matrix3f R = svd.matrixU() * svd.matrixV().transpose();
-
-//        double rx = R(2, 1) - R(1, 2);
-//        double ry = R(0, 2) - R(2, 0);
-//        double rz = R(1, 0) - R(0, 1);
-
-//        double s = sqrt((rx*rx + ry*ry + rz*rz)*0.25);
-//        double c = (R.trace() - 1) * 0.5;
-//        c = c > 1. ? 1. : c < -1. ? -1. : c;
-
-//        double theta = acos(c);
-
-//        if( s < 1e-5 )
-//        {
-//            double t;
-
-//            if( c > 0 )
-//                rx = ry = rz = 0;
-//            else
-//            {
-//                t = (R(0, 0) + 1)*0.5;
-//                rx = sqrt( std::max(t, 0.0) );
-//                t = (R(1, 1) + 1)*0.5;
-//                ry = sqrt( std::max(t, 0.0) ) * (R(0, 1) < 0 ? -1.0 : 1.0);
-//                t = (R(2, 2) + 1)*0.5;
-//                rz = sqrt( std::max(t, 0.0) ) * (R(0, 2) < 0 ? -1.0 : 1.0);
-
-//                if( fabs(rx) < fabs(ry) && fabs(rx) < fabs(rz) && (R(1, 2) > 0) != (ry*rz > 0) )
-//                    rz = -rz;
-//                theta /= sqrt(rx*rx + ry*ry + rz*rz);
-//                rx *= theta;
-//                ry *= theta;
-//                rz *= theta;
-//            }
-//        }
-//        else
-//        {
-//            double vth = 1/(2*s);
-//            vth *= theta;
-//            rx *= vth; ry *= vth; rz *= vth;
-//        }
-//        return Eigen::Vector3d(rx, ry, rz).cast<float>();
-//    }
-//}
