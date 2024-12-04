@@ -760,6 +760,9 @@ void kfusion::KinFu::loopClosureOptimize()
     // flag_closed_ = false;
     if(flag_closed_)
     {
+        flag_second_loop = false;
+        loopClosureOptimize(poses_, loop_frame_idx_, loop_poses_);
+        flag_second_loop = true;
         loopClosureOptimize(poses_, loop_frame_idx_, loop_poses_);
     }
     else{
@@ -1013,96 +1016,101 @@ void kfusion::KinFu::loopClosureOptimize(
             cv::waitKey(10);
         }
     }
-    // cout<<"reintegrate again"<<endl;
-    // for(int i = 0; i < frame_count; i++) {
-    //     auto &depth = depth_imgs_[i];
-    //     depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
-    //     cuda::computeDists(depth_device_tmp_, dists_, p.intr);
-    //     cuda::depthBilateralFilter(depth_device_tmp_, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
-    //     if (p.icp_truncate_depth_dist > 0)
-    //         kfusion::cuda::depthTruncation(curr_.depth_pyr[0], p.icp_truncate_depth_dist);
-    //     for (int i = 1; i < LEVELS; ++i)
-    //         cuda::depthBuildPyramid(curr_.depth_pyr[i-1], curr_.depth_pyr[i], p.bilateral_sigma_depth);
-    //     for (int i = 0; i < LEVELS; ++i)
-    //         cuda::computePointNormals(p.intr(i), curr_.depth_pyr[i], curr_.points_pyr[i], curr_.normals_pyr[i]);
-    //     cuda::waitAllDefaultStream();
-        
-    //     if(i==0)
-    //     {
-    //         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
-    //         cuda::depthBilateralFilter(depth_device_tmp_, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
-    //         if (p.icp_truncate_depth_dist > 0)
-    //             kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
-    //         for (int i = 1; i < LEVELS; ++i)
-    //             cuda::depthBuildPyramid(first_.depth_pyr[i-1], first_.depth_pyr[i], p.bilateral_sigma_depth);
-    //         for (int i = 0; i < LEVELS; ++i)
-    //             cuda::computePointNormals(p.intr(i), first_.depth_pyr[i], first_.points_pyr[i], first_.normals_pyr[i]);
-    //         cuda::waitAllDefaultStream();
-    //         volume_->integrate(dists_, poses[i], p.intr);
-    //         continue;
-    //     }
-    //     for(int j=0; j<1; j++)
-    //     {
-    //         volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
-    //         for (int i = 1; i < LEVELS; ++i)
-    //             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
-    //         cuda::waitAllDefaultStream();
-    //         //重新估算pose
-    //         Affine3f affine;
-    //         bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
-    //         poses[i] = poses[i] * affine;//更新当前帧的pose
-          
-    //     }
-        
-    //     // if(i<frame_count-2)
-    //     // {
-    //     //     poses[i+1] = poses[i+1] * affine;//更新下一帧的pose
-    //     // }
-    //     if(i==poses.size()-1)
-    //     {
-    //         //输出闭环前后的偏差
-    //         Affine3f taffine;
-    //          icp_->estimateTransform(taffine, p.intr, curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
-    //         // 计算poses[i]的欧拉角
-    //         cv::Mat R_pose = cv::Mat(poses[i].rotation());
-    //         cv::Vec3f euler_pose;
-    //         euler_pose[0] = atan2(R_pose.at<float>(2,1), R_pose.at<float>(2,2));
-    //         euler_pose[1] = atan2(-R_pose.at<float>(2,0), sqrt(R_pose.at<float>(2,1)*R_pose.at<float>(2,1) + R_pose.at<float>(2,2)*R_pose.at<float>(2,2)));
-    //         euler_pose[2] = atan2(R_pose.at<float>(1,0), R_pose.at<float>(0,0));
+    if(flag_second_loop)
+    {
+        cout<<"reintegrate again"<<endl;
+        for(int i = 0; i < frame_count; i++) {
+            auto &depth = depth_imgs_[i];
+            depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
+            cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+            cuda::depthBilateralFilter(depth_device_tmp_, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+            if (p.icp_truncate_depth_dist > 0)
+                kfusion::cuda::depthTruncation(curr_.depth_pyr[0], p.icp_truncate_depth_dist);
+            for (int i = 1; i < LEVELS; ++i)
+                cuda::depthBuildPyramid(curr_.depth_pyr[i-1], curr_.depth_pyr[i], p.bilateral_sigma_depth);
+            for (int i = 0; i < LEVELS; ++i)
+                cuda::computePointNormals(p.intr(i), curr_.depth_pyr[i], curr_.points_pyr[i], curr_.normals_pyr[i]);
+            cuda::waitAllDefaultStream();
             
-    //         // 计算taffine的欧拉角
-    //         cv::Mat R_taffine = cv::Mat(taffine.rotation());
-    //         cv::Vec3f euler_taffine;
-    //         euler_taffine[0] = atan2(R_taffine.at<float>(2,1), R_taffine.at<float>(2,2));
-    //         euler_taffine[1] = atan2(-R_taffine.at<float>(2,0), sqrt(R_taffine.at<float>(2,1)*R_taffine.at<float>(2,1) + R_taffine.at<float>(2,2)*R_taffine.at<float>(2,2)));
-    //         euler_taffine[2] = atan2(R_taffine.at<float>(1,0), R_taffine.at<float>(0,0));
+            if(i==0)
+            {
+                cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+                cuda::depthBilateralFilter(depth_device_tmp_, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+                if (p.icp_truncate_depth_dist > 0)
+                    kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
+                for (int i = 1; i < LEVELS; ++i)
+                    cuda::depthBuildPyramid(first_.depth_pyr[i-1], first_.depth_pyr[i], p.bilateral_sigma_depth);
+                for (int i = 0; i < LEVELS; ++i)
+                    cuda::computePointNormals(p.intr(i), first_.depth_pyr[i], first_.points_pyr[i], first_.normals_pyr[i]);
+                cuda::waitAllDefaultStream();
+                volume_->integrate(dists_, poses[i], p.intr);
+                continue;
+            }
+            for(int j=0; j<1; j++)
+            {
+                volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+                for (int i = 1; i < LEVELS; ++i)
+                    resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+                cuda::waitAllDefaultStream();
+                //重新估算pose
+                Affine3f affine;
+                bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
+                poses[i] = poses[i] * affine;//更新当前帧的pose
             
-    //         // 输出角度(转换为度)
-    //         std::cout << "poses[" << i << "]旋转角度(度): roll=" << euler_pose[0]*180/M_PI 
-    //                   << ", pitch=" << euler_pose[1]*180/M_PI
-    //                   << ", yaw=" << euler_pose[2]*180/M_PI << std::endl;
-                      
-    //         std::cout << "taffine旋转角度(度): roll=" << euler_taffine[0]*180/M_PI 
-    //                   << ", pitch=" << euler_taffine[1]*180/M_PI
-    //                   << ", yaw=" << euler_taffine[2]*180/M_PI << std::endl;
-    //     }
-    //     volume_->integrate(dists_, poses[i], p.intr);
-    //     if(false)
-    //     { 
-    //         volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
-    //         for (int i = 1; i < LEVELS; ++i)
-    //             resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
-    //         cuda::waitAllDefaultStream();
-    //         // 在当前相机视角下进行raycast
-    //         renderImage(view_device_, 0);
-    //         view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
-    //         view_device_.download(view_host_.ptr<void>(), view_host_.step);
-    //         cv::Mat rotated_view;
-    //         cv::rotate(view_host_, rotated_view, cv::ROTATE_90_CLOCKWISE);
-    //         cv::imshow("loopScene", rotated_view);
-    //         cv::waitKey(10);
-    //     }
-    // }
+            }
+            
+            // if(i<frame_count-2)
+            // {
+            //     poses[i+1] = poses[i+1] * affine;//更新下一帧的pose
+            // }
+            if(i==poses.size()-1)
+            {
+                //输出闭环前后的偏差
+                Affine3f taffine;
+                icp_->estimateTransform(taffine, p.intr, curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
+                // 计算poses[i]的欧拉角
+                cv::Mat R_pose = cv::Mat(poses[i].rotation());
+                cv::Vec3f euler_pose;
+                euler_pose[0] = atan2(R_pose.at<float>(2,1), R_pose.at<float>(2,2));
+                euler_pose[1] = atan2(-R_pose.at<float>(2,0), sqrt(R_pose.at<float>(2,1)*R_pose.at<float>(2,1) + R_pose.at<float>(2,2)*R_pose.at<float>(2,2)));
+                euler_pose[2] = atan2(R_pose.at<float>(1,0), R_pose.at<float>(0,0));
+                
+                // 计算taffine的欧拉角
+                cv::Mat R_taffine = cv::Mat(taffine.rotation());
+                cv::Vec3f euler_taffine;
+                euler_taffine[0] = atan2(R_taffine.at<float>(2,1), R_taffine.at<float>(2,2));
+                euler_taffine[1] = atan2(-R_taffine.at<float>(2,0), sqrt(R_taffine.at<float>(2,1)*R_taffine.at<float>(2,1) + R_taffine.at<float>(2,2)*R_taffine.at<float>(2,2)));
+                euler_taffine[2] = atan2(R_taffine.at<float>(1,0), R_taffine.at<float>(0,0));
+                
+                // 输出角度(转换为度)
+                std::cout << "poses[" << i << "]旋转角度(度): roll=" << euler_pose[0]*180/M_PI 
+                        << ", pitch=" << euler_pose[1]*180/M_PI
+                        << ", yaw=" << euler_pose[2]*180/M_PI << std::endl;
+                        
+                std::cout << "taffine旋转角度(度): roll=" << euler_taffine[0]*180/M_PI 
+                        << ", pitch=" << euler_taffine[1]*180/M_PI
+                        << ", yaw=" << euler_taffine[2]*180/M_PI << std::endl;
+            }
+            volume_->integrate(dists_, poses[i], p.intr);
+            if(false)
+            { 
+                volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+                for (int i = 1; i < LEVELS; ++i)
+                    resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+                cuda::waitAllDefaultStream();
+                // 在当前相机视角下进行raycast
+                renderImage(view_device_, 0);
+                view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
+                view_device_.download(view_host_.ptr<void>(), view_host_.step);
+                cv::Mat rotated_view;
+                cv::rotate(view_host_, rotated_view, cv::ROTATE_90_CLOCKWISE);
+                cv::imshow("loopScene", rotated_view);
+                cv::waitKey(10);
+            }
+        }
+        return;
+    }
+    flag_second_loop = true;
     //离散获取volume对应的点云，并用于后续的闭环优化
     std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> clouds;
     volume_loop_->clear();
