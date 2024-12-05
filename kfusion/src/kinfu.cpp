@@ -1056,6 +1056,7 @@ void kfusion::KinFu::loopClosureOptimize(
         //圆周估计
         CircularMotionConstraint motion_constraint;
         motion_constraint.estimateFromTrajectory(poses);
+        
         // 从轨迹估计圆心和半径
         // std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
         // std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
