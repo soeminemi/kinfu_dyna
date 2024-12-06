@@ -901,7 +901,7 @@ public:
 
         // cloth_type = "lvekuansong";
 
-        cout << "step 1. load ply file:" << pfile << endl;
+        cout << "step 1. load ply file:" << bodypath << endl;
         // step 1. load ply file
         Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Zero();
         if (flag_std_sample == true)
@@ -932,6 +932,17 @@ public:
         std::cout << "ply file loaded, try to filter the data" << std::endl;
         pcl::transformPointCloudWithNormals(*cloud_orig, *cloud, transformation_matrix);
 
+        // 创建用于平面检测的点云
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr detection_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        for (const auto& point : cloud->points) {
+            if (point.y < -0.5) {
+                detection_cloud->points.push_back(point);
+            }
+        }
+        // 保存detection_cloud为ply到results文件夹中
+        std::string detection_cloud_path = "results/detection_cloud.ply";
+        pcl::io::savePLYFile(detection_cloud_path, *detection_cloud);
+        std::cout << "Detection cloud saved to: " << detection_cloud_path << std::endl;
 
         // 使用RANSAC方法找到地面平面
         pcl::SACSegmentation<pcl::PointXYZRGBNormal> seg;
@@ -939,16 +950,16 @@ public:
         pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
         
         // 配置RANSAC参数
-        seg.setInputCloud(cloud);
+        seg.setInputCloud(detection_cloud);
         seg.setOptimizeCoefficients(true);
         seg.setModelType(pcl::SACMODEL_PERPENDICULAR_PLANE);  // 设置模型为垂直平面
         seg.setMethodType(pcl::SAC_RANSAC);     // 使用RANSAC方法
-        seg.setDistanceThreshold(0.05);         // 设置内点阈值为5cm
+        seg.setDistanceThreshold(0.1);         // 设置内点阈值为10cm
         
         // 设置平面法向约束,使其接近y轴方向
         Eigen::Vector3f axis = Eigen::Vector3f(0.0, 1.0, 0.0);
         seg.setAxis(axis);
-        seg.setEpsAngle(10.0f * (M_PI/180.0f)); // 允许30度的偏差
+        seg.setEpsAngle(20.0f * (M_PI/180.0f)); // 允许20度的偏差
         
         seg.segment(*inliers, *coefficients);
 
@@ -978,7 +989,7 @@ public:
                             std::sqrt(a * a + b * b + c * c);
                 
                 // 只保留平面上方的点
-                if (distance < -0.01)
+                if (distance < -0.02)
                 {
                     filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
                 }
