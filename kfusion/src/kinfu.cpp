@@ -545,7 +545,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         // if(gicp.hasConverged())
         // {
         //     std::cout << "Fitness score: " << gicp.getFitnessScore() << std::endl;
-        //     Eigen::Matrix4f transformation = gicp.getFinalTransformation();
+        //     Eigen::Matrix4d transformation = gicp.getFinalTransformation();
         //     // 保存点云
         //     pcl::io::savePLYFileBinary("aligned_cloud.ply", *aligned_cloud);
         //     pcl::io::savePLYFileBinary("first_cloud.ply", *pcl_first_cloud);
@@ -855,8 +855,24 @@ void kfusion::KinFu::loopClosureOptimize(
                     point.b = b;
                     point.g = g;
                     point.r = r;
-                    
-                    if(!std::isnan(tpt[0]) && !std::isnan(tnl[0])) //同时具有点和法向量
+                    if(tnl[0]==0 && tnl[1]==0 && tnl[2]==0)
+                    {
+                        continue;
+                    }
+                    if(std::isnan(tpt[0]) || std::isnan(tpt[1] || std::isnan(tpt[2])))
+                    {
+                        continue;
+                    }
+                    if(std::isnan(tnl[0]) || std::isnan(tnl[1] || std::isnan(tnl[2])))
+                    {
+                        continue;
+                    }
+                    float normal_magnitude = std::sqrt(tnl[0]*tnl[0] + tnl[1]*tnl[1] + tnl[2]*tnl[2]);
+                    if (normal_magnitude < 0.9f) {
+                        std::cout << "Normal magnitude: " << normal_magnitude << std::endl;
+                    }
+
+                    // if(!std::isnan(tpt[0]) && !std::isnan(tnl[0])) //同时具有点和法向量
                     {
                         pcl_first_cloud_p->points.push_back(point);
                     }
@@ -871,7 +887,7 @@ void kfusion::KinFu::loopClosureOptimize(
             std::cout<<"cloud is empty"<<std::endl;
         }
     }
-    std::vector<Eigen::Matrix4f> transformations;
+    std::vector<Eigen::Matrix4d> transformations;
 
     for (size_t k = 0; k < 1; ++k) {
         // Store each point cloud in 'clouds' as a PLY file
@@ -879,8 +895,9 @@ void kfusion::KinFu::loopClosureOptimize(
         clouds_transformed.clear();
         for (size_t i = 0; i < clouds.size(); ++i) {
             std::string filename = "cloud_" + std::to_string(i) + ".ply";
+            pcl::io::savePLYFile(filename, *clouds[i]);
             // Apply transformation to cloud using pose[i] and save
-            Eigen::Matrix4f transformation;
+            Eigen::Matrix4d transformation;
             int pose_idx = anchor_frame_idx[i];
             transformation << 
                 poses[pose_idx].matrix.val[0], poses[pose_idx].matrix.val[1], poses[pose_idx].matrix.val[2], poses[pose_idx].matrix.val[3],
@@ -894,7 +911,19 @@ void kfusion::KinFu::loopClosureOptimize(
             cout<<poses[pose_idx].rotation()<<","<<poses[pose_idx].translation()<<endl;
             cout<<"-------------------------------"<<endl;
             pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-            pcl::transformPointCloudWithNormals(*clouds[i], *transformed_cloud, transformation);
+            cout<<"start transform: cloud size: "<<clouds[i]->size()<<endl;
+            try {
+                Eigen::Matrix4d transformation_matrix = Eigen::Matrix4d::Identity();
+                cout<<"transformation_matrix: "<<transformation_matrix<<endl;
+                pcl::transformPointCloud(*clouds[i], *transformed_cloud, transformation_matrix);
+            } catch (const std::exception& e) {
+                std::cerr << "Floating point exception occurred during point cloud transformation: " << e.what() << std::endl;
+                std::cerr << "Skipping transformation for cloud " << i << std::endl;
+                *transformed_cloud = *clouds[i];  // Use original cloud if transformation fails
+                std::cerr << "Exiting program due to transformation failure." << std::endl;
+                exit(1);
+
+            }
             clouds_transformed.push_back(transformed_cloud);
 
             std::string transformed_filename = "transformed_cloud_" + std::to_string(i) + ".ply";
@@ -985,60 +1014,60 @@ void kfusion::KinFu::loopClosureOptimize(
         }
 
         // 添加闭环约束边
-        // for(int i=0; i<loop_frame_idx.size(); i++)
-        // {
-        //     g2o::EdgeSE3* loop_edge = new g2o::EdgeSE3();
-        //     loop_edge->setVertex(0, optimizer.vertex(0));
-        //     loop_edge->setVertex(1, optimizer.vertex(loop_frame_idx[i])); //添加从初始帧到闭环帧的边
+        for(int i=0; i<loop_frame_idx.size(); i++)
+        {
+            g2o::EdgeSE3* loop_edge = new g2o::EdgeSE3();
+            loop_edge->setVertex(0, optimizer.vertex(0));
+            loop_edge->setVertex(1, optimizer.vertex(loop_frame_idx[i])); //添加从初始帧到闭环帧的边
             
-        //     // 计算闭环约束
-        //     Eigen::Isometry3d loop_constraint = Eigen::Isometry3d::Identity();
-        //     cv::Mat R;
-        //     cv::Mat(( loop_poses[i]).rotation()).convertTo(R, CV_64F);
-        //     Eigen::Matrix3d rotation;
-        //     cv2eigen(R, rotation);
-        //     loop_constraint.linear() = rotation;
-        //     auto t = ( loop_poses[i]).translation();
-        //     loop_constraint.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
+            // 计算闭环约束
+            Eigen::Isometry3d loop_constraint = Eigen::Isometry3d::Identity();
+            cv::Mat R;
+            cv::Mat(( loop_poses[i]).rotation()).convertTo(R, CV_64F);
+            Eigen::Matrix3d rotation;
+            cv2eigen(R, rotation);
+            loop_constraint.linear() = rotation;
+            auto t = ( loop_poses[i]).translation();
+            loop_constraint.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
         
-        //     loop_edge->setMeasurement(loop_constraint);
+            loop_edge->setMeasurement(loop_constraint);
         
-        //     // 设置闭环约束的信息矩阵(权重更大)
-        //     Eigen::Matrix<double,6,6> loop_information = Eigen::Matrix<double,6,6>::Identity() * 1;
-        //     loop_edge->setInformation(loop_information);
-        //     optimizer.addEdge(loop_edge);
-        // }
-        // //添加跨帧约束边
-        // for (size_t i = 1; i < clouds.size(); ++i) {
-        //     pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
-        //     icp.setMaxCorrespondenceDistance(0.05);
-        //     icp.setMaximumIterations(50);
-        //     icp.setTransformationEpsilon(1e-8);
-        //     icp.setEuclideanFitnessEpsilon(0.01);
-        // // icp.setUseReciprocalCorrespondences(true);
-        //     icp.setInputSource(clouds_transformed[i]);
-        //     icp.setInputTarget(clouds_transformed[i-1]);//将source变换到target,从后帧向前面帧进行变换，和前面的处理保持一致 估计到的都是全局坐标系下的变换
-        //     pcl::PointCloud<pcl::PointXYZRGBNormal> Final;
-        //     icp.align(Final);
+            // 设置闭环约束的信息矩阵(权重更大)
+            Eigen::Matrix<double,6,6> loop_information = Eigen::Matrix<double,6,6>::Identity() * 1;
+            loop_edge->setInformation(loop_information);
+            optimizer.addEdge(loop_edge);
+        }
+        //添加跨帧约束边
+        for (size_t i = 1; i < clouds.size(); ++i) {
+            pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
+            icp.setMaxCorrespondenceDistance(0.05);
+            icp.setMaximumIterations(50);
+            icp.setTransformationEpsilon(1e-8);
+            icp.setEuclideanFitnessEpsilon(0.01);
+        // icp.setUseReciprocalCorrespondences(true);
+            icp.setInputSource(clouds_transformed[i]);
+            icp.setInputTarget(clouds_transformed[i-1]);//将source变换到target,从后帧向前面帧进行变换，和前面的处理保持一致 估计到的都是全局坐标系下的变换
+            pcl::PointCloud<pcl::PointXYZRGBNormal> Final;
+            icp.align(Final);
 
-        //     if (icp.hasConverged()) {
-        //         std::string final_filename = "final_cloud_" + std::to_string(i) + ".ply";
-        //         pcl::io::savePLYFile(final_filename, Final);
-        //         // Ptarget.inv()*(Rest * Psource)
-        //         Eigen::Matrix4f transform_matrix = (icp.getFinalTransformation().matrix() * transformations[i]) * transformations[i-1].inverse();
-        //         //transforma_matrix 是两个关键帧之间的相对位姿
-        //         cout<<"from "<<anchor_frame_idx[i-1]<<" to "<<anchor_frame_idx[i]<<": "<<endl<<transform_matrix<<endl;
-        //         Eigen::Isometry3d transform;
-        //         transform.matrix() = transform_matrix.cast<double>();
-        //         g2o::EdgeSE3* edge = new g2o::EdgeSE3();
-        //         edge->setVertex(0, optimizer.vertex(anchor_frame_idx[i-1]));
-        //         edge->setVertex(1, optimizer.vertex(anchor_frame_idx[i]));
-        //         edge->setMeasurement(transform);
-        //         edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity()*10);
-        //         optimizer.addEdge(edge);
-        //     }
-        // }
-        // cout<<"添加闭环约束边"<<endl;
+            if (icp.hasConverged()) {
+                std::string final_filename = "final_cloud_" + std::to_string(i) + ".ply";
+                pcl::io::savePLYFile(final_filename, Final);
+                // Ptarget.inv()*(Rest * Psource)
+                Eigen::Matrix4d transform_matrix = (icp.getFinalTransformation().matrix().cast<double>() * transformations[i]) * transformations[i-1].inverse();
+                //transforma_matrix 是两个关键帧之间的相对位姿
+                cout<<"from "<<anchor_frame_idx[i-1]<<" to "<<anchor_frame_idx[i]<<": "<<endl<<transform_matrix<<endl;
+                Eigen::Isometry3d transform;
+                transform.matrix() = transform_matrix;
+                g2o::EdgeSE3* edge = new g2o::EdgeSE3();
+                edge->setVertex(0, optimizer.vertex(anchor_frame_idx[i-1]));
+                edge->setVertex(1, optimizer.vertex(anchor_frame_idx[i]));
+                edge->setMeasurement(transform);
+                edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity()*10);
+                optimizer.addEdge(edge);
+            }
+        }
+        cout<<"添加闭环约束边"<<endl;
         // 添加闭环约束边
         pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> loop_icp;
         loop_icp.setMaxCorrespondenceDistance(0.1);
@@ -1058,7 +1087,7 @@ void kfusion::KinFu::loopClosureOptimize(
         
         pcl::io::savePLYFileBinary("loop_aligned_cloud_final.ply", loop_final);
         if (loop_icp.hasConverged()) {
-            Eigen::Matrix4f transform_matrix = (loop_icp.getFinalTransformation().matrix() * transformations[fidx]) * transformations[0].inverse();
+            Eigen::Matrix4d transform_matrix = (loop_icp.getFinalTransformation().matrix().cast<double>() * transformations[fidx]) * transformations[0].inverse();
             Eigen::Isometry3d loop_transform;
             loop_transform.matrix() = transform_matrix.cast<double>();
             cout<<"=============================fidx is: "<<fidx<<endl;
@@ -1128,10 +1157,10 @@ void kfusion::KinFu::loopClosureOptimize(
             pose.translation().y(),
             pose.translation().z()));
         }
-        auto taff = poses[anchor_frame_idx[0]].inv() * poses[anchor_frame_idx_last];
-        std::cout<<"relative pose: "<<endl<<taff.translation()<<endl;
-        std::cout<<taff.rotation()<<endl;
-        std::cout<<"-----"<<endl;
+        // auto taff = poses[anchor_frame_idx[0]].inv() * poses[anchor_frame_idx_last];
+        // std::cout<<"relative pose: "<<endl<<taff.translation()<<endl;
+        // std::cout<<taff.rotation()<<endl;
+        // std::cout<<"-----"<<endl;
 
         std::ofstream ply_file2("poses_and_circle2.ply");
         ply_file2 << "ply\n";
@@ -1160,31 +1189,31 @@ void kfusion::KinFu::loopClosureOptimize(
         
         ply_file2.close();
     }
-    transformations.clear();
-    clouds_transformed.clear();
-    for (size_t i = 0; i < clouds.size(); ++i) {
-        std::string filename = "cloud_" + std::to_string(i) + ".ply";
-        // Apply transformation to cloud using pose[i] and save
-        Eigen::Matrix4f transformation;
-        int pose_idx = anchor_frame_idx[i];
-        transformation << 
-            poses[pose_idx].matrix.val[0], poses[pose_idx].matrix.val[1], poses[pose_idx].matrix.val[2], poses[pose_idx].matrix.val[3],
-            poses[pose_idx].matrix.val[4], poses[pose_idx].matrix.val[5], poses[pose_idx].matrix.val[6], poses[pose_idx].matrix.val[7],
-            poses[pose_idx].matrix.val[8], poses[pose_idx].matrix.val[9], poses[pose_idx].matrix.val[10], poses[pose_idx].matrix.val[11],
-            poses[pose_idx].matrix.val[12], poses[pose_idx].matrix.val[13], poses[pose_idx].matrix.val[14], poses[pose_idx].matrix.val[15];
+    // transformations.clear();
+    // clouds_transformed.clear();
+    // for (size_t i = 0; i < clouds.size(); ++i) {
+    //     std::string filename = "cloud_" + std::to_string(i) + ".ply";
+    //     // Apply transformation to cloud using pose[i] and save
+    //     Eigen::Matrix4d transformation;
+    //     int pose_idx = anchor_frame_idx[i];
+    //     transformation << 
+    //         poses[pose_idx].matrix.val[0], poses[pose_idx].matrix.val[1], poses[pose_idx].matrix.val[2], poses[pose_idx].matrix.val[3],
+    //         poses[pose_idx].matrix.val[4], poses[pose_idx].matrix.val[5], poses[pose_idx].matrix.val[6], poses[pose_idx].matrix.val[7],
+    //         poses[pose_idx].matrix.val[8], poses[pose_idx].matrix.val[9], poses[pose_idx].matrix.val[10], poses[pose_idx].matrix.val[11],
+    //         poses[pose_idx].matrix.val[12], poses[pose_idx].matrix.val[13], poses[pose_idx].matrix.val[14], poses[pose_idx].matrix.val[15];
         
-        transformations.push_back(transformation);
-        cout<<"======index of anchor frame: "<<i<<"======="<<pose_idx<<endl;
-        cout<<"transformation: "<<transformation<<endl;
-        cout<<poses[pose_idx].rotation()<<","<<poses[pose_idx].translation()<<endl;
-        cout<<"-------------------------------"<<endl;
-        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-        pcl::transformPointCloudWithNormals(*clouds[i], *transformed_cloud, transformation);
-        clouds_transformed.push_back(transformed_cloud);
+    //     transformations.push_back(transformation);
+    //     cout<<"======index of anchor frame: "<<i<<"======="<<pose_idx<<endl;
+    //     cout<<"transformation: "<<transformation<<endl;
+    //     cout<<poses[pose_idx].rotation()<<","<<poses[pose_idx].translation()<<endl;
+    //     cout<<"-------------------------------"<<endl;
+    //     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+    //     pcl::transformPointCloudWithNormals(*clouds[i], *transformed_cloud, transformation);
+    //     clouds_transformed.push_back(transformed_cloud);
 
-        std::string transformed_filename = "ftransformed_cloud_" + std::to_string(i) + ".ply";
-        pcl::io::savePLYFile(transformed_filename, *transformed_cloud);
-    }
+    //     std::string transformed_filename = "ftransformed_cloud_" + std::to_string(i) + ".ply";
+    //     pcl::io::savePLYFile(transformed_filename, *transformed_cloud);
+    // }
     //先合成一个闭环的TSDF，用于后续位姿估计的基准
     for(int i=0; i<frame_count; i++)
     {
@@ -1286,7 +1315,7 @@ void kfusion::KinFu::loopClosureOptimize(
                         << ", yaw=" << euler_taffine[2]*180/M_PI << std::endl;
             }
             volume_->integrate(dists_, poses[i], p.intr);
-            if(false)
+            if(true)
             { 
                 volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
                 for (int i = 1; i < LEVELS; ++i)
