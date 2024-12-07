@@ -227,6 +227,7 @@ public:
     string spfile_folder = "./check_results/body_default/";
     string color_folder = "./check_results/body_default/colors";
     string depth_folder = "./check_results/body_default/depths";
+    string align_color_folder = "./check_results/body_default/align_colors";
     KinFuParams params = KinFuParams::default_params();
     double fx;
     double fy;
@@ -989,7 +990,7 @@ public:
                             std::sqrt(a * a + b * b + c * c);
                 
                 // 只保留平面上方的点
-                if (distance < -0.02)
+                if (distance < -0.04)
                 {
                     filtered_cloud->points.push_back(point); // 保留原始点的颜色和法向
                 }
@@ -1148,9 +1149,9 @@ public:
         }
         else
         {
-            string body_file = "./results/rbody.ply";
-            bm.loadMeasureBody("./results/rbody.ply");
-            rt["body_model"] = (readFileIntoString("./results/rbody.ply").c_str());
+            string body_file = "./results/body_measure.ply";
+            bm.loadMeasureBody("./results/body_measure.ply");
+            rt["body_model"] = (readFileIntoString("./results/body_measure.ply").c_str());
         }
         // bm.loadMeasureBody_pcl("./results/scan.ply", body_file.c_str(), "./results/corres_idxes.mat");
         // load the config file
