@@ -443,7 +443,7 @@ public:
                         std::stringstream ss;
                         ss << pfile;
                         kinfu.toPlyColor(cloud_host, normal_host, spfile_folder+"origin_cloud.ply", 255, 0, 0);
-                        kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(), 255, 0, 0);
+                        // kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(), 255, 0, 0);
                         // string scmd = "cp ./results/origin_cloud.ply "+spfile_folder+"origin_cloud.ply";
                         // system(scmd.c_str());
                         // start measurement
@@ -584,135 +584,138 @@ public:
                         std::cout << "decode png" << std::endl;
                         cv::Mat depth = cv::imdecode(img_vec, cv::IMREAD_ANYDEPTH);
                         cv::imwrite(depth_folder + jv["frame_id"].asString() + ".png", depth);
-                        if (device_type == "realsense")
+                        if(kinfu_->isLoopClosed() == false)
                         {
-                            depth = depth / 4;
-                        }
-                        else if (device_type == "kinect")
-                        {
-                            depth = depth;
-                        }
-                        for (size_t i = 0; i < depth.rows; i++)
-                        {
-                            for (size_t j = 0; j < depth.cols; j++)
+                            if (device_type == "realsense")
                             {
-                                if (depth.at<ushort>(i, j) > 2500)
-                                {
-                                    depth.at<ushort>(i, j) = 0;
-                                }
-                                if(i<20 || i> 414-20)
-                                {
-                                    depth.at<ushort>(i,j) = 0;
-                                }
+                                depth = depth / 4;
                             }
-                        }
-                        ////////////////////////START//////////////////////////
-                        // user specified code, for test to filter the point cloud
-                        cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
-                        cameraMatrix.at<double>(0, 0) = fx;
-                        cameraMatrix.at<double>(1, 1) = fy;
-                        cameraMatrix.at<double>(0, 2) = cx;
-                        cameraMatrix.at<double>(1, 2) = cy;
-                        cv::Mat distCoeffs = cv::Mat::zeros(1, 5, CV_64F);
-                        distCoeffs.at<double>(0) = k1;
-                        distCoeffs.at<double>(1) = k2;
-                        distCoeffs.at<double>(2) = p1;
-                        distCoeffs.at<double>(3) = p2;
-                        distCoeffs.at<double>(4) = k3;
-                        cv::Mat undistortedDepth;
-                        std::cout << "try to undistort image" << std::endl;
-                        cv::undistort(depth, undistortedDepth, cameraMatrix, distCoeffs);
-                        std::cout << "undistored" << std::endl;
-                        depth = undistortedDepth;
-                        // cv::imwrite(depth_folder + jv["frame_id"].asString() + "_undistored.png", depth);
-                        // cv::medianBlur(depth, depth, 5);
-                        //------------
-                        cv::Mat filteredDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
-                        for (size_t i = 0; i < depth.rows; i++)
-                        {
-                            for (size_t j = 0; j < depth.cols; j++)
+                            else if (device_type == "kinect")
                             {
-                                ushort minDepth = USHRT_MAX, maxDepth = 0;
-                                for (int k = -1; k <= 1; k++)
+                                depth = depth;
+                            }
+                            for (size_t i = 0; i < depth.rows; i++)
+                            {
+                                for (size_t j = 0; j < depth.cols; j++)
                                 {
-                                    for (int l = -1; l <= 1; l++)
+                                    if (depth.at<ushort>(i, j) > 2500)
                                     {
-                                        int new_i = i + k;
-                                        int new_j = j + l;
-                                        if (new_i >= 0 && new_i < depth.rows && new_j >= 0 && new_j < depth.cols)
-                                        {
-                                            ushort depthValue = depth.at<ushort>(new_i, new_j);
-                                            if (depthValue < minDepth) minDepth = depthValue;
-                                            if (depthValue > maxDepth) maxDepth = depthValue;
-                                        }
+                                        depth.at<ushort>(i, j) = 0;
+                                    }
+                                    if(i<20 || i> 414-20)
+                                    {
+                                        depth.at<ushort>(i,j) = 0;
                                     }
                                 }
-                                if (maxDepth - minDepth > 30) // 如果深度最大值和最小值的差异过大
+                            }
+                            ////////////////////////START//////////////////////////
+                            // user specified code, for test to filter the point cloud
+                            cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+                            cameraMatrix.at<double>(0, 0) = fx;
+                            cameraMatrix.at<double>(1, 1) = fy;
+                            cameraMatrix.at<double>(0, 2) = cx;
+                            cameraMatrix.at<double>(1, 2) = cy;
+                            cv::Mat distCoeffs = cv::Mat::zeros(1, 5, CV_64F);
+                            distCoeffs.at<double>(0) = k1;
+                            distCoeffs.at<double>(1) = k2;
+                            distCoeffs.at<double>(2) = p1;
+                            distCoeffs.at<double>(3) = p2;
+                            distCoeffs.at<double>(4) = k3;
+                            cv::Mat undistortedDepth;
+                            std::cout << "try to undistort image" << std::endl;
+                            cv::undistort(depth, undistortedDepth, cameraMatrix, distCoeffs);
+                            std::cout << "undistored" << std::endl;
+                            depth = undistortedDepth;
+                            // cv::imwrite(depth_folder + jv["frame_id"].asString() + "_undistored.png", depth);
+                            // cv::medianBlur(depth, depth, 5);
+                            //------------
+                            cv::Mat filteredDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
+                            for (size_t i = 0; i < depth.rows; i++)
+                            {
+                                for (size_t j = 0; j < depth.cols; j++)
                                 {
-                                    filteredDepth.at<ushort>(i, j) = 0;
-                                }
-                                else
-                                {
-                                    filteredDepth.at<ushort>(i, j) = depth.at<ushort>(i, j);
+                                    ushort minDepth = USHRT_MAX, maxDepth = 0;
+                                    for (int k = -1; k <= 1; k++)
+                                    {
+                                        for (int l = -1; l <= 1; l++)
+                                        {
+                                            int new_i = i + k;
+                                            int new_j = j + l;
+                                            if (new_i >= 0 && new_i < depth.rows && new_j >= 0 && new_j < depth.cols)
+                                            {
+                                                ushort depthValue = depth.at<ushort>(new_i, new_j);
+                                                if (depthValue < minDepth) minDepth = depthValue;
+                                                if (depthValue > maxDepth) maxDepth = depthValue;
+                                            }
+                                        }
+                                    }
+                                    if (maxDepth - minDepth > 30) // 如果深度最大值和最小值的差异过大
+                                    {
+                                        filteredDepth.at<ushort>(i, j) = 0;
+                                    }
+                                    else
+                                    {
+                                        filteredDepth.at<ushort>(i, j) = depth.at<ushort>(i, j);
+                                    }
                                 }
                             }
-                        }
-                        // 对深度图进行噪声过滤
-                        // depth = filteredDepth;
-                        // cv::Mat noiseFilteredDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
-                        // const int windowSize = 5; // 使用5x5的窗口
-                        // const int halfWindow = windowSize / 2;
-                        // const float stdDevThreshold = 5.0f; // 标准差阈值
-                        
-                        // for(int i = halfWindow; i < depth.rows-halfWindow; i++) {
-                        //     for(int j = halfWindow; j < depth.cols-halfWindow; j++) {
-                        //         // 计算窗口内的均值和标准差
-                        //         float sum = 0;
-                        //         float sqSum = 0;
-                        //         int count = 0;
-                                
-                        //         for(int m = -halfWindow; m <= halfWindow; m++) {
-                        //             for(int n = -halfWindow; n <= halfWindow; n++) {
-                        //                 ushort val = depth.at<ushort>(i+m, j+n);
-                        //                 if(val > 0) { // 只考虑有效深度值
-                        //                     sum += val;
-                        //                     sqSum += val * val;
-                        //                     count++;
-                        //                 }
-                        //             }
-                        //         }
-                                
-                        //         if(count > 0) {
-                        //             float mean = sum / count;
-                        //             float variance = (sqSum / count) - (mean * mean);
-                        //             float stdDev = sqrt(variance);
+                            // 对深度图进行噪声过滤
+                            // depth = filteredDepth;
+                            // cv::Mat noiseFilteredDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());
+                            // const int windowSize = 5; // 使用5x5的窗口
+                            // const int halfWindow = windowSize / 2;
+                            // const float stdDevThreshold = 5.0f; // 标准差阈值
+                            
+                            // for(int i = halfWindow; i < depth.rows-halfWindow; i++) {
+                            //     for(int j = halfWindow; j < depth.cols-halfWindow; j++) {
+                            //         // 计算窗口内的均值和标准差
+                            //         float sum = 0;
+                            //         float sqSum = 0;
+                            //         int count = 0;
                                     
-                        //             // 如果标准差大于阈值，认为是噪声区域
-                        //             if(stdDev > stdDevThreshold) {
-                        //                 noiseFilteredDepth.at<ushort>(i,j) = 0;
-                        //             } else {
-                        //                 noiseFilteredDepth.at<ushort>(i,j) = depth.at<ushort>(i,j);
-                        //             }
-                        //         }
-                        //     }
-                        // }
-                        
-                        // filteredDepth = noiseFilteredDepth;
-                        depth = filteredDepth;
-                        kinfu.append_depth_image(depth);
-                        depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
-                        // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
-                        {
-                            SampledScopeTime fps(time_ms);
-                            (void)fps;
-                            has_image = kinfu(depth_device_);
-                        }
-                        if (flag_show_image)
-                        {
-                            if (has_image)
-                                show_raycasted(kinfu);
-                            // cv::imshow("Image", depth);
-                            int key = cv::waitKey(pause_ ? 0 : 3);
+                            //         for(int m = -halfWindow; m <= halfWindow; m++) {
+                            //             for(int n = -halfWindow; n <= halfWindow; n++) {
+                            //                 ushort val = depth.at<ushort>(i+m, j+n);
+                            //                 if(val > 0) { // 只考虑有效深度值
+                            //                     sum += val;
+                            //                     sqSum += val * val;
+                            //                     count++;
+                            //                 }
+                            //             }
+                            //         }
+                                    
+                            //         if(count > 0) {
+                            //             float mean = sum / count;
+                            //             float variance = (sqSum / count) - (mean * mean);
+                            //             float stdDev = sqrt(variance);
+                                        
+                            //             // 如果标准差大于阈值，认为是噪声区域
+                            //             if(stdDev > stdDevThreshold) {
+                            //                 noiseFilteredDepth.at<ushort>(i,j) = 0;
+                            //             } else {
+                            //                 noiseFilteredDepth.at<ushort>(i,j) = depth.at<ushort>(i,j);
+                            //             }
+                            //         }
+                            //     }
+                            // }
+                            
+                            // filteredDepth = noiseFilteredDepth;
+                            depth = filteredDepth;
+                            kinfu.append_depth_image(depth);
+                            depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
+                            // depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
+                            {
+                                SampledScopeTime fps(time_ms);
+                                (void)fps;
+                                has_image = kinfu(depth_device_);
+                            }
+                            if (flag_show_image)
+                            {
+                                if (has_image)
+                                    show_raycasted(kinfu);
+                                // cv::imshow("Image", depth);
+                                int key = cv::waitKey(pause_ ? 0 : 3);
+                            }
                         }
                     }
                     std::cout << "image received: " << jv["img_type"].asString() << std::endl;
@@ -724,7 +727,6 @@ public:
                 ;
             }
         }
-
         return true;
     }
 
