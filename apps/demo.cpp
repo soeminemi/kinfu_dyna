@@ -384,6 +384,9 @@ public:
 
                 if (jv["cmd"].asString() == "finish")
                 {
+                    flag_started = false;
+                    vcode = "none";
+                    std::cout << "msg:" << msg << std::endl;
                     if (kinfu.isLoopClosed()==false)
                     {
                         // for test
@@ -400,8 +403,6 @@ public:
                         continue;
                     }
                     kinfu.loopClosureOptimize();//执行闭环优化
-                    std::cout << "msg:" << msg << std::endl;
-                    vcode = "none"; // ready to receive new process
                     if (jv["gender"].isString())
                     {
                         if (jv["gender"].asString() == "male")
