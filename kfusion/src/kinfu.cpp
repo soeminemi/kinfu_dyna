@@ -2,18 +2,6 @@
 #include "internal.hpp"
 #include "io/ply.hpp"
 // #include <ceres/ceres.h>
-#include <g2o/core/sparse_optimizer.h>
-#include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <g2o/core/optimization_algorithm_factory.h>
-#include <g2o/types/slam3d/vertex_se3.h>
-#include <g2o/types/slam3d/edge_se3.h>
-#include <g2o/core/base_vertex.h>
-#include <g2o/core/base_unary_edge.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/core/optimization_algorithm_gauss_newton.h>
-#include <g2o/core/optimization_algorithm_dogleg.h>
-#include <g2o/solvers/dense/linear_solver_dense.h>
 #include <memory>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
@@ -28,6 +16,19 @@
 #include <pcl/registration/icp_nl.h>
 #include <pcl/registration/joint_icp.h>
 #include "kfusion/loop_closure_solver.hpp"
+
+#include <g2o/core/sparse_optimizer.h>
+#include <g2o/solvers/eigen/linear_solver_eigen.h>
+#include <g2o/core/optimization_algorithm_factory.h>
+#include <g2o/types/slam3d/vertex_se3.h>
+#include <g2o/types/slam3d/edge_se3.h>
+#include <g2o/core/base_vertex.h>
+#include <g2o/core/base_unary_edge.h>
+#include <g2o/core/block_solver.h>
+#include <g2o/core/optimization_algorithm_levenberg.h>
+#include <g2o/core/optimization_algorithm_gauss_newton.h>
+#include <g2o/core/optimization_algorithm_dogleg.h>
+#include <g2o/solvers/dense/linear_solver_dense.h>
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
@@ -497,6 +498,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             cuda::DeviceArray<Point> cloud_buffer;
             cuda::DeviceArray<Point> tcloud;
             tcloud = volume_->fetchCloud(cloud_buffer);
+            
             cv::Mat cloud_host(1, (int)tcloud.size(), CV_32FC4);
             tcloud.download(cloud_host.ptr<Point>());
             
@@ -587,12 +589,12 @@ void kfusion::KinFu::loopClosureOptimize(
     std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> clouds_transformed; 
     std::vector<int> anchor_frame_idx;
     anchor_frame_idx.clear();
-    for(int i=0; i<frame_count; i+=15)
+    for(int i=0; i<frame_count; i+=20)
     {
         volume_loop_->clear();
         int integrate_num = 0;
         //获取当前帧的点云
-        for (int j = i-10; j < i+10; j++)
+        for (int j = i-15; j < i+15; j++)
         {
             if (j<0 || j>=frame_count)
                 continue;
@@ -680,296 +682,293 @@ void kfusion::KinFu::loopClosureOptimize(
     std::vector<Eigen::Matrix4d> transformations;
     std::vector<Affine3f> initial_poses;
 
-    for (size_t k = 0; k < 1; ++k) {
-        // Store each point cloud in 'clouds' as a PLY file
-        transformations.clear();
-        clouds_transformed.clear();
-        initial_poses.clear();
-        std::vector<std::pair<int,int>> loop_pair;
-        for (size_t i = 0; i < clouds.size(); ++i) {
-            std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
-            // Apply transformation to cloud using pose[i] and save
-            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_read(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-            if (pcl::io::loadPLYFile(filename, *cloud_read) == -1) {
-                PCL_ERROR("Couldn't read file %s \n", filename.c_str());
-                continue;
-            }
-            // auto cloud_read = clouds[i];
-            Eigen::Matrix4d transformation;
-            int pose_idx = anchor_frame_idx[i];
-            transformation << 
-                poses[pose_idx].matrix.val[0], poses[pose_idx].matrix.val[1], poses[pose_idx].matrix.val[2], poses[pose_idx].matrix.val[3],
-                poses[pose_idx].matrix.val[4], poses[pose_idx].matrix.val[5], poses[pose_idx].matrix.val[6], poses[pose_idx].matrix.val[7],
-                poses[pose_idx].matrix.val[8], poses[pose_idx].matrix.val[9], poses[pose_idx].matrix.val[10], poses[pose_idx].matrix.val[11],
-                poses[pose_idx].matrix.val[12], poses[pose_idx].matrix.val[13], poses[pose_idx].matrix.val[14], poses[pose_idx].matrix.val[15];
-            initial_poses.push_back(poses[pose_idx]);
-            transformations.push_back(transformation);
-            cout<<"======index of anchor frame: "<<i<<"======="<<pose_idx<<endl;
-            cout<<"transformation: "<<transformation<<endl;
-            cout<<poses[pose_idx].rotation()<<","<<poses[pose_idx].translation()<<endl;
-            cout<<"-------------------------------"<<endl;
-            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-            cout<<"start transform: cloud size: "<<clouds[i]->size()<<endl;
-            try {
-                cout<<"transformation_matrix: "<<transformation<<endl;
-                pcl::transformPointCloudWithNormals(*cloud_read, *transformed_cloud, transformation);
-            } catch (const std::exception& e) {
-                std::cerr << "Exiting program due to transformation failure." << std::endl;
-                exit(1);
-
-            }
-            clouds_transformed.push_back(transformed_cloud);
-            if (i>0)
-            {
-                loop_pair.push_back(std::make_pair(i,i-1));
-            }
-        }
-        loop_pair.push_back(std::make_pair(clouds.size()-1,0));
-        //调用闭环模块进行闭环
-        cout<<"开始BA优化"<<endl;
-        LoopClosureSolver solver_ba;
-        std::vector<cv::Affine3f> optimized_poses;
-        //用ICP进行初步配准已经进行了多次迭代，整个BA多次优化没有任何效果，一次就可以了
-        for(size_t i=0;i<1;i++)
-        {
-            optimized_poses = solver_ba.optimizePoses(clouds, initial_poses, loop_pair);
-            initial_poses = optimized_poses;
-            cout<<"第"<<i<<"次BA优化完成"<<endl;
-        }
-        cout<<"BA finished"<<endl;
-        //
-        auto affineToEigen = [](const cv::Affine3f& affine) -> Eigen::Matrix4f {
-            Eigen::Matrix4f eigenMat;
-            cv::Matx44f cvMat = affine.matrix;
-            for (int i = 0; i < 4; ++i) {
-                for (int j = 0; j < 4; ++j) {
-                    eigenMat(i, j) = cvMat(i, j);
-                }
-            }
-            return eigenMat;
-        };
-        
-        // 将clouds按照对应的优化得到的pose进行变换并存储到同一个ply文件内
-        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-        for (size_t i = 0; i < clouds.size(); ++i) {
-            //服务器上要重新导入才能变换，不然会报浮点错误
-            std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
-            // Apply transformation to cloud using pose[i] and save
-            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_read(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-            if (pcl::io::loadPLYFile(filename, *cloud_read) == -1) {
-                PCL_ERROR("Couldn't read file %s \n", filename.c_str());
-                continue;
-            }
-            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-            Eigen::Matrix4f transformation = affineToEigen(optimized_poses[i]) ;
+    // Store each point cloud in 'clouds' as a PLY file
+    transformations.clear();
+    clouds_transformed.clear();
+    initial_poses.clear();
+    std::vector<std::pair<int,int>> loop_pair;
+    for (size_t i = 0; i < clouds.size(); ++i) {
+        // std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
+        // // Apply transformation to cloud using pose[i] and save
+        // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_read(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+        // if (pcl::io::loadPLYFile(filename, *cloud_read) == -1) {
+        //     PCL_ERROR("Couldn't read file %s \n", filename.c_str());
+        //     continue;
+        // }
+        auto cloud_read = clouds[i];
+        Eigen::Matrix4d transformation;
+        int pose_idx = anchor_frame_idx[i];
+        transformation << 
+            poses[pose_idx].matrix.val[0], poses[pose_idx].matrix.val[1], poses[pose_idx].matrix.val[2], poses[pose_idx].matrix.val[3],
+            poses[pose_idx].matrix.val[4], poses[pose_idx].matrix.val[5], poses[pose_idx].matrix.val[6], poses[pose_idx].matrix.val[7],
+            poses[pose_idx].matrix.val[8], poses[pose_idx].matrix.val[9], poses[pose_idx].matrix.val[10], poses[pose_idx].matrix.val[11],
+            poses[pose_idx].matrix.val[12], poses[pose_idx].matrix.val[13], poses[pose_idx].matrix.val[14], poses[pose_idx].matrix.val[15];
+        initial_poses.push_back(poses[pose_idx]);
+        transformations.push_back(transformation);
+        cout<<"======index of anchor frame: "<<i<<"======="<<pose_idx<<endl;
+        cout<<"transformation: "<<transformation<<endl;
+        cout<<poses[pose_idx].rotation()<<","<<poses[pose_idx].translation()<<endl;
+        cout<<"-------------------------------"<<endl;
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+        cout<<"start transform: cloud size: "<<clouds[i]->size()<<endl;
+        try {
+            cout<<"transformation_matrix: "<<transformation<<endl;
             pcl::transformPointCloudWithNormals(*cloud_read, *transformed_cloud, transformation);
-            *merged_cloud += *transformed_cloud;
-        }
-        //合并的点云现在是好的
-        pcl::io::savePLYFile("./results/origin_cloud.ply", *merged_cloud);
-        
-        // 构建图优化问题
-        auto cv2eigen = [](const cv::Mat& cvMat, Eigen::Matrix3d& eigenMat) {
-            for(int i = 0; i < 3; i++) {
-                for(int j = 0; j < 3; j++) {
-                    eigenMat(i,j) = cvMat.at<double>(i,j);
-                }
-            }
-        };
-        auto eigen2cv = [](const Eigen::Matrix3d& eigenMat, cv::Mat& cvMat) {
-            cvMat = cv::Mat(3, 3, CV_64F);
-            for(int i = 0; i < 3; i++) {
-                for(int j = 0; j < 3; j++) {
-                    cvMat.at<double>(i,j) = eigenMat(i,j);
-                }
-            }
-        };
-        // 创建优化器
-        g2o::SparseOptimizer optimizer;
-        optimizer.clear();
-        // 配置求解器
-        std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver = 
-            std::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
-        g2o::OptimizationAlgorithmLevenberg* solver = 
-            new g2o::OptimizationAlgorithmLevenberg(
-                std::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver)));
-        optimizer.setAlgorithm(solver);
+        } catch (const std::exception& e) {
+            std::cerr << "Exiting program due to transformation failure." << std::endl;
+            exit(1);
 
-        // 添加顶点
-        for(int i = 0; i < frame_count; i++) {
-            g2o::VertexSE3* v = new g2o::VertexSE3();
-            v->setId(i);
-            
-            // 设置顶点初始估计值
-            Eigen::Isometry3d pose;
-            cv::Mat R;
-            cv::Mat(poses[i].rotation()).convertTo(R, CV_64F);
-            Eigen::Matrix3d rotation;
-            
-            cv2eigen(R, rotation);
-            pose.linear() = rotation;
-            pose.translation() = Eigen::Vector3d(
-                poses[i].translation()[0],
-                poses[i].translation()[1], 
-                poses[i].translation()[2]);
-            
-            v->setEstimate(pose);
-            
-            // 第一帧固定
-            if(i == 0)
-                v->setFixed(true);
-                
-            optimizer.addVertex(v);
         }
-
-        // 添加帧间约束边
-        for(int i = 1; i < frame_count; i++) {
-            g2o::EdgeSE3* edge = new g2o::EdgeSE3();
-            edge->setId(i);
-            edge->setVertex(0, optimizer.vertex(i-1));
-            edge->setVertex(1, optimizer.vertex(i));
-            
-            // 计算相对位姿约束
-            Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
-            cv::Mat R;
-            auto af = poses[i-1].inv() * poses[i]; // transform from i to i-1
-            cv::Mat(af.rotation()).convertTo(R, CV_64F);
-            Eigen::Matrix3d rotation;
-            cv2eigen(R, rotation);
-            relative_pose.linear() = rotation;
-            auto t = af.translation();
-            relative_pose.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
-            
-            edge->setMeasurement(relative_pose);
-            
-            // 设置信息矩阵
-            // 计算边的长度(相对位移的模长)作为权重
-            double edge_length = cv::norm(cv::Vec3f(t[0], t[1], t[2]));
-            Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Identity() ;//* edge_length;
-            edge->setInformation(information);
-            
-            optimizer.addEdge(edge);
+        clouds_transformed.push_back(transformed_cloud);
+        if (i>0)
+        {
+            loop_pair.push_back(std::make_pair(i,i-1));
         }
-        //添加固定关键帧约束边
-        cout<<"=====================添加固定关键帧约束边===================="<<endl;
-        for (size_t i = 1; i < clouds.size(); ++i) {
-            g2o::EdgeSE3* edge = new g2o::EdgeSE3();
-            // (Rest * Psource) * Ptarget.inv()
-            // 计算相对位姿约束
-            Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
-            cv::Mat R;
-            auto af = optimized_poses[0].inv() * optimized_poses[i]; // transform from i to i-1
-            cv::Mat(af.rotation()).convertTo(R, CV_64F);
-            Eigen::Matrix3d rotation;
-            cv2eigen(R, rotation);
-            relative_pose.linear() = rotation;
-            auto t = af.translation();
-            relative_pose.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
-
-            edge->setVertex(0, optimizer.vertex(anchor_frame_idx[0]));
-            edge->setVertex(1, optimizer.vertex(anchor_frame_idx[i]));
-            
-            edge->setMeasurement(relative_pose);
-            edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity()*100); 
-            optimizer.addEdge(edge);
-        }
-        //圆周估计
-        CircularMotionConstraint motion_constraint;
-        motion_constraint.estimateFromTrajectory(poses);
-        // 从轨迹估计圆心和半径
-        // std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
-        // std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
-        // double sum_error = 0;
-        // for(int i = 0; i < frame_count; i++) {
-        //     cv::Vec3f p = poses[i].translation();
-        //     cv::Vec3f center = motion_constraint.getCenter();
-        //     double dist = cv::norm(p - center);
-        //     double error = std::abs(dist - motion_constraint.getRadius());
-        //     sum_error += error;
-        // }
-        // double mean_error = sum_error / frame_count;
-        // std::cout << "Mean error of camera poses to circle center: " << mean_error << std::endl;
-        // // 为相邻帧添加圆周运动约束
-        // for(int i = 0; i < frame_count-1; i++) {
-        //     g2o::EdgeCircularMotion* circular_edge = new g2o::EdgeCircularMotion();
-        //     circular_edge->setVertex(0, optimizer.vertex(i));
-        //     circular_edge->setVertex(1, optimizer.vertex(i+1));
-        //     circular_edge->setMeasurement(motion_constraint);
-        //     // 设置信息矩阵（约束权重）
-        //     Eigen::Matrix3d information = Eigen::Matrix3d::Identity();
-        //     information(0,0) = information(1,1) = 1.0;  // 距离约束权重
-        //     information(2,2) = 0.00;  // 切向约束权重
-        //     circular_edge->setInformation(information);
-        //     optimizer.addEdge(circular_edge);
-        // }
-        // 执行优化
-        cout<<"开始G2O优化"<<endl;
-        optimizer.initializeOptimization();
-        int iterations = optimizer.optimize(30);
-        // 输出优化相关信息
-        double chi2 = optimizer.chi2();
-        std::cout << "优化信息:" << std::endl;
-        std::cout << "- 优化迭代次数: " << iterations << std::endl;
-        std::cout << "- 最终误差值: " << chi2 << std::endl;
-        std::cout << "- 边的数量: " << optimizer.edges().size() << std::endl;
-        std::cout << "- 顶点的数量: " << optimizer.vertices().size() << std::endl;
-        // 获取优化结果更新poses
-        for(int i = 0; i < frame_count; i++) {
-            g2o::VertexSE3* v = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
-            Eigen::Isometry3d pose = v->estimate();
-            
-            cv::Mat R;
-            Eigen::Matrix3d rotation = pose.rotation();
-            eigen2cv(rotation, R);
-            R.convertTo(R, CV_32F);
-            poses[i] = Affine3f(R, cv::Vec3f(
-            pose.translation().x(),
-            pose.translation().y(),
-            pose.translation().z()));
-        }
-        int anchor_frame_idx_last = anchor_frame_idx.back();
-        auto taff = poses[anchor_frame_idx[0]].inv() * poses[anchor_frame_idx_last];
-        std::cout<<"optimized relative pose: "<<endl<<taff.translation()<<endl<<endl;
-        std::cout<<taff.rotation()<<endl;
-        std::cout<<"-----"<<endl;
-        std::cout<<"optimized anchor pose: "<<endl<<poses[anchor_frame_idx_last].translation()<<endl<<endl;
-        std::cout<<poses[anchor_frame_idx_last].rotation()<<endl;
-        std::cout<<"-----"<<endl;
-    }//end of g2o iterations
-
-
-    std::cout << "Saving poses as ply file..." << std::endl;
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr pose_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    for (const auto& pose : poses) {
-        pcl::PointXYZRGBNormal point;
-        cv::Vec3f translation = pose.translation();
-        cv::Vec3f direction = pose.rotation() * cv::Vec3f(0, 0, 1);  // 将Z轴方向转换到世界坐标系
-        point.x = translation[0];
-        point.y = translation[1];
-        point.z = translation[2];
-        point.r = 0;
-        point.g = 255;
-        point.b = 0;   
-        point.normal_x = direction[0];
-        point.normal_y = direction[1];
-        point.normal_z = direction[2];
-        pose_cloud->points.push_back(point);
     }
-    pcl::io::savePLYFileBinary("./results/camera_poses.ply", *pose_cloud);
+    loop_pair.push_back(std::make_pair(clouds.size()-1,0));
+    //调用闭环模块进行闭环
+    cout<<"开始BA优化"<<endl;
+    LoopClosureSolver solver_ba;
+    std::vector<cv::Affine3f> optimized_poses;
+    //用ICP进行初步配准已经进行了多次迭代，整个BA多次优化没有任何效果，一次就可以了
+    for(size_t i=0;i<1;i++)
+    {
+        optimized_poses = solver_ba.optimizePoses(clouds, initial_poses, loop_pair);
+        initial_poses = optimized_poses;
+        cout<<"第"<<i<<"次BA优化完成"<<endl;
+    }
+    cout<<"BA finished"<<endl;
+    //
+    auto affineToEigen = [](const cv::Affine3f& affine) -> Eigen::Matrix4f {
+        Eigen::Matrix4f eigenMat;
+        cv::Matx44f cvMat = affine.matrix;
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                eigenMat(i, j) = cvMat(i, j);
+            }
+        }
+        return eigenMat;
+    };
+    
+    // 将clouds按照对应的优化得到的pose进行变换并存储到同一个ply文件内
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    for (size_t i = 0; i < clouds.size(); ++i) {
+        //服务器上要重新导入才能变换，不然会报浮点错误
+        // std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
+        // // Apply transformation to cloud using pose[i] and save
+        // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_read(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+        // if (pcl::io::loadPLYFile(filename, *cloud_read) == -1) {
+        //     PCL_ERROR("Couldn't read file %s \n", filename.c_str());
+        //     continue;
+        // }
+        auto cloud_read = clouds[i];
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+        Eigen::Matrix4f transformation = affineToEigen(optimized_poses[i]) ;
+        pcl::transformPointCloudWithNormals(*cloud_read, *transformed_cloud, transformation);
+        *merged_cloud += *transformed_cloud;
+    }
+    //合并的点云现在是好的
+    pcl::io::savePLYFile("./results/origin_cloud.ply", *merged_cloud);
+    
+    // 构建图优化问题
+    auto cv2eigen = [](const cv::Mat& cvMat, Eigen::Matrix3d& eigenMat) {
+        for(int i = 0; i < 3; i++) {
+            for(int j = 0; j < 3; j++) {
+                eigenMat(i,j) = cvMat.at<double>(i,j);
+            }
+        }
+    };
+    auto eigen2cv = [](const Eigen::Matrix3d& eigenMat, cv::Mat& cvMat) {
+        cvMat = cv::Mat(3, 3, CV_64F);
+        for(int i = 0; i < 3; i++) {
+            for(int j = 0; j < 3; j++) {
+                cvMat.at<double>(i,j) = eigenMat(i,j);
+            }
+        }
+    };
+    //clear the optimizer
+    g2o::SparseOptimizer optimizer;
+    // 配置求解器
+    std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver = 
+        std::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
+    g2o::OptimizationAlgorithmLevenberg* solver = 
+        new g2o::OptimizationAlgorithmLevenberg(
+            std::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver)));
+    optimizer.setAlgorithm(solver);
+    // 添加顶点
+    for(int i = 0; i < frame_count; i++) {
+        g2o::VertexSE3 *v = new g2o::VertexSE3();
+        v->setId(i);
+        
+        // 设置顶点初始估计值
+        Eigen::Isometry3d pose;
+        cv::Mat R;
+        cv::Mat(poses[i].rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        
+        cv2eigen(R, rotation);
+        pose.linear() = rotation;
+        pose.translation() = Eigen::Vector3d(
+            poses[i].translation()[0],
+            poses[i].translation()[1], 
+            poses[i].translation()[2]);
+        
+        v->setEstimate(pose);
+        
+        // 第一帧固定
+        if(i == 0)
+            v->setFixed(true);
+        optimizer.addVertex(v);
+    }
+
+    // 添加帧间约束边
+    for(int i = 1; i < frame_count; i++) {
+        g2o::EdgeSE3 *edge = new g2o::EdgeSE3();
+        edge->setId(i);
+        edge->setVertex(0, optimizer.vertex(i-1));
+        edge->setVertex(1, optimizer.vertex(i));
+        
+        // 计算相对位姿约束
+        Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
+        cv::Mat R;
+        auto af = poses[i-1].inv() * poses[i]; // transform from i to i-1
+        cv::Mat(af.rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        cv2eigen(R, rotation);
+        relative_pose.linear() = rotation;
+        auto t = af.translation();
+        relative_pose.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
+        
+        edge->setMeasurement(relative_pose);
+        
+        // 设置信息矩阵
+        // 计算边的长度(相对位移的模长)作为权重
+        double edge_length = cv::norm(cv::Vec3f(t[0], t[1], t[2]));
+        Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Identity() ;//* edge_length;
+        edge->setInformation(information);
+        
+        optimizer.addEdge(edge);
+    }
+    //添加固定关键帧约束边
+    cout<<"=====================添加固定关键帧约束边===================="<<endl;
+    float ct_idx = clouds.size()/2;
+    for (size_t i = 1; i < clouds.size(); ++i) {
+        double weight = fabs(i-ct_idx) * 100/ct_idx;
+        if(weight < 1)
+            weight = 1;
+        g2o::EdgeSE3* edge = new g2o::EdgeSE3();
+        // (Rest * Psource) * Ptarget.inv()
+        // 计算相对位姿约束
+        Eigen::Isometry3d relative_pose = Eigen::Isometry3d::Identity();
+        cv::Mat R;
+        auto af = optimized_poses[0].inv() * optimized_poses[i]; // transform from i to i-1
+        cv::Mat(af.rotation()).convertTo(R, CV_64F);
+        Eigen::Matrix3d rotation;
+        cv2eigen(R, rotation);
+        relative_pose.linear() = rotation;
+        auto t = af.translation();
+        relative_pose.translation() = Eigen::Vector3d(t[0], t[1], t[2]);
+
+        edge->setVertex(0, optimizer.vertex(anchor_frame_idx[0]));
+        edge->setVertex(1, optimizer.vertex(anchor_frame_idx[i]));
+        
+        edge->setMeasurement(relative_pose);
+        edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity()*weight); 
+        optimizer.addEdge(edge);
+    }
+    //圆周估计
+    // CircularMotionConstraint motion_constraint;
+    // motion_constraint.estimateFromTrajectory(poses);
+    // 从轨迹估计圆心和半径
+    // std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
+    // std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
+    // double sum_error = 0;
+    // for(int i = 0; i < frame_count; i++) {
+    //     cv::Vec3f p = poses[i].translation();
+    //     cv::Vec3f center = motion_constraint.getCenter();
+    //     double dist = cv::norm(p - center);
+    //     double error = std::abs(dist - motion_constraint.getRadius());
+    //     sum_error += error;
+    // }
+    // double mean_error = sum_error / frame_count;
+    // std::cout << "Mean error of camera poses to circle center: " << mean_error << std::endl;
+    // // 为相邻帧添加圆周运动约束
+    // for(int i = 0; i < frame_count-1; i++) {
+    //     g2o::EdgeCircularMotion* circular_edge = new g2o::EdgeCircularMotion();
+    //     circular_edge->setVertex(0, optimizer.vertex(i));
+    //     circular_edge->setVertex(1, optimizer.vertex(i+1));
+    //     circular_edge->setMeasurement(motion_constraint);
+    //     // 设置信息矩阵（约束权重）
+    //     Eigen::Matrix3d information = Eigen::Matrix3d::Identity();
+    //     information(0,0) = information(1,1) = 1.0;  // 距离约束权重
+    //     information(2,2) = 0.00;  // 切向约束权重
+    //     circular_edge->setInformation(information);
+    //     optimizer.addEdge(circular_edge);
+    // }
+    // 执行优化
+    cout<<"开始G2O优化"<<endl;
+    optimizer.initializeOptimization();
+    int iterations = optimizer.optimize(30);
+    // 输出优化相关信息
+    double chi2 = optimizer.chi2();
+    std::cout << "优化信息:" << std::endl;
+    std::cout << "- 优化迭代次数: " << iterations << std::endl;
+    std::cout << "- 最终误差值: " << chi2 << std::endl;
+    std::cout << "- 边的数量: " << optimizer.edges().size() << std::endl;
+    std::cout << "- 顶点的数量: " << optimizer.vertices().size() << std::endl;
+    // 获取优化结果更新poses
+    for(int i = 0; i < frame_count; i++) {
+        g2o::VertexSE3* v = static_cast<g2o::VertexSE3*>(optimizer.vertex(i));
+        Eigen::Isometry3d pose = v->estimate();
+        
+        cv::Mat R;
+        Eigen::Matrix3d rotation = pose.rotation();
+        eigen2cv(rotation, R);
+        R.convertTo(R, CV_32F);
+        poses[i] = Affine3f(R, cv::Vec3f(
+        pose.translation().x(),
+        pose.translation().y(),
+        pose.translation().z()));
+    }
+    int anchor_frame_idx_last = anchor_frame_idx.back();
+    auto taff = poses[anchor_frame_idx[0]].inv() * poses[anchor_frame_idx_last];
+    std::cout<<"optimized relative pose: "<<endl<<taff.translation()<<endl<<endl;
+    std::cout<<taff.rotation()<<endl;
+    std::cout<<"-----"<<endl;
+    std::cout<<"optimized anchor pose: "<<endl<<poses[anchor_frame_idx_last].translation()<<endl<<endl;
+    std::cout<<poses[anchor_frame_idx_last].rotation()<<endl;
+    // std::cout << "Saving poses as ply file..." << std::endl;
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr pose_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    // for (const auto& pose : poses) {
+    //     pcl::PointXYZRGBNormal point;
+    //     cv::Vec3f translation = pose.translation();
+    //     cv::Vec3f direction = pose.rotation() * cv::Vec3f(0, 0, 1);  // 将Z轴方向转换到世界坐标系
+    //     point.x = translation[0];
+    //     point.y = translation[1];
+    //     point.z = translation[2];
+    //     point.r = 0;
+    //     point.g = 255;
+    //     point.b = 0;   
+    //     point.normal_x = direction[0];
+    //     point.normal_y = direction[1];
+    //     point.normal_z = direction[2];
+    //     pose_cloud->points.push_back(point);
+    // }
+    // pcl::io::savePLYFileBinary("./results/camera_poses.ply", *pose_cloud);
 
 
     // transformations.clear();
     // clouds_transformed.clear();
     cout<<"=======重新变换位姿并保存======="<<endl;
     for (size_t i = 0; i < clouds.size(); ++i) {
-        std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
-        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr ncloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-        if (pcl::io::loadPLYFile<pcl::PointXYZRGBNormal>(filename, *ncloud) == -1)
-        {
-            PCL_ERROR("Couldn't read file %s\n", filename.c_str());
-            return;
-        }
-
+        // std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
+        // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr ncloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+        // if (pcl::io::loadPLYFile<pcl::PointXYZRGBNormal>(filename, *ncloud) == -1)
+        // {
+        //     PCL_ERROR("Couldn't read file %s\n", filename.c_str());
+        //     return;
+        // }
+        auto ncloud = clouds[i];
         // Apply transformation to cloud using pose[i] and save
         Eigen::Matrix4d transformation;
         int pose_idx = anchor_frame_idx[i];
@@ -992,6 +991,10 @@ void kfusion::KinFu::loopClosureOptimize(
         int j=i%20;
         if(j>3)
             continue;
+        // if(i>30 && i<frame_count -30)
+        // {
+        //     continue;
+        // }
         auto &depth = depth_imgs_[i];
         depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
@@ -1013,7 +1016,63 @@ void kfusion::KinFu::loopClosureOptimize(
     if(true)
     {
         cout<<"reintegrate again"<<endl;
-        for(int i = 0; i < frame_count; i++) {
+        for(int i = 0; i < frame_count/2; i++) {
+            auto &depth = depth_imgs_[i];
+            depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
+            cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+            cuda::depthBilateralFilter(depth_device_tmp_, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+            if (p.icp_truncate_depth_dist > 0)
+                kfusion::cuda::depthTruncation(curr_.depth_pyr[0], p.icp_truncate_depth_dist);
+            for (int i = 1; i < LEVELS; ++i)
+                cuda::depthBuildPyramid(curr_.depth_pyr[i-1], curr_.depth_pyr[i], p.bilateral_sigma_depth);
+            for (int i = 0; i < LEVELS; ++i)
+                cuda::computePointNormals(p.intr(i), curr_.depth_pyr[i], curr_.points_pyr[i], curr_.normals_pyr[i]);
+            cuda::waitAllDefaultStream();
+            
+            if(i==0)
+            {
+                cuda::computeDists(depth_device_tmp_, dists_, p.intr);
+                cuda::depthBilateralFilter(depth_device_tmp_, first_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
+                if (p.icp_truncate_depth_dist > 0)
+                    kfusion::cuda::depthTruncation(first_.depth_pyr[0], p.icp_truncate_depth_dist);
+                for (int i = 1; i < LEVELS; ++i)
+                    cuda::depthBuildPyramid(first_.depth_pyr[i-1], first_.depth_pyr[i], p.bilateral_sigma_depth);
+                for (int i = 0; i < LEVELS; ++i)
+                    cuda::computePointNormals(p.intr(i), first_.depth_pyr[i], first_.points_pyr[i], first_.normals_pyr[i]);
+                cuda::waitAllDefaultStream();
+                volume_->integrate(dists_, poses[i], p.intr);
+                continue;
+            }
+
+            volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+            for (int i = 1; i < LEVELS; ++i)
+                resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+            cuda::waitAllDefaultStream();
+            //重新估算pose
+            Affine3f affine;
+            bool ok = icp_->estimateTransform(affine, p.intr, curr_.points_pyr, curr_.normals_pyr, prev_.points_pyr, prev_.normals_pyr);
+            poses[i] = poses[i] * affine;//更新当前帧的pose
+
+            volume_->integrate(dists_, poses[i], p.intr);
+            if(false)
+            { 
+                volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
+                for (int i = 1; i < LEVELS; ++i)
+                    resizePointsNormals(prev_.points_pyr[i-1], prev_.normals_pyr[i-1], prev_.points_pyr[i], prev_.normals_pyr[i]);
+                cuda::waitAllDefaultStream();
+                // 在当前相机视角下进行raycast
+                renderImage(view_device_, 0);
+                view_host_.create(view_device_.rows(), view_device_.cols(), CV_8UC4);
+                view_device_.download(view_host_.ptr<void>(), view_host_.step);
+                cv::Mat rotated_view;
+                cv::rotate(view_host_, rotated_view, cv::ROTATE_90_CLOCKWISE);
+                cv::imshow("loopScene", rotated_view);
+                cv::waitKey(10);
+            }
+        }
+        //other side
+        cout<<"reintegrate from another side"<<endl;
+        for(int i = frame_count -1 ; i > frame_count / 2; i--) {
             auto &depth = depth_imgs_[i];
             depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
             cuda::computeDists(depth_device_tmp_, dists_, p.intr);
@@ -1068,6 +1127,7 @@ void kfusion::KinFu::loopClosureOptimize(
             }
         }
     }
+    cout<<"loop closure finished"<<endl;
     //保存关键帧信息，用于后续投影及柔性重建
     for(size_t i=0; i<anchor_frame_idx.size(); i++)
     {

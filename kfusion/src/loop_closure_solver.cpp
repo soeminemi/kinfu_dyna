@@ -1,9 +1,4 @@
 #include "kfusion/loop_closure_solver.hpp"
-#include <g2o/core/sparse_optimizer.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/types/slam3d/vertex_se3.h>
-#include <g2o/types/slam3d/edge_se3.h>
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 #include <pcl/io/ply_io.h>
@@ -22,12 +17,12 @@ LoopClosureSolver::LoopClosureSolver()
 {
 }
 
-void LoopClosureSolver::setupICP(pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>& icp) const {
+void LoopClosureSolver::setupICP(pcl::IterativeClosestPointWithNormals<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>& icp) const {
     icp.setMaxCorrespondenceDistance(max_correspondence_distance_);
     icp.setTransformationEpsilon(transformation_epsilon_);
     icp.setEuclideanFitnessEpsilon(euclidean_fitness_epsilon_);
     icp.setMaximumIterations(max_iterations_);
-    // icp.setUseSymmetricObjective(true); 
+    icp.setUseSymmetricObjective(true); 
 }
 
 cv::Affine3f LoopClosureSolver::estimateRelativePose(
@@ -37,7 +32,7 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
     std::vector<int>& source_indices,
     std::vector<int>& target_indices
 ) {
-    pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
+    pcl::IterativeClosestPointWithNormals<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
     setupICP(icp);
 
     icp.setInputSource(source_cloud);
@@ -91,91 +86,6 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
             final_cv_mat.at<float>(i,j) = final_transform(i,j);
 
     return cv::Affine3f(final_cv_mat);
-}
-
-void LoopClosureSolver::buildPoseGraphOptimization(
-    const std::vector<cv::Affine3f>& poses,
-    const std::vector<std::pair<int, int>>& loop_pairs,
-    const std::vector<cv::Affine3f>& relative_poses
-) {
-    // // 创建优化器
-    // g2o::SparseOptimizer optimizer;
-    // auto linearSolver = std::make_unique<g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>>();
-    // auto solver = std::make_unique<g2o::BlockSolverX>(std::move(linearSolver));
-    // auto algorithm = new g2o::OptimizationAlgorithmLevenberg(std::move(solver));
-    // optimizer.setAlgorithm(algorithm);
-
-    // // 添加顶点（相机位姿）
-    // for (size_t i = 0; i < poses.size(); ++i) {
-    //     g2o::VertexSE3* v = new g2o::VertexSE3();
-    //     v->setId(static_cast<int>(i));
-        
-    //     // 转换OpenCV Affine3f到Eigen Isometry3d
-    //     Eigen::Isometry3d pose_eigen;
-    //     cv::Mat pose_cv = poses[i].matrix;
-    //     for(int r = 0; r < 4; r++)
-    //         for(int c = 0; c < 4; c++)
-    //             pose_eigen.matrix()(r,c) = pose_cv.at<float>(r,c);
-        
-    //     v->setEstimate(pose_eigen);
-    //     if (i == 0)  // 固定第一帧
-    //         v->setFixed(true);
-    //     optimizer.addVertex(v);
-    // }
-
-    // // 添加边（位姿约束）
-    // int edge_id = 0;
-    
-    // // 添加相邻帧之间的约束
-    // for (size_t i = 1; i < poses.size(); ++i) {
-    //     g2o::EdgeSE3* e = new g2o::EdgeSE3();
-    //     e->setId(edge_id++);
-    //     e->setVertex(0, optimizer.vertex(i-1));
-    //     e->setVertex(1, optimizer.vertex(i));
-        
-    //     // 计算相对位姿
-    //     cv::Affine3f relative = poses[i-1].inv() * poses[i];
-    //     Eigen::Isometry3d relative_eigen;
-    //     cv::Mat relative_cv = relative.matrix;
-    //     for(int r = 0; r < 4; r++)
-    //         for(int c = 0; c < 4; c++)
-    //             relative_eigen.matrix()(r,c) = relative_cv.at<float>(r,c);
-        
-    //     e->setMeasurement(relative_eigen);
-        
-    //     // 设置信息矩阵（协方差的逆）
-    //     Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Identity();
-    //     e->setInformation(information);
-        
-    //     optimizer.addEdge(e);
-    // }
-    
-    // // 添加闭环约束
-    // for (size_t i = 0; i < loop_pairs.size(); ++i) {
-    //     g2o::EdgeSE3* e = new g2o::EdgeSE3();
-    //     e->setId(edge_id++);
-    //     e->setVertex(0, optimizer.vertex(loop_pairs[i].first));
-    //     e->setVertex(1, optimizer.vertex(loop_pairs[i].second));
-        
-    //     // 使用ICP计算得到的相对位姿
-    //     Eigen::Isometry3d relative_eigen;
-    //     cv::Mat relative_cv = relative_poses[i].matrix;
-    //     for(int r = 0; r < 4; r++)
-    //         for(int c = 0; c < 4; c++)
-    //             relative_eigen.matrix()(r,c) = relative_cv.at<float>(r,c);
-        
-    //     e->setMeasurement(relative_eigen);
-        
-    //     // 设置闭环约束的信息矩阵（可以给予较小的权重）
-    //     Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Identity() * 0.1;
-    //     e->setInformation(information);
-        
-    //     optimizer.addEdge(e);
-    // }
-
-    // // 执行优化
-    // optimizer.initializeOptimization();
-    // optimizer.optimize(20);
 }
 
 std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(

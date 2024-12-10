@@ -24,7 +24,7 @@ public:
 
 private:
     // ICP参数设置
-    void setupICP(pcl::IterativeClosestPoint<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>& icp) const;
+    void setupICP(pcl::IterativeClosestPointWithNormals<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>& icp) const;
     
     // 计算两个点云之间的相对位姿，并获取对应点序号
     cv::Affine3f estimateRelativePose(
@@ -41,13 +41,6 @@ private:
         const std::vector<cv::Affine3f>& initial_poses,
         const std::vector<std::pair<int, int>>& loop_pairs,
         const std::vector<std::vector<std::pair<int, int> > >& loop_corres
-    );
-
-    // 构建位姿图优化问题
-    void buildPoseGraphOptimization(
-        const std::vector<cv::Affine3f>& poses,
-        const std::vector<std::pair<int, int>>& loop_pairs,
-        const std::vector<cv::Affine3f>& relative_poses
     );
 
     // ICP相关参数

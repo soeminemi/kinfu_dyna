@@ -384,6 +384,21 @@ public:
 
                 if (jv["cmd"].asString() == "finish")
                 {
+                    if (kinfu.isLoopClosed()==false)
+                    {
+                        // for test
+                        Json::Value rt;
+                        rt["error"] = "not loop closed";
+                        Json::StreamWriterBuilder jswBuilder;
+                        jswBuilder["emitUTF8"] = true;
+                        std::unique_ptr<Json::StreamWriter> jsWriter(jswBuilder.newStreamWriter());
+
+                        std::ostringstream os;
+                        jsWriter->write(rt, &os);
+                        ws.send_msg(a.hdl, os.str());
+                        continue;
+                    }
+                    
                     kinfu.loopClosureOptimize();//执行闭环优化
                     std::cout << "msg:" << msg << std::endl;
                     vcode = "none"; // ready to receive new process
