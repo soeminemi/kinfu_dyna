@@ -396,9 +396,9 @@ public:
                         std::ostringstream os;
                         jsWriter->write(rt, &os);
                         ws.send_msg(a.hdl, os.str());
+                        kinfu.reset();
                         continue;
                     }
-                    
                     kinfu.loopClosureOptimize();//执行闭环优化
                     std::cout << "msg:" << msg << std::endl;
                     vcode = "none"; // ready to receive new process
@@ -425,10 +425,13 @@ public:
                     {
                         double weight = jv["weight"].asDouble();
                         meshFittor->setWeight(weight,true);
+                        flag_weight_set = true;
+                        weight_set = weight;
                     }
                     else{
                         std::cout << "failed to get weight" << std::endl;
                         meshFittor->setWeight(50.0,false);
+                        flag_weight_set = false;
                     }
                     if (jv["measure_type"].isString())
                     {
@@ -733,7 +736,6 @@ public:
                             }
                         }
                     }
-                    std::cout << "image received: " << jv["img_type"].asString() << std::endl;
                 }
             }
             else
@@ -897,7 +899,8 @@ public:
     {
         auto start = std::chrono::high_resolution_clock::now();
         ofstream ff("log.txt", ios::app);
-        ff << "calling the service @ " << getCurrentTimeStr() << endl;
+        auto start_time = getCurrentTimeStr();
+        ff << "calling the service @ " << start_time<< endl;
         ff.close();
         if (flag_std_sample)
         {
@@ -1133,6 +1136,8 @@ public:
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
         cout << "time used for optimization: " << elapsed.count() << endl;
+        cout <<"calling the service @ " << start_time<< endl;
+        cout <<"end calling service @ "<<getCurrentTimeStr()<<endl;
         return rst;
     }
     std::string readFileToString(std::string filePath)
@@ -1151,7 +1156,10 @@ public:
         Json::Reader reader;
         Json::Value root;
         Json::Value rt;
-
+        if(flag_weight_set == true)
+        {
+            rt["weight"] = weight_set;
+        }
         if (flag_std_sample)
         {
             cloth_type = "nake";
@@ -1296,21 +1304,20 @@ public:
         // save result for checking
 
         string cppath = "cp ./results/kn0.ply " + spfile_folder + "kn0.ply";
-        system(cppath.c_str());
+        auto rtn = system(cppath.c_str());
         cppath = "cp ./examples/final.ply " + spfile_folder + "final.ply";
-        system(cppath.c_str());
+        rtn = system(cppath.c_str());
         cppath = "cp ./results/scan.ply " + spfile_folder + "scan.ply";
-        system(cppath.c_str());
+        rtn = system(cppath.c_str());
         cppath = "cp ./results/rbody.ply " + spfile_folder + "rbody.ply";
-        system(cppath.c_str());
+        rtn = system(cppath.c_str());
         cppath = "cp ./results/body_measure.ply " + spfile_folder + "body_measure.ply";
-        system(cppath.c_str());
+        rtn = system(cppath.c_str());
         ofstream ff1("log.txt", ios::app);
         ff1 << "end calling the service @ " << getCurrentTimeStr() << endl;
         ff1 << endl;
         ff1.close();
         cout << "end calling the service @ " << getCurrentTimeStr() << endl;
-
         return os.str();
     }
     void init_bodymeasuer()
@@ -1328,6 +1335,9 @@ public:
         meshFittor = &meshFittorFemale;
     }
 #endif
+private: 
+    double weight_set = 50;
+    bool flag_weight_set = false;
 };
 
 #include <websocketpp/config/asio_no_tls_client.hpp>
