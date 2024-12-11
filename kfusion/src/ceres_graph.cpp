@@ -11,6 +11,7 @@ void CeresGraph::optimizePoseGraph(std::vector<Affine3f>& poses,
     // Problem setup
     ceres::Problem problem;
     ceres::LossFunction* loss_function = new ceres::HuberLoss(1.0);
+    ceres::LocalParameterization* quaternion_parameterization = new ceres::EigenQuaternionParameterization();
 
     // Parameters for each pose (translation and rotation as quaternion)
     std::vector<Eigen::Vector3d> translations(poses.size());
@@ -35,8 +36,8 @@ void CeresGraph::optimizePoseGraph(std::vector<Affine3f>& poses,
         Eigen::Matrix4d relative_pose = Eigen::Matrix4d::Identity();
         
         // Compute relative transformation between consecutive frames
-        Eigen::Matrix3d R_rel = rotations[i-1].conjugate() * rotations[i].toRotationMatrix();
-        Eigen::Vector3d t_rel = rotations[i-1].conjugate() * (translations[i] - translations[i-1]);
+        Eigen::Matrix3d R_rel = rotations[i].conjugate() * rotations[i-1].toRotationMatrix();
+        Eigen::Vector3d t_rel = rotations[i].conjugate() * (translations[i-1] - translations[i]);
         
         relative_pose.block(0, 0, 3, 3) = R_rel;
         relative_pose.block(0, 3, 3, 1) = t_rel;
@@ -48,11 +49,9 @@ void CeresGraph::optimizePoseGraph(std::vector<Affine3f>& poses,
                                translations[i-1].data(), rotations[i-1].coeffs().data(),
                                translations[i].data(), rotations[i].coeffs().data());
 
-        // Keep quaternions normalized
-        problem.SetManifold(rotations[i-1].coeffs().data(), 
-                          new ceres::EigenQuaternionManifold);
-        problem.SetManifold(rotations[i].coeffs().data(), 
-                          new ceres::EigenQuaternionManifold);
+        // Keep quaternions normalized using shared quaternion parameterization
+        problem.SetParameterization(rotations[i-1].coeffs().data(), quaternion_parameterization);
+        problem.SetParameterization(rotations[i].coeffs().data(), quaternion_parameterization);
     }
 
     // Add loop closure constraints
@@ -78,6 +77,10 @@ void CeresGraph::optimizePoseGraph(std::vector<Affine3f>& poses,
         problem.AddResidualBlock(loop_cost_function, loss_function,
                                translations[idx1].data(), rotations[idx1].coeffs().data(),
                                translations.back().data(), rotations.back().coeffs().data());
+
+        // Keep quaternions normalized for loop closure constraints
+        problem.SetParameterization(rotations[idx1].coeffs().data(), quaternion_parameterization);
+        problem.SetParameterization(rotations.back().coeffs().data(), quaternion_parameterization);
     }
 
     // Fix the first pose

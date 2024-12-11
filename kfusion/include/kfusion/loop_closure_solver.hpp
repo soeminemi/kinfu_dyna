@@ -1,11 +1,12 @@
 #pragma once
 
-#include <vector>
-#include <opencv2/core.hpp>
-#include <opencv2/core/affine.hpp>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/registration/icp.h>
+#include <pcl/registration/transformation_estimation_point_to_plane.h>
+#include <opencv2/core.hpp>
+#include <vector>
+#include <opencv2/core/affine.hpp>
 #include "internal.hpp"
 
 namespace kfusion {
@@ -21,6 +22,9 @@ public:
         const std::vector<cv::Affine3f>& initial_poses,
         const std::vector<std::pair<int, int>>& loop_pairs
     );
+    void setIndex(int idx) {
+        idx_ = idx;
+    }
 
 private:
     // ICP参数设置
@@ -48,6 +52,7 @@ private:
     float transformation_epsilon_;
     float euclidean_fitness_epsilon_;
     int max_iterations_;
+    int idx_ = 0;
 };
 
 } // namespace kfusion

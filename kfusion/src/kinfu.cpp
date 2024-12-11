@@ -590,9 +590,13 @@ void kfusion::KinFu::loopClosureOptimize(
     anchor_frame_idx.clear();
     if(frame_count == 0)
         return;
-    int step = 40/(360/frame_count);
+    int step = 30/(360/frame_count);
     int bias = 15/(360/frame_count);
+    cout<<"step: "<<step<<endl;
+    cout<<"bias: "<<bias<<endl;
     bias = bias < 1 ? 1 : bias;
+    step = 20;
+    bias = 15;
     for(int i=0; i<frame_count; i+=step)
     {
         volume_loop_->clear();
@@ -714,7 +718,6 @@ void kfusion::KinFu::loopClosureOptimize(
         cout<<poses[pose_idx].rotation()<<","<<poses[pose_idx].translation()<<endl;
         cout<<"-------------------------------"<<endl;
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-        cout<<"start transform: cloud size: "<<clouds[i]->size()<<endl;
         try {
             cout<<"transformation_matrix: "<<transformation<<endl;
             pcl::transformPointCloudWithNormals(*cloud_read, *transformed_cloud, transformation);
@@ -773,7 +776,18 @@ void kfusion::KinFu::loopClosureOptimize(
     }
     //合并的点云现在是好的
     pcl::io::savePLYFile("./results/origin_cloud.ply", *merged_cloud);
-    return;
+#ifndef USE_G2O
+    CeresGraph::optimizePoseGraph(poses, anchor_frame_idx, optimized_poses);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr poses_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    for (size_t i = 0; i < poses.size(); ++i) {
+        pcl::PointXYZ point;
+        point.x = poses[i].translation()[0];
+        point.y = poses[i].translation()[1];
+        point.z = poses[i].translation()[2];
+        poses_cloud->points.push_back(point);
+    }
+    pcl::io::savePLYFile("./results/camera_poses_after_opt.ply", *poses_cloud);
+#else
     volume_->clear(); 
     volume_loop_->clear();
     // 构建图优化问题
@@ -882,35 +896,6 @@ void kfusion::KinFu::loopClosureOptimize(
         edge->setInformation(Eigen::Matrix<double, 6, 6>::Identity()*weight); 
         optimizer.addEdge(edge);
     }
-    //圆周估计
-    // CircularMotionConstraint motion_constraint;
-    // motion_constraint.estimateFromTrajectory(poses);
-    // 从轨迹估计圆心和半径
-    // std::cout << "Estimated circle center: " << motion_constraint.getCenter() << std::endl;
-    // std::cout << "Estimated circle radius: " << motion_constraint.getRadius() << std::endl;
-    // double sum_error = 0;
-    // for(int i = 0; i < frame_count; i++) {
-    //     cv::Vec3f p = poses[i].translation();
-    //     cv::Vec3f center = motion_constraint.getCenter();
-    //     double dist = cv::norm(p - center);
-    //     double error = std::abs(dist - motion_constraint.getRadius());
-    //     sum_error += error;
-    // }
-    // double mean_error = sum_error / frame_count;
-    // std::cout << "Mean error of camera poses to circle center: " << mean_error << std::endl;
-    // // 为相邻帧添加圆周运动约束
-    // for(int i = 0; i < frame_count-1; i++) {
-    //     g2o::EdgeCircularMotion* circular_edge = new g2o::EdgeCircularMotion();
-    //     circular_edge->setVertex(0, optimizer.vertex(i));
-    //     circular_edge->setVertex(1, optimizer.vertex(i+1));
-    //     circular_edge->setMeasurement(motion_constraint);
-    //     // 设置信息矩阵（约束权重）
-    //     Eigen::Matrix3d information = Eigen::Matrix3d::Identity();
-    //     information(0,0) = information(1,1) = 1.0;  // 距离约束权重
-    //     information(2,2) = 0.00;  // 切向约束权重
-    //     circular_edge->setInformation(information);
-    //     optimizer.addEdge(circular_edge);
-    // }
     // 执行优化
     cout<<"开始G2O优化"<<endl;
     optimizer.initializeOptimization();
@@ -943,24 +928,25 @@ void kfusion::KinFu::loopClosureOptimize(
     std::cout<<"-----"<<endl;
     std::cout<<"optimized anchor pose: "<<endl<<poses[anchor_frame_idx_last].translation()<<endl<<endl;
     std::cout<<poses[anchor_frame_idx_last].rotation()<<endl;
-    // std::cout << "Saving poses as ply file..." << std::endl;
-    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr pose_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    // for (const auto& pose : poses) {
-    //     pcl::PointXYZRGBNormal point;
-    //     cv::Vec3f translation = pose.translation();
-    //     cv::Vec3f direction = pose.rotation() * cv::Vec3f(0, 0, 1);  // 将Z轴方向转换到世界坐标系
-    //     point.x = translation[0];
-    //     point.y = translation[1];
-    //     point.z = translation[2];
-    //     point.r = 0;
-    //     point.g = 255;
-    //     point.b = 0;   
-    //     point.normal_x = direction[0];
-    //     point.normal_y = direction[1];
-    //     point.normal_z = direction[2];
-    //     pose_cloud->points.push_back(point);
-    // }
-    // pcl::io::savePLYFileBinary("./results/camera_poses.ply", *pose_cloud);
+    std::cout << "Saving poses as ply file..." << std::endl;
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr pose_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    for (const auto& pose : poses) {
+        pcl::PointXYZRGBNormal point;
+        cv::Vec3f translation = pose.translation();
+        cv::Vec3f direction = pose.rotation() * cv::Vec3f(0, 0, 1);  // 将Z轴方向转换到世界坐标系
+        point.x = translation[0];
+        point.y = translation[1];
+        point.z = translation[2];
+        point.r = 0;
+        point.g = 255;
+        point.b = 0;   
+        point.normal_x = direction[0];
+        point.normal_y = direction[1];
+        point.normal_z = direction[2];
+        pose_cloud->points.push_back(point);
+    }
+    pcl::io::savePLYFileBinary("./results/camera_poses.ply", *pose_cloud);
+#endif
 
 
     // transformations.clear();

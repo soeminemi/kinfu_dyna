@@ -5,6 +5,7 @@
 #include <pcl/registration/icp.h>
 #include <pcl/registration/icp_nl.h>
 #include <iostream>
+#include <random>
 using namespace std;
 
 namespace kfusion {
@@ -22,7 +23,12 @@ void LoopClosureSolver::setupICP(pcl::IterativeClosestPointWithNormals<pcl::Poin
     icp.setTransformationEpsilon(transformation_epsilon_);
     icp.setEuclideanFitnessEpsilon(euclidean_fitness_epsilon_);
     icp.setMaximumIterations(max_iterations_);
-    icp.setUseSymmetricObjective(true); 
+    icp.setUseSymmetricObjective(true);
+    
+    // 设置点到平面距离度量
+    pcl::registration::TransformationEstimationPointToPlane<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>::Ptr trans_est(
+        new pcl::registration::TransformationEstimationPointToPlane<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>);
+    icp.setTransformationEstimation(trans_est);
 }
 
 cv::Affine3f LoopClosureSolver::estimateRelativePose(
@@ -57,8 +63,8 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
 
     // // 保存target和转换后的source为ply格式
     // pcl::io::savePLYFile("target_cloud.ply", *target_cloud);
-    // pcl::io::savePLYFile("transformed_source_cloud.ply", *transformed_source);
-    // pcl::io::savePLYFile("aligned_cloud.ply", aligned);
+    pcl::io::savePLYFile("aligned_target_cloud_"+to_string(idx_)+".ply", *target_cloud);
+    pcl::io::savePLYFile("aligned_cloud_"+to_string(idx_)+".ply", aligned);
 
     if (!icp.hasConverged()) {
         std::cout << "ICP did not converge!" << std::endl;
@@ -98,9 +104,12 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
     std::vector<int> source_indices, target_indices;
     std::vector<std::vector<std::pair<int, int>>> loop_corres;
     cout<<"基于icp进行相对位姿估计及对应点获取"<<endl;
+    int idx = 1;
     for (const auto& pair : loop_pairs) {
         cout<<"估计ICP 从: "<<pair.first<<" 到 "<<pair.second<<endl;
         cv::Affine3f initial_guess = initial_poses[pair.second].inv() * initial_poses[pair.first];
+        setIndex(idx);
+        idx++;
         cv::Affine3f relative_pose = estimateRelativePose(
             point_clouds[pair.first],
             point_clouds[pair.second],
@@ -271,25 +280,52 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
             // problem.SetParameterBlockConstant(params + 4); // 固定平移向量
         }
     }
+    float max_x = -std::numeric_limits<float>::max();
+    for (const auto& point_cloud : point_clouds) {
+        for (const auto& point : point_cloud->points) {
+            max_x = std::max(max_x, point.x);
+        }
+    }
+    std::cout << "max x: " << max_x << std::endl;
+    
     // 添加闭环约束
     double weight = 1.0;
+    const size_t MAX_CORRESPONDENCES = 10000;
+    float ct_idx = loop_pairs.size()/2;
     for (size_t i = 0; i < loop_pairs.size(); ++i) {
-        weight = 1.0;
-        if(i == 0 || i == loop_pairs.size() - 1)
-        {
-            weight = 10.f;
+        // 设置权重，第一个和最后一个回环约束权重更大
+        // weight = 1.0;
+        // if(i == 0 || i == loop_pairs.size() - 1) {
+        //     weight = 10.f;
+        // }
+        weight = fabs(i-ct_idx) * 10/ct_idx;
+        if(weight < 2)
+            weight = 2;
+        auto source_idx = loop_pairs[i].first;
+        auto target_idx = loop_pairs[i].second;
+        
+        std::vector<size_t> indices(loop_corres[i].size());
+        std::iota(indices.begin(), indices.end(), 0);  // Fill with 0, 1, ..., n-1
+        
+        if (loop_corres[i].size() > MAX_CORRESPONDENCES) {
+            // Random shuffle and take first MAX_CORRESPONDENCES elements
+            std::random_shuffle(indices.begin(), indices.end());
+            indices.resize(MAX_CORRESPONDENCES);
+            std::cout << "Using " << MAX_CORRESPONDENCES << " points out of " << loop_corres[i].size() 
+                      << " for loop closure " << i << " (weight: " << weight << ")" << std::endl;
+        } else {
+            std::cout << "Using all " << loop_corres[i].size() << " points for loop closure " << i 
+                      << " (weight: " << weight << ")" << std::endl;
         }
-        int source_idx = loop_pairs[i].first;
-        int target_idx = loop_pairs[i].second;
-        cout<<"添加损失函数，从帧"<<source_idx<<"到帧"<<target_idx<<",对应点对个数"<<loop_corres[i].size()<<endl;
-        // 获取对应点对
-        for (size_t j = 0; j < loop_corres[i].size(); ++j) {
-            auto pt_cpidx = loop_corres[i][j];
+        
+        for (size_t idx : indices) {
+            auto pt_cpidx = loop_corres[i][idx];
             auto source_indice = pt_cpidx.first;
             auto target_indice = pt_cpidx.second;
             const auto& source_point = point_clouds[source_idx]->points[source_indice];
             const auto& target_point = point_clouds[target_idx]->points[target_indice];
-            
+            if (source_point.x > max_x - 0.2) continue;
+            if (target_point.x > max_x - 0.2) continue;
             Eigen::Vector3d source_eigen(source_point.x, source_point.y, source_point.z);
             Eigen::Vector3d target_eigen(target_point.x, target_point.y, target_point.z);
             Eigen::Vector3d source_normal_eigen(source_point.normal_x, source_point.normal_y, source_point.normal_z);

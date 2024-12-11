@@ -2,6 +2,7 @@
 
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
+#include <ceres/local_parameterization.h>
 #include <opencv2/core.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <Eigen/Core>
@@ -26,17 +27,17 @@ public:
         Eigen::Map<const Eigen::Matrix<T, 3, 1>> t2(p2);
         Eigen::Map<const Eigen::Quaternion<T>> q2_map(q2);
 
-        // Compute the relative transformation
-        Eigen::Quaternion<T> q_rel = q1_map.conjugate() * q2_map;
-        Eigen::Matrix<T, 3, 1> t_rel = q1_map.conjugate() * (t2 - t1);
+        // Compute the relative transformation (from pose2 to pose1)
+        Eigen::Quaternion<T> q_rel = q2_map.conjugate() * q1_map;
+        Eigen::Matrix<T, 3, 1> t_rel = q2_map.conjugate() * (t1 - t2);
 
         // Convert relative pose to matrix form
         Eigen::Matrix<T, 4, 4> pred_rel = Eigen::Matrix<T, 4, 4>::Identity();
         pred_rel.block(0, 0, 3, 3) = q_rel.toRotationMatrix();
         pred_rel.block(0, 3, 3, 1) = t_rel;
 
-        // Compute error
-        Eigen::Matrix<T, 4, 4> error = pred_rel.inverse() * relative_pose_.cast<T>();
+        // Compute error (both pred_rel and relative_pose_ are from pose2 to pose1)
+        Eigen::Matrix<T, 4, 4> error = pred_rel * relative_pose_.cast<T>().inverse();
         
         // Extract rotation and translation parts of the error
         Eigen::Matrix<T, 3, 3> R_error = error.block(0, 0, 3, 3);
