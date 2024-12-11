@@ -1,7 +1,7 @@
 #include "precomp.hpp"
 #include "internal.hpp"
 #include "io/ply.hpp"
-// #include <ceres/ceres.h>
+#include "kfusion/ceres_graph.hpp"
 #include <memory>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
@@ -582,19 +582,23 @@ void kfusion::KinFu::loopClosureOptimize(
     const int LEVELS = icp_->getUsedLevelsNum();
     cv::Mat view_host_;
     cuda::Image view_device_;
-    volume_->clear(); 
-    volume_loop_->clear();
+    
     cuda::Depth depth_device_tmp_;
     std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> clouds;
     std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr> clouds_transformed; 
     std::vector<int> anchor_frame_idx;
     anchor_frame_idx.clear();
-    for(int i=0; i<frame_count; i+=20)
+    if(frame_count == 0)
+        return;
+    int step = 40/(360/frame_count);
+    int bias = 15/(360/frame_count);
+    bias = bias < 1 ? 1 : bias;
+    for(int i=0; i<frame_count; i+=step)
     {
         volume_loop_->clear();
         int integrate_num = 0;
         //获取当前帧的点云
-        for (int j = i-15; j < i+15; j++)
+        for (int j = i-bias; j < i+bias; j++)
         {
             if (j<0 || j>=frame_count)
                 continue;
@@ -749,7 +753,7 @@ void kfusion::KinFu::loopClosureOptimize(
         }
         return eigenMat;
     };
-    
+   
     // 将clouds按照对应的优化得到的pose进行变换并存储到同一个ply文件内
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     for (size_t i = 0; i < clouds.size(); ++i) {
@@ -769,7 +773,9 @@ void kfusion::KinFu::loopClosureOptimize(
     }
     //合并的点云现在是好的
     pcl::io::savePLYFile("./results/origin_cloud.ply", *merged_cloud);
-    
+    return;
+    volume_->clear(); 
+    volume_loop_->clear();
     // 构建图优化问题
     auto cv2eigen = [](const cv::Mat& cvMat, Eigen::Matrix3d& eigenMat) {
         for(int i = 0; i < 3; i++) {
