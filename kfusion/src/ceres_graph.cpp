@@ -55,8 +55,13 @@ void CeresGraph::optimizePoseGraph(std::vector<Affine3f>& poses,
     }
 
     // Add loop closure constraints
+    // 给定的loop约束是全局坐标，与第一帧绑定
     for (size_t i = 0; i < loop_frame_idx.size(); ++i) {
         int idx1 = loop_frame_idx[i];
+        if (idx1 == 0)
+        {
+            continue;
+        }
         
         // Convert loop pose to Eigen format
         cv::Mat R_loop;
@@ -76,11 +81,11 @@ void CeresGraph::optimizePoseGraph(std::vector<Affine3f>& poses,
 
         problem.AddResidualBlock(loop_cost_function, loss_function,
                                translations[idx1].data(), rotations[idx1].coeffs().data(),
-                               translations.back().data(), rotations.back().coeffs().data());
+                               translations[0].data(), rotations[0].coeffs().data());
 
-        // Keep quaternions normalized for loop closure constraints
-        problem.SetParameterization(rotations[idx1].coeffs().data(), quaternion_parameterization);
-        problem.SetParameterization(rotations.back().coeffs().data(), quaternion_parameterization);
+        // Keep quaternions normalized for loop closure constraints // 上面已经加了归一化约束
+        // problem.SetParameterization(rotations[idx1].coeffs().data(), quaternion_parameterization);
+        // problem.SetParameterization(rotations.back().coeffs().data(), quaternion_parameterization); 
     }
 
     // Fix the first pose

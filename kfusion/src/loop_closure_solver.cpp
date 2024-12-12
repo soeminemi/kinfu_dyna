@@ -9,7 +9,6 @@
 using namespace std;
 
 namespace kfusion {
-
 LoopClosureSolver::LoopClosureSolver()
     : max_correspondence_distance_(0.05f)
     , transformation_epsilon_(1e-8f)
@@ -40,10 +39,9 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
 ) {
     pcl::IterativeClosestPointWithNormals<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
     setupICP(icp);
-
+    
     icp.setInputSource(source_cloud);
     icp.setInputTarget(target_cloud);
-
 
     // 准备PCL格式的初始猜测矩阵
     Eigen::Matrix4f init_guess_mat = Eigen::Matrix4f::Identity();
@@ -238,6 +236,26 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
     const std::vector<std::pair<int, int>>& loop_pairs,
     const std::vector<std::vector<std::pair<int, int> > > &loop_corres
 ) {
+    // // 计算所有点云按照给定的initial_poses变换后的点云的所有点的中心点
+    // Eigen::Vector3d center(0, 0, 0);
+    // int total_points = 0;
+
+    // for (size_t i = 0; i < point_clouds.size(); ++i) {
+    //     const auto& cloud = point_clouds[i];
+    //     const auto& pose = initial_poses[i];
+
+    //     for (const auto& point : *cloud) {
+    //         cv::Point3f pt(point.x, point.y, point.z);
+    //         cv::Point3f transformed_pt = pose * pt;
+    //         center += Eigen::Vector3d(transformed_pt.x, transformed_pt.y, transformed_pt.z);
+    //         ++total_points;
+    //     }
+    // }
+
+    // if (total_points > 0) {
+    //     center /= total_points;
+    // }
+
     // 创建Ceres问题
     ceres::Problem problem;
     
