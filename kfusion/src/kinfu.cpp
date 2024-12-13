@@ -635,9 +635,20 @@ void kfusion::KinFu::loopClosureOptimize(
             auto b = static_cast<uint8_t>(rand() % 256);
             auto g = static_cast<uint8_t>(rand() % 256);
             auto r = static_cast<uint8_t>(rand() % 256);
+            float thres_rand = 15000.0/tcloud.size();
+            cout<<"thres_rand: "<<thres_rand<<endl;
             for (int y = 0; y < cloud_host.rows; ++y) {
                 for (int x = 0; x < cloud_host.cols; ++x) {
                     //得到在当前中心点视角下的点云
+                    // if(thres_rand < 0.8)
+                    // {
+                    //     float rand_num = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                    //     if(rand_num > thres_rand)
+                    //     {
+                    //         continue;
+                    //     }
+                    // }
+
                     cv::Vec4f pt = cloud_host.at<cv::Vec4f>(y, x);
                     cv::Vec3f tpt(pt[0],pt[1],pt[2]);
                     tpt = pinv * tpt;
@@ -713,13 +724,8 @@ void kfusion::KinFu::loopClosureOptimize(
             poses[pose_idx].matrix.val[12], poses[pose_idx].matrix.val[13], poses[pose_idx].matrix.val[14], poses[pose_idx].matrix.val[15];
         initial_poses.push_back(poses[pose_idx]);
         transformations.push_back(transformation);
-        cout<<"======index of anchor frame: "<<i<<"======="<<pose_idx<<endl;
-        cout<<"transformation: "<<transformation<<endl;
-        cout<<poses[pose_idx].rotation()<<","<<poses[pose_idx].translation()<<endl;
-        cout<<"-------------------------------"<<endl;
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
         try {
-            cout<<"transformation_matrix: "<<transformation<<endl;
             pcl::transformPointCloudWithNormals(*cloud_read, *transformed_cloud, transformation);
         } catch (const std::exception& e) {
             std::cerr << "Exiting program due to transformation failure." << std::endl;
@@ -730,6 +736,10 @@ void kfusion::KinFu::loopClosureOptimize(
         if (i>0)
         {
             loop_pair.push_back(std::make_pair(i,i-1));
+            // if(i < clouds.size()-1)
+            // {
+            //     loop_pair.push_back(std::make_pair(i+1,i-1));
+            // }
         }
     }
     loop_pair.push_back(std::make_pair(clouds.size()-1,0));
@@ -738,15 +748,30 @@ void kfusion::KinFu::loopClosureOptimize(
     LoopClosureSolver solver_ba;
     std::vector<cv::Affine3f> optimized_poses;
     //用ICP进行初步配准已经进行了多次迭代，整个BA多次优化没有任何效果，一次就可以了
-    for(size_t i=0;i<1;i++)
+    for(size_t i=0;i<3;i++)
     {
         optimized_poses = solver_ba.optimizePoses(clouds, initial_poses, loop_pair);
-        initial_poses = optimized_poses;
         cout<<"第"<<i<<"次BA优化完成"<<endl;
+        cout<<"BA finished"<<endl;
+        CeresGraph::optimizePoseGraph(poses, anchor_frame_idx, optimized_poses);
+        int k = 0;
+        for(auto idx : anchor_frame_idx)
+        {
+            optimized_poses[k] = poses[idx];
+            k++;
+        }
+        initial_poses = optimized_poses;
     }
-    cout<<"BA finished"<<endl;
-    //
-    auto affineToEigen = [](const cv::Affine3f& affine) -> Eigen::Matrix4f {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr poses_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    for (size_t i = 0; i < poses.size(); ++i) {
+        pcl::PointXYZ point;
+        point.x = poses[i].translation()[0];
+        point.y = poses[i].translation()[1];
+        point.z = poses[i].translation()[2];
+        poses_cloud->points.push_back(point);
+    }
+    pcl::io::savePLYFile("./results/camera_poses_after_opt.ply", *poses_cloud);
+        auto affineToEigen = [](const cv::Affine3f& affine) -> Eigen::Matrix4f {
         Eigen::Matrix4f eigenMat;
         cv::Matx44f cvMat = affine.matrix;
         for (int i = 0; i < 4; ++i) {
@@ -760,14 +785,6 @@ void kfusion::KinFu::loopClosureOptimize(
     // 将clouds按照对应的优化得到的pose进行变换并存储到同一个ply文件内
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     for (size_t i = 0; i < clouds.size(); ++i) {
-        //服务器上要重新导入才能变换，不然会报浮点错误
-        // std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
-        // // Apply transformation to cloud using pose[i] and save
-        // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_read(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-        // if (pcl::io::loadPLYFile(filename, *cloud_read) == -1) {
-        //     PCL_ERROR("Couldn't read file %s \n", filename.c_str());
-        //     continue;
-        // }
         auto cloud_read = clouds[i];
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
         Eigen::Matrix4f transformation = affineToEigen(optimized_poses[i]) ;
@@ -776,18 +793,7 @@ void kfusion::KinFu::loopClosureOptimize(
     }
     //合并的点云现在是好的
     pcl::io::savePLYFile("./results/origin_cloud.ply", *merged_cloud);
-#ifndef USE_G2O
-    CeresGraph::optimizePoseGraph(poses, anchor_frame_idx, optimized_poses);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr poses_cloud(new pcl::PointCloud<pcl::PointXYZ>());
-    for (size_t i = 0; i < poses.size(); ++i) {
-        pcl::PointXYZ point;
-        point.x = poses[i].translation()[0];
-        point.y = poses[i].translation()[1];
-        point.z = poses[i].translation()[2];
-        poses_cloud->points.push_back(point);
-    }
-    pcl::io::savePLYFile("./results/camera_poses_after_opt.ply", *poses_cloud);
-#else
+#ifdef USE_G2O
     volume_->clear(); 
     volume_loop_->clear();
     // 构建图优化问题
@@ -1005,7 +1011,7 @@ void kfusion::KinFu::loopClosureOptimize(
             cv::waitKey(10);
         }
     }
-    if(true)
+    if(false)
     {
         cout<<"reintegrate again"<<endl;
         for(int i = 0; i < frame_count/2; i++) {

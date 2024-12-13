@@ -10,10 +10,10 @@ using namespace std;
 
 namespace kfusion {
 LoopClosureSolver::LoopClosureSolver()
-    : max_correspondence_distance_(0.05f)
+    : max_correspondence_distance_(0.1f)
     , transformation_epsilon_(1e-8f)
     , euclidean_fitness_epsilon_(1e-6f)
-    , max_iterations_(50)
+    , max_iterations_(5)
 {
 }
 
