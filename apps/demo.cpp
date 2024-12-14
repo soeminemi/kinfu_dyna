@@ -603,7 +603,7 @@ public:
                         std::cout << "decode png" << std::endl;
                         cv::Mat depth = cv::imdecode(img_vec, cv::IMREAD_ANYDEPTH);
                         cv::imwrite(depth_folder + jv["frame_id"].asString() + ".png", depth);
-                        if(kinfu_->isLoopClosed() == false)
+                        if(kinfu_->isFinished() == false)
                         {
                             if (device_type == "realsense")
                             {

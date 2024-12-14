@@ -1,16 +1,16 @@
 #pragma once
 
-#include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/registration/icp.h>
 #include <pcl/registration/transformation_estimation_point_to_plane.h>
+#include <pcl/registration/correspondence_estimation_normal_shooting.h>
 #include <opencv2/core.hpp>
 #include <vector>
 #include <opencv2/core/affine.hpp>
+#include <pcl/point_types.h>
 #include "internal.hpp"
 
 namespace kfusion {
-
 class LoopClosureSolver {
 public:
     LoopClosureSolver();

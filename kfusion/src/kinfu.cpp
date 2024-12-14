@@ -208,6 +208,7 @@ void kfusion::KinFu::reset()
     loop_poses_.clear();
     loop_poses_.reserve(3000);
     flag_closed_ = false;
+    flag_finish_ = false;
     
     volume_->clear();
     warp_->clear();
@@ -292,6 +293,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
         }
         cuda::waitAllDefaultStream();
         flag_closed_ = false;
+        flag_finish_ = false;
         volume_->integrate(dists_, poses_.back(), p.intr);
 #if defined USE_DEPTH
         curr_.depth_pyr.swap(prev_.depth_pyr);
@@ -420,7 +422,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
              
     float roll_angle = euler_angles[0]*180/M_PI;
     
-    if(fabs(roll_angle)<8 && frame_counter_>100)
+    if(fabs(roll_angle)<20 && frame_counter_>100)
     {
         Affine3f taffine;
         // bool ok = icp_->estimateTransform(taffine, p.intr,curr_.points_pyr, curr_.normals_pyr, first_.points_pyr, first_.normals_pyr);
@@ -444,8 +446,12 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
             loop_poses_.push_back(Affine3f::Identity());
         }
         flag_closed_ = true;
+        if(fabs(roll_angle)<5)
+        {
+            flag_finish_ = true;
+        }
     }
-    if(flag_closed_ == false)
+    if(flag_finish_ == false)
     {
         ///////////////////////////////////////////////////////////////////////////////////////////
         // Volume integration

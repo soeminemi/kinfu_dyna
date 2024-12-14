@@ -97,6 +97,7 @@ namespace kfusion
             depth_imgs_.push_back(depth);
         }
         bool isLoopClosed() const { return flag_closed_; }
+        bool isFinished() const { return flag_finish_; }
     private:
         void allocate_buffers();
 
@@ -118,6 +119,7 @@ namespace kfusion
         cv::Ptr<cuda::ProjectiveICP> icp_;
         cv::Ptr<WarpField> warp_;
         bool flag_closed_;
+        bool flag_finish_;
         std::vector<int> loop_frame_idx_;
         std::vector<Affine3f> loop_poses_;
         std::vector<cv::Mat> depth_imgs_;
