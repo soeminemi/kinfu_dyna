@@ -69,22 +69,6 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
 
     // 执行配准
     pcl::PointCloud<pcl::PointXYZRGBNormal> aligned;
-    
-    // 根据初始位姿变换源点云
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    pcl::transformPointCloud(*source_cloud, *transformed_source, init_guess_mat);
-    
-    //
-    // typedef pcl::registration::CorrespondenceEstimationNormalShooting<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> NormalCorrespondenceEstimator;
-    // NormalCorrespondenceEstimator::Ptr corr_est(new NormalCorrespondenceEstimator());
-    // 不使用考虑法向量的对应点估计器
-    // typedef pcl::registration::CorrespondenceEstimation<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> CorrespondenceEstimator;
-    // CorrespondenceEstimator::Ptr corr_est(new CorrespondenceEstimator());
-    // corr_est->setInputSource(transformed_source);
-    // corr_est->setInputTarget(target_cloud);
-    // corr_est->setKSearch(10);
-    // icp.setCorrespondenceEstimation(corr_est);
-    
     icp.align(aligned, init_guess_mat);
     std::cout << "Final ICP fitness score: " << icp.getFitnessScore() << std::endl;
 
@@ -116,6 +100,11 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
 
     // 将PCL变换矩阵转换回OpenCV格式
     Eigen::Matrix4f final_transform = icp.getFinalTransformation();
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    pcl::transformPointCloud(*source_cloud, *transformed_source, final_transform);
+    // 保存target和转换后的source为ply格式
+    pcl::io::savePLYFile("aligned_transformed_source_"+icp_name_+".ply", *transformed_source);
+
     cv::Mat final_cv_mat(4, 4, CV_32F);
     for(int i = 0; i < 4; i++)
         for(int j = 0; j < 4; j++)
