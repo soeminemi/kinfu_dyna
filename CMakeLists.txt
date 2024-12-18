@@ -26,8 +26,10 @@ message(STATUS "G2O_INCLUDE_DIRS: ${g2o_INCLUDE_DIRS}")
 set(DEPENDENCIES realsense2 )
 
 find_package(PCL REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system thread)
 message(STATUS "PCL_INCLUDE_DIRS: ${PCL_INCLUDE_DIRS}")
-include_directories(${PCL_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${OPENNI_INCLUDE_DIR} ${CERES_INCLUDE_DIRS} ${g2o_INCLUDE_DIRS} /usr/include/eigen3)
+message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+include_directories(${PCL_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${OPENNI_INCLUDE_DIR} ${CERES_INCLUDE_DIRS} ${g2o_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} /usr/include/eigen3)
 # ---[ misc settings
 if(USE_PROJECT_FOLDERS)
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)

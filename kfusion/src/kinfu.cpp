@@ -29,6 +29,7 @@
 #include <g2o/core/optimization_algorithm_gauss_newton.h>
 #include <g2o/core/optimization_algorithm_dogleg.h>
 #include <g2o/solvers/dense/linear_solver_dense.h>
+#include <cmath>  // for std::ceil
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
@@ -601,7 +602,7 @@ void kfusion::KinFu::loopClosureOptimize(
     cout<<"step: "<<step<<endl;
     cout<<"bias: "<<bias<<endl;
     bias = bias < 1 ? 1 : bias;
-    step = 20;
+    step = 10;
     bias = 15;
     for(int i=0; i<frame_count; i+=step)
     {
@@ -713,13 +714,6 @@ void kfusion::KinFu::loopClosureOptimize(
     initial_poses.clear();
     std::vector<std::pair<int,int>> loop_pair;
     for (size_t i = 0; i < clouds.size(); ++i) {
-        // std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
-        // // Apply transformation to cloud using pose[i] and save
-        // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_read(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-        // if (pcl::io::loadPLYFile(filename, *cloud_read) == -1) {
-        //     PCL_ERROR("Couldn't read file %s \n", filename.c_str());
-        //     continue;
-        // }
         auto cloud_read = clouds[i];
         Eigen::Matrix4d transformation;
         int pose_idx = anchor_frame_idx[i];
@@ -739,14 +733,19 @@ void kfusion::KinFu::loopClosureOptimize(
 
         }
         clouds_transformed.push_back(transformed_cloud);
-        if (i>0)
-        {
-            loop_pair.push_back(std::make_pair(i,i-1));
-            // if(i < clouds.size()-1)
-            // {
-            //     loop_pair.push_back(std::make_pair(i+1,i-1));
-            // }
-        }
+    }
+    //进行匹配的点云对从正方两个方向同时进行，这样可以平衡单方向导致的结果偏差
+    int cloud_num = clouds.size();
+    // 将浮点数除法结果向上取整
+    int hnum = std::ceil(float(cloud_num)/2.0);
+    // 保证存在一个交叉的约束
+    for(size_t i = 1;i<=hnum ;i++)
+    {
+        loop_pair.push_back(std::make_pair(i,i-1));
+    }
+    for(size_t i = cloud_num -1;i>=hnum;i--)
+    {
+        loop_pair.push_back(std::make_pair(i-1,i));
     }
     loop_pair.push_back(std::make_pair(clouds.size()-1,0));
     //调用闭环模块进行闭环
@@ -754,7 +753,7 @@ void kfusion::KinFu::loopClosureOptimize(
     LoopClosureSolver solver_ba;
     std::vector<cv::Affine3f> optimized_poses;
     //用ICP进行初步配准已经进行了多次迭代，整个BA多次优化没有任何效果，一次就可以了
-    for(size_t i=0;i<3;i++)
+    for(size_t i=0;i<1;i++)
     {
         optimized_poses = solver_ba.optimizePoses(clouds, initial_poses, loop_pair);
         cout<<"第"<<i<<"次BA优化完成"<<endl;

@@ -9,6 +9,7 @@
 #include <opencv2/core/affine.hpp>
 #include <pcl/point_types.h>
 #include "internal.hpp"
+#include <string>
 
 namespace kfusion {
 class LoopClosureSolver {
@@ -22,10 +23,7 @@ public:
         const std::vector<cv::Affine3f>& initial_poses,
         const std::vector<std::pair<int, int>>& loop_pairs
     );
-    void setIndex(int idx) {
-        idx_ = idx;
-    }
-
+    
 private:
     // ICP参数设置
     void setupICP(pcl::IterativeClosestPointWithNormals<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>& icp) const;
@@ -52,7 +50,7 @@ private:
     float transformation_epsilon_;
     float euclidean_fitness_epsilon_;
     int max_iterations_;
-    int idx_ = 0;
+    std::string icp_name_;
 };
 
 } // namespace kfusion

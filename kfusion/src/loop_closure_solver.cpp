@@ -6,16 +6,23 @@
 #include <pcl/registration/icp_nl.h>
 #include <pcl/registration/correspondence_estimation_normal_shooting.h>
 #include <pcl/registration/correspondence_rejection_sample_consensus.h>
+#include <pcl/visualization/pcl_visualizer.h>
 #include <iostream>
 #include <random>
+#include <opencv2/core/eigen.hpp>
+#include <thread>
+#include <chrono>
+#include <cmath>
+#include <vtkRenderWindow.h> // Added VTK header
+#include <boost/thread/thread.hpp>
 using namespace std;
 
 namespace kfusion {
 LoopClosureSolver::LoopClosureSolver()
     : max_correspondence_distance_(0.05f)
     , transformation_epsilon_(1e-8f)
-    , euclidean_fitness_epsilon_(1e-6f)
-    , max_iterations_(5)
+    , euclidean_fitness_epsilon_(1e-7f)
+    , max_iterations_(50)
 {
 }
 
@@ -26,16 +33,16 @@ void LoopClosureSolver::setupICP(pcl::IterativeClosestPointWithNormals<pcl::Poin
     icp.setTransformationEpsilon(transformation_epsilon_);
     icp.setEuclideanFitnessEpsilon(euclidean_fitness_epsilon_);
     icp.setMaximumIterations(max_iterations_);
-    
+    icp.setUseReciprocalCorrespondences(true);
     // 使用点到面的误差度量
-    auto trans_est = pcl::make_shared<pcl::registration::TransformationEstimationPointToPlane<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>>();
-    icp.setTransformationEstimation(trans_est);
+    // auto trans_est = pcl::make_shared<pcl::registration::TransformationEstimationPointToPlane<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal>>();
+    // icp.setTransformationEstimation(trans_est);
 
     // 设置RANSAC离群点剔除
-    auto rej = pcl::make_shared<pcl::registration::CorrespondenceRejectorSampleConsensus<pcl::PointXYZRGBNormal>>();
-    rej->setInlierThreshold(0.025);  // 设置RANSAC内点阈值
-    rej->setMaximumIterations(100);  // RANSAC最大迭代次数
-    icp.addCorrespondenceRejector(rej);
+    // auto rej = pcl::make_shared<pcl::registration::CorrespondenceRejectorSampleConsensus<pcl::PointXYZRGBNormal>>();
+    // rej->setInlierThreshold(0.025);  // 设置RANSAC内点阈值
+    // rej->setMaximumIterations(100);  // RANSAC最大迭代次数
+    // icp.addCorrespondenceRejector(rej);
 }
 
 cv::Affine3f LoopClosureSolver::estimateRelativePose(
@@ -67,24 +74,28 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     pcl::transformPointCloud(*source_cloud, *transformed_source, init_guess_mat);
     
-    // 设置考虑法向量的对应点估计器
-    typedef pcl::registration::CorrespondenceEstimationNormalShooting<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> NormalCorrespondenceEstimator;
-    NormalCorrespondenceEstimator::Ptr corr_est(new NormalCorrespondenceEstimator());
-    corr_est->setInputSource(transformed_source);
-    corr_est->setInputTarget(target_cloud);
-    corr_est->setKSearch(10);
-    icp.setCorrespondenceEstimation(corr_est);
+    //
+    // typedef pcl::registration::CorrespondenceEstimationNormalShooting<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> NormalCorrespondenceEstimator;
+    // NormalCorrespondenceEstimator::Ptr corr_est(new NormalCorrespondenceEstimator());
+    // 不使用考虑法向量的对应点估计器
+    // typedef pcl::registration::CorrespondenceEstimation<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> CorrespondenceEstimator;
+    // CorrespondenceEstimator::Ptr corr_est(new CorrespondenceEstimator());
+    // corr_est->setInputSource(transformed_source);
+    // corr_est->setInputTarget(target_cloud);
+    // corr_est->setKSearch(10);
+    // icp.setCorrespondenceEstimation(corr_est);
     
     icp.align(aligned, init_guess_mat);
+    std::cout << "Final ICP fitness score: " << icp.getFitnessScore() << std::endl;
+
     // // 按照init_guess_mat转换source点云
     // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     // pcl::transformPointCloud(*source_cloud, *transformed_source, init_guess_mat);
 
     // // 保存target和转换后的source为ply格式
     // pcl::io::savePLYFile("target_cloud.ply", *target_cloud);
-    pcl::io::savePLYFile("aligned_target_cloud_"+to_string(idx_)+".ply", *target_cloud);
-    pcl::io::savePLYFile("aligned_cloud_"+to_string(idx_)+".ply", aligned);
-
+    pcl::io::savePLYFile("aligned_target_cloud_"+icp_name_+".ply", *target_cloud);
+    pcl::io::savePLYFile("aligned_cloud_"+icp_name_+".ply", aligned);
     if (!icp.hasConverged()) {
         std::cout << "ICP did not converge!" << std::endl;
         return initial_guess;
@@ -123,12 +134,10 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
     std::vector<int> source_indices, target_indices;
     std::vector<std::vector<std::pair<int, int>>> loop_corres;
     cout<<"基于icp进行相对位姿估计及对应点获取"<<endl;
-    int idx = 1;
     for (const auto& pair : loop_pairs) {
         cout<<"估计ICP 从: "<<pair.first<<" 到 "<<pair.second<<endl;
         cv::Affine3f initial_guess = initial_poses[pair.second].inv() * initial_poses[pair.first];
-        setIndex(idx);
-        idx++;
+        icp_name_ = std::to_string(pair.first)+"_"+std::to_string(pair.second);
         cv::Affine3f relative_pose = estimateRelativePose(
             point_clouds[pair.first],
             point_clouds[pair.second],
@@ -149,7 +158,19 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
     }
 
     // 使用BA优化位姿
-    return optimizePosesBA(point_clouds, initial_poses, loop_pairs, loop_corres);
+    auto optimizedPose = optimizePosesBA(point_clouds, initial_poses, loop_pairs, loop_corres);
+    // 合并所有点云
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    for (size_t i = 0; i < point_clouds.size(); ++i) {
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        Eigen::Matrix4f transform_matrix;
+        cv::cv2eigen(optimizedPose[i].matrix, transform_matrix);
+        pcl::transformPointCloud(*point_clouds[i], *transformed_cloud, transform_matrix);
+        *merged_cloud += *transformed_cloud;
+    }
+    pcl::io::savePLYFile("./results/ba_merged_cloud.ply", *merged_cloud);
+    cout << "Merged cloud saved to ./results/ba_merged_cloud.ply" << endl;
+    return optimizedPose;
 }
 
 // 定义BA优化的代价函数
@@ -256,30 +277,10 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
     const std::vector<cv::Affine3f>& initial_poses,
     const std::vector<std::pair<int, int>>& loop_pairs,
     const std::vector<std::vector<std::pair<int, int> > > &loop_corres
-) {
-    // // 计算所有点云按照给定的initial_poses变换后的点云的所有点的中心点
-    // Eigen::Vector3d center(0, 0, 0);
-    // int total_points = 0;
-
-    // for (size_t i = 0; i < point_clouds.size(); ++i) {
-    //     const auto& cloud = point_clouds[i];
-    //     const auto& pose = initial_poses[i];
-
-    //     for (const auto& point : *cloud) {
-    //         cv::Point3f pt(point.x, point.y, point.z);
-    //         cv::Point3f transformed_pt = pose * pt;
-    //         center += Eigen::Vector3d(transformed_pt.x, transformed_pt.y, transformed_pt.z);
-    //         ++total_points;
-    //     }
-    // }
-
-    // if (total_points > 0) {
-    //     center /= total_points;
-    // }
-
+    ) 
+{
     // 创建Ceres问题
     ceres::Problem problem;
-    
     // 为每个位姿创建参数块
     std::vector<double*> pose_params;
     for (const auto& pose : initial_poses) {
@@ -337,9 +338,9 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
         // if(i == 0 || i == loop_pairs.size() - 1) {
         //     weight = 10.f;
         // }
-        weight = std::abs(i-ct_idx) * 10/ct_idx;
-        if(weight < 2)
-            weight = 2;
+        // weight = std::abs(i-ct_idx) * 10/ct_idx;
+        // if(weight < 2)
+        //     weight = 2;
         auto source_idx = loop_pairs[i].first;
         auto target_idx = loop_pairs[i].second;
         
@@ -356,12 +357,7 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
         //     std::cout << "Using all " << loop_corres[i].size() << " points for loop closure " << i 
         //               << " (weight: " << weight << ")" << std::endl;
         // }
-        
-        // 用于保存法向量差异大的点对
-        pcl::PointCloud<pcl::PointXYZRGBNormal> source_points;
-        pcl::PointCloud<pcl::PointXYZRGBNormal> target_points;
-        
-        for (size_t idx : indices) {
+        for (size_t idx = 0; idx < loop_corres[i].size(); idx++) {
             auto pt_cpidx = loop_corres[i][idx];
             auto source_indice = pt_cpidx.first;
             auto target_indice = pt_cpidx.second;
@@ -373,40 +369,7 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
             Eigen::Vector3d target_eigen(target_point.x, target_point.y, target_point.z);
             Eigen::Vector3d source_normal_eigen(source_point.normal_x, source_point.normal_y, source_point.normal_z);
             Eigen::Vector3d target_normal_eigen(target_point.normal_x, target_point.normal_y, target_point.normal_z);
-            // // 两个点的法向量偏差
-            // Eigen::Quaterniond source_q(pose_params[source_idx][0], pose_params[source_idx][1], pose_params[source_idx][2], pose_params[source_idx][3]);
-            // Eigen::Quaterniond target_q(pose_params[target_idx][0], pose_params[target_idx][1], pose_params[target_idx][2], pose_params[target_idx][3]);
-            // Eigen::Vector3d source_rotated_normal = source_q * source_normal_eigen;
-            // Eigen::Vector3d target_rotated_normal = target_q * target_normal_eigen;
-            // Eigen::Vector3d normal_diff = source_rotated_normal.cross(target_rotated_normal);
-            // double normal_diff_angle = std::acos(std::min(1.0, std::abs(normal_diff.norm() / (source_normal_eigen.norm() * target_normal_eigen.norm()))));
-            // if(fabs(normal_diff_angle) < 30.0 / 180.0 * M_PI) {
-            //     // std::cout << "Ignore correspondence with normal difference angle: " << normal_diff_angle * 180.0 / M_PI <<", normal diff: " << normal_diff<< std::endl;
-            //                 // 保存点对到ply文件中
-            //     pcl::PointXYZRGBNormal source_p, target_p;
-            //     Eigen::Quaterniond source_q(pose_params[source_idx][0], pose_params[source_idx][1], pose_params[source_idx][2], pose_params[source_idx][3]);
-            //     Eigen::Quaterniond target_q(pose_params[target_idx][0], pose_params[target_idx][1], pose_params[target_idx][2], pose_params[target_idx][3]);
-            //     Eigen::Vector3d source_rotated = source_q * source_eigen;
-            //     Eigen::Vector3d target_rotated = target_q * target_eigen;
-            //     Eigen::Vector3d source_normal_eigen_rotated = source_q * source_normal_eigen;
-            //     Eigen::Vector3d target_normal_eigen_rotated = target_q * target_normal_eigen;
-            //     source_p.x = source_rotated.x() + pose_params[source_idx][4];
-            //     source_p.y = source_rotated.y() + pose_params[source_idx][5];
-            //     source_p.z = source_rotated.z() + pose_params[source_idx][6];
-            //     target_p.x = target_rotated.x() + pose_params[target_idx][4];
-            //     target_p.y = target_rotated.y() + pose_params[target_idx][5];
-            //     target_p.z = target_rotated.z() + pose_params[target_idx][6];
-            //     source_p.normal_x = source_normal_eigen_rotated.x();
-            //     source_p.normal_y = source_normal_eigen_rotated.y();
-            //     source_p.normal_z = source_normal_eigen_rotated.z();
-            //     target_p.normal_x = target_normal_eigen_rotated.x();
-            //     target_p.normal_y = target_normal_eigen_rotated.y();
-            //     target_p.normal_z = target_normal_eigen_rotated.z();
-            //     source_points.push_back(source_p);
-            //     target_points.push_back(target_p);
-            //     continue;
-            // }
-            
+                   
             // 添加代价函数
             ceres::CostFunction* cost_function = 
                 PoseOptimizationError::Create(source_eigen, target_eigen, source_normal_eigen, target_normal_eigen, weight);
@@ -417,13 +380,6 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
                                    pose_params[target_idx]      // 目标旋转平移参数
                                    );
         }
-        // 保存ply文件
-        // if (!source_points.empty()) {
-        //     std::string filename = "diff_normal_" + std::to_string(i) + "_source.ply";
-        //     pcl::io::savePLYFile(filename, source_points);
-        //     filename = "diff_normal_" + std::to_string(i) + "_target.ply";
-        //     pcl::io::savePLYFile(filename, target_points);
-        // }
     }
     
     // 配置求解器
