@@ -33,6 +33,7 @@ private:
         const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& source_cloud,
         const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& target_cloud,
         const cv::Affine3f& initial_guess,
+        const cv::Affine3f& global_pose_src,
         std::vector<int>& source_indices,
         std::vector<int>& target_indices
     );

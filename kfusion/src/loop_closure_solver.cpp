@@ -49,6 +49,7 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
     const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& source_cloud,
     const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& target_cloud,
     const cv::Affine3f& initial_guess,
+    const cv::Affine3f& global_pose_src,
     std::vector<int>& source_indices,
     std::vector<int>& target_indices
 ) {
@@ -72,14 +73,23 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
     icp.align(aligned, init_guess_mat);
     std::cout << "Final ICP fitness score: " << icp.getFitnessScore() << std::endl;
 
-    // // 按照init_guess_mat转换source点云
-    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    // pcl::transformPointCloud(*source_cloud, *transformed_source, init_guess_mat);
+    // Eigen::Matrix4f gsrc_pose = Eigen::Matrix4f::Identity();
+    // const cv::Matx44f& cv_mat_g = global_pose_src.matrix;
+    // for (int i = 0; i < 4; ++i)
+    //     for (int j = 0; j < 4; ++j)
+    //         gsrc_pose(i, j) = cv_mat_g(i, j);
+
+    // // // 按照init_guess_mat转换source点云
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_target(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    // pcl::transformPointCloud(*target_cloud, *global_target, gsrc_pose);
+
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_source_aligned(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    // pcl::transformPointCloud(aligned, *global_source_aligned, gsrc_pose);
 
     // // 保存target和转换后的source为ply格式
     // pcl::io::savePLYFile("target_cloud.ply", *target_cloud);
-    pcl::io::savePLYFile("aligned_target_cloud_"+icp_name_+".ply", *target_cloud);
-    pcl::io::savePLYFile("aligned_cloud_"+icp_name_+".ply", aligned);
+    // pcl::io::savePLYFile("target_cloud_"+icp_name_+".ply", *global_target);
+    // pcl::io::savePLYFile("aligned_cloud_"+icp_name_+".ply", *global_source_aligned);
     if (!icp.hasConverged()) {
         std::cout << "ICP did not converge!" << std::endl;
         return initial_guess;
@@ -97,14 +107,7 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
             target_indices.push_back(corr.index_match);
         }
     }
-
-    // 将PCL变换矩阵转换回OpenCV格式
-    Eigen::Matrix4f final_transform = icp.getFinalTransformation();
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    pcl::transformPointCloud(*source_cloud, *transformed_source, final_transform);
-    // 保存target和转换后的source为ply格式
-    pcl::io::savePLYFile("aligned_transformed_source_"+icp_name_+".ply", *transformed_source);
-
+    auto final_transform = icp.getFinalTransformation();
     cv::Mat final_cv_mat(4, 4, CV_32F);
     for(int i = 0; i < 4; i++)
         for(int j = 0; j < 4; j++)
@@ -131,6 +134,7 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
             point_clouds[pair.first],
             point_clouds[pair.second],
             initial_guess,
+            initial_poses[pair.second],
             source_indices,
             target_indices
         );
@@ -145,9 +149,25 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
         loop_corres.push_back(pcorres);
         relative_poses.push_back(relative_pose);  
     }
-
+    // 将优化后的相对位姿用于优化初始位姿
+    std::vector<cv::Affine3f> optimized_poses = initial_poses;  // Create a local copy
+    int lidx = optimized_poses.size() - 1;
+    optimized_poses[lidx] = optimized_poses[0] * relative_poses[relative_poses.size() - 1];//先约束好闭环位姿
+    for (size_t i = 0; i < loop_pairs.size() - 1; i++)
+    {
+        optimized_poses[loop_pairs[i].first] = optimized_poses[loop_pairs[i].second] * relative_poses[i];
+    }
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud_beforeba(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    for (size_t i = 0; i < point_clouds.size(); ++i) {
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+        Eigen::Matrix4f transform_matrix;
+        cv::cv2eigen(optimized_poses[i].matrix, transform_matrix);
+        pcl::transformPointCloud(*point_clouds[i], *transformed_cloud, transform_matrix);
+        *merged_cloud_beforeba += *transformed_cloud;
+    }
+    pcl::io::savePLYFile("./results/ba_merged_cloud_beforeba.ply", *merged_cloud_beforeba);
     // 使用BA优化位姿
-    auto optimizedPose = optimizePosesBA(point_clouds, initial_poses, loop_pairs, loop_corres);
+    auto optimizedPose = optimizePosesBA(point_clouds, optimized_poses, loop_pairs, loop_corres);
     // 合并所有点云
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     for (size_t i = 0; i < point_clouds.size(); ++i) {
@@ -210,22 +230,22 @@ struct PoseOptimizationError {
         p_target[1] += target_t[1];
         p_target[2] += target_t[2];
 
-        // 转换法向量
-        T n_source[3] = {T(source_normal_[0]), 
-                        T(source_normal_[1]), 
-                        T(source_normal_[2])};
-        T n_target[3] = {T(target_normal_[0]), 
-                        T(target_normal_[1]), 
-                        T(target_normal_[2])};
+        // // 转换法向量
+        // T n_source[3] = {T(source_normal_[0]), 
+        //                 T(source_normal_[1]), 
+        //                 T(source_normal_[2])};
+        // T n_target[3] = {T(target_normal_[0]), 
+        //                 T(target_normal_[1]), 
+        //                 T(target_normal_[2])};
         
-        T rotated_n_source[3], rotated_n_target[3];
-        ceres::QuaternionRotatePoint(source_q, n_source, rotated_n_source);
-        ceres::QuaternionRotatePoint(target_q, n_target, rotated_n_target);
+        // T rotated_n_source[3], rotated_n_target[3];
+        // ceres::QuaternionRotatePoint(source_q, n_source, rotated_n_source);
+        // ceres::QuaternionRotatePoint(target_q, n_target, rotated_n_target);
 
-        // 计算法向量的点积，用于判断法向量是否接近
-        T normal_similarity = rotated_n_source[0] * rotated_n_target[0] +
-                            rotated_n_source[1] * rotated_n_target[1] +
-                            rotated_n_source[2] * rotated_n_target[2];
+        // // 计算法向量的点积，用于判断法向量是否接近
+        // T normal_similarity = rotated_n_source[0] * rotated_n_target[0] +
+        //                     rotated_n_source[1] * rotated_n_target[1] +
+        //                     rotated_n_source[2] * rotated_n_target[2];
         
         // 计算点到面的距离
         T point_diff[3] = {p_source[0] - p_target[0],
@@ -233,12 +253,14 @@ struct PoseOptimizationError {
                           p_source[2] - p_target[2]};
 
         // 点到面的距离 = (p1 - p2) · n2
-        T point_to_plane_dist = point_diff[0] * rotated_n_target[0] +
-                               point_diff[1] * rotated_n_target[1] +
-                               point_diff[2] * rotated_n_target[2];
+        // T point_to_plane_dist = point_diff[0] * rotated_n_target[0] +
+        //                        point_diff[1] * rotated_n_target[1] +
+        //                        point_diff[2] * rotated_n_target[2];
 
         // 最终残差 = 权重 * 点到面距离
-        residuals[0] = T(weight_) * point_to_plane_dist;
+        residuals[0] = T(weight_) * point_diff[0];
+        residuals[1] = T(weight_) * point_diff[1];
+        residuals[2] = T(weight_) * point_diff[2];
 
         return true;
     }
@@ -248,7 +270,7 @@ struct PoseOptimizationError {
                                      const Eigen::Vector3d& source_normal,
                                      const Eigen::Vector3d& target_normal,
                                      const double weight) {
-        return new ceres::AutoDiffCostFunction<PoseOptimizationError, 1, 7, 7>(
+        return new ceres::AutoDiffCostFunction<PoseOptimizationError, 3, 7, 7>(
             new PoseOptimizationError(source_point, target_point, 
                                     source_normal, target_normal, weight));
     }
@@ -330,22 +352,10 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
         // weight = std::abs(i-ct_idx) * 10/ct_idx;
         // if(weight < 2)
         //     weight = 2;
+        cout<<"add ba constraint, source idx: "<<loop_pairs[i].first<<", target idx: "<<loop_pairs[i].second<<endl;
         auto source_idx = loop_pairs[i].first;
         auto target_idx = loop_pairs[i].second;
-        
-        std::vector<size_t> indices(loop_corres[i].size());
-        std::iota(indices.begin(), indices.end(), 0);  // Fill with 0, 1, ..., n-1
-        
-        // if (loop_corres[i].size() > MAX_CORRESPONDENCES) {
-        //     // Random shuffle and take first MAX_CORRESPONDENCES elements
-        //     std::random_shuffle(indices.begin(), indices.end());
-        //     indices.resize(MAX_CORRESPONDENCES);
-        //     std::cout << "Using " << MAX_CORRESPONDENCES << " points out of " << loop_corres[i].size() 
-        //               << " for loop closure " << i << " (weight: " << weight << ")" << std::endl;
-        // } else {
-        //     std::cout << "Using all " << loop_corres[i].size() << " points for loop closure " << i 
-        //               << " (weight: " << weight << ")" << std::endl;
-        // }
+
         for (size_t idx = 0; idx < loop_corres[i].size(); idx++) {
             auto pt_cpidx = loop_corres[i][idx];
             auto source_indice = pt_cpidx.first;
