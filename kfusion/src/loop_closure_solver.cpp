@@ -73,23 +73,23 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
     icp.align(aligned, init_guess_mat);
     std::cout << "Final ICP fitness score: " << icp.getFitnessScore() << std::endl;
 
-    // Eigen::Matrix4f gsrc_pose = Eigen::Matrix4f::Identity();
-    // const cv::Matx44f& cv_mat_g = global_pose_src.matrix;
-    // for (int i = 0; i < 4; ++i)
-    //     for (int j = 0; j < 4; ++j)
-    //         gsrc_pose(i, j) = cv_mat_g(i, j);
+    Eigen::Matrix4f gsrc_pose = Eigen::Matrix4f::Identity();
+    const cv::Matx44f& cv_mat_g = global_pose_src.matrix;
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            gsrc_pose(i, j) = cv_mat_g(i, j);
 
     // // // 按照init_guess_mat转换source点云
-    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_target(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    // pcl::transformPointCloud(*target_cloud, *global_target, gsrc_pose);
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_target(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    pcl::transformPointCloud(*target_cloud, *global_target, gsrc_pose);
 
-    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_source_aligned(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    // pcl::transformPointCloud(aligned, *global_source_aligned, gsrc_pose);
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_source_aligned(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    pcl::transformPointCloud(aligned, *global_source_aligned, gsrc_pose);
 
     // // 保存target和转换后的source为ply格式
     // pcl::io::savePLYFile("target_cloud.ply", *target_cloud);
-    // pcl::io::savePLYFile("target_cloud_"+icp_name_+".ply", *global_target);
-    // pcl::io::savePLYFile("aligned_cloud_"+icp_name_+".ply", *global_source_aligned);
+    pcl::io::savePLYFile("target_cloud_"+icp_name_+".ply", *global_target);
+    pcl::io::savePLYFile("aligned_cloud_"+icp_name_+".ply", *global_source_aligned);
     if (!icp.hasConverged()) {
         std::cout << "ICP did not converge!" << std::endl;
         return initial_guess;

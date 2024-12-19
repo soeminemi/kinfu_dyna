@@ -657,6 +657,10 @@ void kfusion::KinFu::loopClosureOptimize(
                     // }
 
                     cv::Vec4f pt = cloud_host.at<cv::Vec4f>(y, x);
+                    if(pt[0]>0.78)
+                    {
+                        continue;
+                    }
                     cv::Vec3f tpt(pt[0],pt[1],pt[2]);
                     tpt = pinv * tpt;
                     cv::Vec4f nl = normal_host.at<cv::Vec4f>(y, x);
@@ -759,6 +763,8 @@ void kfusion::KinFu::loopClosureOptimize(
         cout<<"第"<<i<<"次BA优化完成"<<endl;
         cout<<"BA finished"<<endl;
         CeresGraph::optimizePoseGraph(poses, anchor_frame_idx, optimized_poses);
+
+
         int k = 0;
         for(auto idx : anchor_frame_idx)
         {
