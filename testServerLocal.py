@@ -118,27 +118,7 @@ if __name__ == "__main__":
     fid = 0
     # ws_url = "ws://175.6.27.254:9099"
     ws = websocket.create_connection(ws_url)
-    # 判断连接是否成功
-    # print("try to connect to server")
-    # try:
-    #     # 发送一个简单的消息来测试连接
-    #     test_message = json.dumps({"ack": "test"})
-    #     ws.send(test_message)
-        
-    #     # 等待服务器响应
-    #     response = ws.recv()
-    #     response_data = json.loads(response)
-        
-    #     if response_data.get("status") == "ok":
-    #         print("WebSocket连接成功")
-    #     else:
-    #         print("WebSocket连接失败")
-    #         ws.close()
-    #         sys.exit(1)
-    # except Exception as e:
-    #     print(f"连接测试时发生错误: {str(e)}")
-    #     ws.close()
-    #     sys.exit(1)
+   
     show_msg = "Ready"
     orig = (50,50)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -184,6 +164,19 @@ if __name__ == "__main__":
     depth_files = sorted([f for f in os.listdir(depth_folder) if f.endswith('.png')], key=sort_key)
     
     depth_index = 0
+    intr = {'FocalLengthX': 367.04278564453125, 'FocalLengthY': 367.04278564453125, 'PrincipalPointX': 255.80419921875, 'PrincipalPointY': 203.5063018798828, 'RadialDistortionSecondOrder': 0.09293150156736374, 'RadialDistortionFourthOrder': -0.2737075090408325, 'RadialDistortionSixthOrder': 0.09219703823328018}
+    intrinsics_path = os.path.join(os.path.dirname(depth_folder+'../'), "intrinsics.json")
+    if os.path.isfile(intrinsics_path):
+        with open(intrinsics_path, 'r') as f:
+            intrinsics = json.load(f)
+            intr = intrinsics
+            intr["RadialDistortionSecondOrder"] = 0
+            intr["RadialDistortionFourthOrder"] = 0
+            intr["RadialDistortionSixthOrder"] = 0
+    else:
+        print("intrinsics.json文件不存在于", os.path.dirname(depth_folder))
+        sys.exit(1)
+    
     while True:
         depth_file = "./depth.png"
         color_file = "./color.png"
@@ -203,42 +196,9 @@ if __name__ == "__main__":
         showimg = last_color_frame
         # cv2.putText(showimg, show_msg, orig, font, fontscale, color, 2)
         showimg = cv2.rotate(cv2.cvtColor(last_color_frame,cv2.COLOR_BGR2RGB), cv2.ROTATE_90_CLOCKWISE)
-        
-        # if cvui.checkbox(showimg,50,60,"male",male_checked):
-        #     female_checked=[False]
-        #     gender = "male"
-        # if cvui.checkbox(showimg,50,80,"female",female_checked):
-        #     male_checked = [False]
-        #     gender = "female"
-
-        # if cvui.button(showimg, 50, 100,  button_name):
-        #     if button_name == "START":
-        #         button_name = "STOP"
-        #         flag_start = True
-        #         flag_end = False
-        #         show_msg = "Sending Data to Server......"
-        #         result_str = "None"
-        #     else:
-        #         button_name = "START"
-        #         flag_end = True
-        #         flag_start = False
-        #         show_msg = 'Waiting for Measuring......'
-        #         result_str = "None"
-        # if cvui.button(showimg, 250, 100,  "EXIT"):
-        #     lock.acquire()
-        #     flag_exit = True
-        #     lock.release()
-        #     break
-        # cvui.text(showimg, 200, 20, show_msg, 1.0, 0x00ff00)
-        # cvui.text(showimg, 50, 140, result_str, 0.4, 0x00ff00)
-        # cvui.update()
-        # cv2.imshow(WINDOW_NAME,showimg)
-        # key = cv2.waitKey(30)
+             
         time.sleep(0.03)
         if flag_start:
-            if flag_save_disk:
-                depths.append(last_depth_frame)
-                images.append(last_color_frame)
             depthimg = last_depth_frame
             encoded_image = cv2.imencode('.png', depthimg)[1]
             data = base64.b64encode(np.array(encoded_image).tobytes())
@@ -253,15 +213,8 @@ if __name__ == "__main__":
             sd["frame_id"]=str(fid)
             sd["name"]="张三"
             sd["vcode"]=vcode
-            intr = {'FocalLengthX': 367.04278564453125, 'FocalLengthY': 367.04278564453125, 'PrincipalPointX': 255.80419921875, 'PrincipalPointY': 203.5063018798828, 'RadialDistortionSecondOrder': 0.09293150156736374, 'RadialDistortionFourthOrder': -0.2737075090408325, 'RadialDistortionSixthOrder': 0.09219703823328018}
             # intr = {'FocalLengthX': 435.32, 'FocalLengthY': 434.86, 'PrincipalPointX': 314.072, 'PrincipalPointY': 239.634, 'RadialDistortionSecondOrder': 0., 'RadialDistortionFourthOrder': -0., 'RadialDistortionSixthOrder': 0.}
             sd['intrinsics'] = intr
-            # sd["fx"] = fx
-            # sd["fy"] = fy
-            # sd["cx"] = cx
-            # sd["cy"] = cy
-            # sd["width"]=width
-            # sd["height"]=height
             sdstr = json.dumps(sd)
             if flag_cache_send:
                 lock.acquire()
@@ -330,14 +283,3 @@ if __name__ == "__main__":
             flag_exit = True
             lock.release()
             break
-            show_msg = "Ready"
-
-    # if flag_save_disk:
-    #     print("saving to disk")
-    #     # path = "/home/john/Projects/dynamicfusion/data/desk1"
-    #     path = "./data_kinfu/rotperson_1"
-    #     for fid in range(len(depths)):
-    #         o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
-    #         o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
-    #         print("saving: ",fid)
-    

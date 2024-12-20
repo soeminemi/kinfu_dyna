@@ -80,16 +80,16 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
             gsrc_pose(i, j) = cv_mat_g(i, j);
 
     // // // 按照init_guess_mat转换source点云
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_target(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    pcl::transformPointCloud(*target_cloud, *global_target, gsrc_pose);
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_target(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    // pcl::transformPointCloud(*target_cloud, *global_target, gsrc_pose);
 
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_source_aligned(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    pcl::transformPointCloud(aligned, *global_source_aligned, gsrc_pose);
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr global_source_aligned(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    // pcl::transformPointCloud(aligned, *global_source_aligned, gsrc_pose);
 
     // // 保存target和转换后的source为ply格式
     // pcl::io::savePLYFile("target_cloud.ply", *target_cloud);
-    pcl::io::savePLYFile("target_cloud_"+icp_name_+".ply", *global_target);
-    pcl::io::savePLYFile("aligned_cloud_"+icp_name_+".ply", *global_source_aligned);
+    // pcl::io::savePLYFile("target_cloud_"+icp_name_+".ply", *global_target);
+    // pcl::io::savePLYFile("aligned_cloud_"+icp_name_+".ply", *global_source_aligned);
     if (!icp.hasConverged()) {
         std::cout << "ICP did not converge!" << std::endl;
         return initial_guess;
@@ -155,8 +155,10 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
     optimized_poses[lidx] = optimized_poses[0] * relative_poses[relative_poses.size() - 1];//先约束好闭环位姿
     for (size_t i = 0; i < loop_pairs.size() - 1; i++)
     {
+        std::cout<<"优化位姿: "<<loop_pairs[i].first<<" 到 "<<loop_pairs[i].second<<endl;
         optimized_poses[loop_pairs[i].first] = optimized_poses[loop_pairs[i].second] * relative_poses[i];
     }
+    
     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud_beforeba(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
     for (size_t i = 0; i < point_clouds.size(); ++i) {
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
@@ -164,6 +166,7 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
         cv::cv2eigen(optimized_poses[i].matrix, transform_matrix);
         pcl::transformPointCloud(*point_clouds[i], *transformed_cloud, transform_matrix);
         *merged_cloud_beforeba += *transformed_cloud;
+        pcl::io::savePLYFile("./results/icp_cloud_" + std::to_string(i) + ".ply", *transformed_cloud);
     }
     pcl::io::savePLYFile("./results/ba_merged_cloud_beforeba.ply", *merged_cloud_beforeba);
     // 使用BA优化位姿

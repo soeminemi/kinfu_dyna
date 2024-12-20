@@ -310,6 +310,7 @@ public:
     {
         string vcode = "none";
         bool flag_started = false;
+        bool flag_size_set = false;
         CWSServer ws;
         ws.set_port(port);
         thread t_ws(bind(&CWSServer::excute, &ws));
@@ -491,6 +492,7 @@ public:
                 {
                     if (flag_started == false)
                     {
+                        flag_size_set = false;
                         std::cout << "first frame got" << std::endl;
                         // std::cout<<msg<<std::endl;
                         std::vector<std::string> keys;
@@ -547,13 +549,28 @@ public:
                             params.intr.fy = fy;
                             params.intr.cx = cx;
                             params.intr.cy = cy;
+                            // 不要设置畸变参数，不在kinfu中处理，在收到图像后直接处理
                             // params.intr.k1 = k1;
                             // params.intr.k2 = k2;
                             // params.intr.k3 = k3;
                             // params.intr.p1 = p1;
                             // params.intr.p2 = p2;
                             std::cout << "set intr params with fx:" << fx << " fy:" << fy << " cx:" << cx << " cy:" << cy << " k1:" << k1 << " k2:" << k2 << " k3:" << k3 << std::endl;
+                            if (jv["img_type"].asString() == "depth")
+                            {
+                                /* code */
+                                std::string ws_str = base64_decode_str(jv["data"].asString());
+                                std::cout << "base 64 decoded" << std::endl;
+                                std::vector<unsigned char> img_vec(ws_str.begin(), ws_str.end());
+                                std::cout << "decode png" << std::endl;
+                                cv::Mat depth = cv::imdecode(img_vec, cv::IMREAD_ANYDEPTH);
+                                params.rows = depth.rows;
+                                params.cols = depth.cols;
+                                std::cout << "rows:" << params.rows << " cols:" << params.cols << std::endl;
+                                flag_size_set = true;
+                            }
                             kinfu_->set_params(params);
+
                         }
                         if (jv["name"].isString())
                         {
@@ -613,6 +630,14 @@ public:
                             {
                                 depth = depth;
                             }
+                            if(flag_size_set == false)
+                            {
+                                params.rows = depth.rows;
+                                params.cols = depth.cols;
+                                std::cout << "rows:" << params.rows << " cols:" << params.cols << std::endl;
+                                flag_size_set = true;
+                                kinfu_->set_params(params);
+                            }
                             for (size_t i = 0; i < depth.rows; i++)
                             {
                                 for (size_t j = 0; j < depth.cols; j++)
@@ -621,7 +646,7 @@ public:
                                     {
                                         depth.at<ushort>(i, j) = 0;
                                     }
-                                    if(i<20 || i> 414-20)
+                                    if(i<20 || i> depth.rows-20)
                                     {
                                         depth.at<ushort>(i,j) = 0;
                                     }
