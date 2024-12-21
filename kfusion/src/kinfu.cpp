@@ -1016,7 +1016,9 @@ void kfusion::KinFu::loopClosureOptimize(
         pcl::io::savePLYFile(transformed_filename, *transformed_cloud);
     }
     //先合成一个闭环的TSDF，用于后续位姿估计的基准
-    for(int j=0; j<anchor_frame_idx.size(); j++)
+    volume_->clear();
+    volume_loop_->clear();
+    for(size_t j=0; j<anchor_frame_idx.size(); j++)
     {
         // 稀疏帧合成作为锚点，再次基础上进行闭环优化
         int i = anchor_frame_idx[j];
@@ -1025,7 +1027,7 @@ void kfusion::KinFu::loopClosureOptimize(
         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
         volume_->integrate(dists_, poses[i], p.intr);
         cout<<"pose "<<i<<endl<<poses[i].matrix<<endl<<endl;
-        if(true)
+        if(false)
         { 
             volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
@@ -1039,7 +1041,7 @@ void kfusion::KinFu::loopClosureOptimize(
             cv::waitKey(10);
         }
     }
-    if(false)
+    if(true)
     {
         cout<<"reintegrate again"<<endl;
         for(int i = 0; i < frame_count/2; i++) {
@@ -1080,7 +1082,7 @@ void kfusion::KinFu::loopClosureOptimize(
             poses[i] = poses[i] * affine;//更新当前帧的pose
 
             volume_->integrate(dists_, poses[i], p.intr);
-            if(true)
+            if(false)
             { 
                 volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
                 for (int i = 1; i < LEVELS; ++i)
@@ -1136,7 +1138,7 @@ void kfusion::KinFu::loopClosureOptimize(
             poses[i] = poses[i] * affine;//更新当前帧的pose
 
             volume_->integrate(dists_, poses[i], p.intr);
-            if(true)
+            if(false)
             { 
                 volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
                 for (int i = 1; i < LEVELS; ++i)
@@ -1234,10 +1236,10 @@ pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr kfusion::KinFu::depthToPCLWithNorma
             if (!std::isfinite(x_world) || !std::isfinite(y_world) || !std::isfinite(z_world)) {
                 continue;
             }
-            if(x_world > 0.83)
-            {
-                continue;
-            }
+            // if(x_world > 0.83)
+            // {
+            //     continue;
+            // }
             // Calculate normal using neighboring points
             float zl = depth.at<ushort>(y, x-1) / 1000.0f;
             float zr = depth.at<ushort>(y, x+1) / 1000.0f;

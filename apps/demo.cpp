@@ -50,7 +50,7 @@
 using namespace kfusion;
 #define COMBIN_MS // if body measurement is combined
 bool flag_std_sample = false;
-bool flag_show_image = true;
+bool flag_show_image = false;
 static const std::string base64_chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
@@ -464,8 +464,8 @@ public:
                         ss << pfile;
                         kinfu.toPlyColor(cloud_host, normal_host, spfile_folder+"origin_cloud.ply", 255, 0, 0);
                         // kinfu.toPlyColorFilter(cloud_host, normal_host, ss.str(), 255, 0, 0);
-                        string scmd = "cp ./results/origin_cloud.ply "+spfile_folder+"origin_cloud.ply";
-                        system(scmd.c_str());
+                        // string scmd = "cp ./results/origin_cloud.ply "+spfile_folder+"origin_cloud.ply";
+                        // system(scmd.c_str());
                         // start measurement
                         auto rst = func(spfile_folder+"origin_cloud.ply");
                         ws.send_msg(a.hdl, rst);
