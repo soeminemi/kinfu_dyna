@@ -607,10 +607,10 @@ void kfusion::KinFu::loopClosureOptimize(
     bias = bias > 15? 15: bias;
     for(int i=0; i<frame_count; i+=step)
     {
-        auto depth_cloud = depthToPCLWithNormals(depth_imgs_[i], p.intr);
-        clouds.push_back(depth_cloud);
-        anchor_frame_idx.push_back(i);
-        continue;
+        // auto depth_cloud = depthToPCLWithNormals(depth_imgs_[i], p.intr);
+        // clouds.push_back(depth_cloud);
+        // anchor_frame_idx.push_back(i);
+        // continue;
         volume_loop_->clear();
         int integrate_num = 0;
         //获取当前帧的点云
