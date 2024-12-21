@@ -1251,7 +1251,7 @@ pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr kfusion::KinFu::depthToPCLWithNorma
                 // Calculate vectors for normal
                 Eigen::Vector3f dx(xr - xl, 0, zr - zl);
                 Eigen::Vector3f dy(0, yb - yt, zb - zt);
-                Eigen::Vector3f normal = dx.cross(dy).normalized();
+                Eigen::Vector3f normal = dy.cross(dx).normalized();
 
                 pcl::PointXYZRGBNormal pt;
                 pt.x = x_world;
