@@ -607,10 +607,10 @@ void kfusion::KinFu::loopClosureOptimize(
     bias = bias > 15? 15: bias;
     for(int i=0; i<frame_count; i+=step)
     {
-        // auto depth_cloud = depthToPCLWithNormals(depth_imgs_[i], p.intr);
-        // clouds.push_back(depth_cloud);
-        // anchor_frame_idx.push_back(i);
-        // continue;
+        auto depth_cloud = depthToPCLWithNormals(depth_imgs_[i], p.intr);
+        clouds.push_back(depth_cloud);
+        anchor_frame_idx.push_back(i);
+        continue;
         volume_loop_->clear();
         int integrate_num = 0;
         //获取当前帧的点云
@@ -692,17 +692,17 @@ void kfusion::KinFu::loopClosureOptimize(
             std::cout<<"cloud is empty for anchor frame: "<<i<<std::endl;
         }
     }
-    for (size_t i = 0; i < clouds.size();  i++)
-    {
-         std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
-            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr ncloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-            if (pcl::io::loadPLYFile<pcl::PointXYZRGBNormal>(filename, *ncloud) == -1)
-            {
-                PCL_ERROR("Couldn't read file %s\n", filename.c_str());
-                return;
-            }
-            clouds[i] = ncloud;
-    }
+    // for (size_t i = 0; i < clouds.size();  i++)
+    // {
+    //      std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
+    //         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr ncloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+    //         if (pcl::io::loadPLYFile<pcl::PointXYZRGBNormal>(filename, *ncloud) == -1)
+    //         {
+    //             PCL_ERROR("Couldn't read file %s\n", filename.c_str());
+    //             return;
+    //         }
+    //         clouds[i] = ncloud;
+    // }
     cout<<"clouds size: "<<clouds.size()<<endl;
     std::vector<Eigen::Matrix4d> transformations;
     std::vector<Affine3f> initial_poses;
