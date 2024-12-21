@@ -1234,7 +1234,10 @@ pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr kfusion::KinFu::depthToPCLWithNorma
             if (!std::isfinite(x_world) || !std::isfinite(y_world) || !std::isfinite(z_world)) {
                 continue;
             }
-
+            if(x_world > 0.83)
+            {
+                continue;
+            }
             // Calculate normal using neighboring points
             float zl = depth.at<ushort>(y, x-1) / 1000.0f;
             float zr = depth.at<ushort>(y, x+1) / 1000.0f;
