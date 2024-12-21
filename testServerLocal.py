@@ -8,6 +8,7 @@ import cvui
 import threading
 from imageio import imread
 import time
+import signal
 # # 获取深度图, 默认尺寸 424x512
 # def get_last_depth():
 #     frame = kinect.get_last_depth_frame()
@@ -52,10 +53,21 @@ def pub_msg(ws):
         else:
             lock.release()
         time.sleep(0.01)
+
+def signal_handler(signum, frame):
+    global flag_exit
+    print("\nCtrl+C detected. Cleaning up...")
+    flag_exit = True
+    # Give threads time to clean up
+    time.sleep(0.5)
+    sys.exit(0)
+
 import os
 import re
 import sys
 if __name__ == "__main__":
+    # Register signal handler
+    signal.signal(signal.SIGINT, signal_handler)
     print(f"当前程序执行路径: {os.getcwd()}")
     if len(sys.argv) < 2:
         print("使用方法: python testServer.py <深度图像文件夹路径>")

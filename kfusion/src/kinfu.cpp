@@ -66,8 +66,8 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     // }
     // p.volume_dims = Vec3i::all(512);  //number of voxels
     // p.volume_size = Vec3f::all(2.0f);  //meters
-    p.volume_dims = Vec3i(512,256,256);  //number of voxels
-    p.volume_size = Vec3f(2.0f,1.0f,1.0f);  //meters
+    p.volume_dims = Vec3i(256,192,128);  //number of voxels
+    p.volume_size = Vec3f(2.0f,1.5f,1.0f);  //meters
     p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.9f)); //设置初始
 
     p.bilateral_sigma_depth = 0.04f;  //meter
@@ -88,7 +88,7 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
 
     //p.light_pose = p.volume_pose.translation()/4; //meters
     p.light_pose = Vec3f::all(0.f); //meters
-    p.depth_scale = 0.25;
+    p.depth_scale = 0.25;// for realsense, not used actually
 
     return p;
 }
@@ -604,10 +604,13 @@ void kfusion::KinFu::loopClosureOptimize(
     cout<<"step: "<<step<<endl;
     cout<<"bias: "<<bias<<endl;
     bias = bias < 1 ? 1 : bias;
-    step = 10;
-    bias = 15;
+    bias = bias > 15? 15: bias;
     for(int i=0; i<frame_count; i+=step)
     {
+        auto depth_cloud = depthToPCLWithNormals(depth_imgs_[i], p.intr);
+        clouds.push_back(depth_cloud);
+        anchor_frame_idx.push_back(i);
+        continue;
         volume_loop_->clear();
         int integrate_num = 0;
         //获取当前帧的点云
@@ -627,8 +630,8 @@ void kfusion::KinFu::loopClosureOptimize(
         cuda::DeviceArray<Normal> normal_buffer;
         cuda::DeviceArray<Point> tcloud;
         cuda::DeviceArray<Normal> tnormal;
+
         tcloud = volume_loop_->fetchCloud(cloud_buffer);
-        
         cv::Mat cloud_host(1, (int)tcloud.size(), CV_32FC4);
         tcloud.download(cloud_host.ptr<Point>());
         auto pinv = poses[i].inv();
@@ -644,22 +647,10 @@ void kfusion::KinFu::loopClosureOptimize(
             auto b = static_cast<uint8_t>(rand() % 256);
             auto g = static_cast<uint8_t>(rand() % 256);
             auto r = static_cast<uint8_t>(rand() % 256);
-            float thres_rand = 15000.0/tcloud.size();
-            cout<<"thres_rand: "<<thres_rand<<endl;
             for (int y = 0; y < cloud_host.rows; ++y) {
                 for (int x = 0; x < cloud_host.cols; ++x) {
-                    //得到在当前中心点视角下的点云
-                    // if(thres_rand < 0.8)
-                    // {
-                    //     float rand_num = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-                    //     if(rand_num > thres_rand)
-                    //     {
-                    //         continue;
-                    //     }
-                    // }
-
                     cv::Vec4f pt = cloud_host.at<cv::Vec4f>(y, x);
-                    if(pt[0]>0.78)
+                    if(pt[0]>0.6)
                     {
                         continue;
                     }
@@ -690,10 +681,6 @@ void kfusion::KinFu::loopClosureOptimize(
                     {
                         continue;
                     }
-                    float normal_magnitude = std::sqrt(tnl[0]*tnl[0] + tnl[1]*tnl[1] + tnl[2]*tnl[2]);
-                    if (normal_magnitude < 0.9f) {
-                        std::cout << "Normal magnitude: " << normal_magnitude << std::endl;
-                    }
                     pcl_first_cloud_p->points.push_back(point);
                 }
             }
@@ -708,18 +695,25 @@ void kfusion::KinFu::loopClosureOptimize(
     for (size_t i = 0; i < clouds.size();  i++)
     {
          std::string filename = "./results/cloud_" + std::to_string(i) + ".ply";
-            pcl::io::savePLYFile(filename, *clouds[i]);
+            pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr ncloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
+            if (pcl::io::loadPLYFile<pcl::PointXYZRGBNormal>(filename, *ncloud) == -1)
+            {
+                PCL_ERROR("Couldn't read file %s\n", filename.c_str());
+                return;
+            }
+            clouds[i] = ncloud;
     }
-    
+    cout<<"clouds size: "<<clouds.size()<<endl;
     std::vector<Eigen::Matrix4d> transformations;
     std::vector<Affine3f> initial_poses;
-
+    cout<<"mark1"<<endl;
     // Store each point cloud in 'clouds' as a PLY file
     transformations.clear();
     clouds_transformed.clear();
     initial_poses.clear();
     std::vector<std::pair<int,int>> loop_pair;
     for (size_t i = 0; i < clouds.size(); ++i) {
+        cout<<"mark 2"<<endl;
         auto cloud_read = clouds[i];
         Eigen::Matrix4d transformation;
         int pose_idx = anchor_frame_idx[i];
@@ -728,10 +722,12 @@ void kfusion::KinFu::loopClosureOptimize(
             poses[pose_idx].matrix.val[4], poses[pose_idx].matrix.val[5], poses[pose_idx].matrix.val[6], poses[pose_idx].matrix.val[7],
             poses[pose_idx].matrix.val[8], poses[pose_idx].matrix.val[9], poses[pose_idx].matrix.val[10], poses[pose_idx].matrix.val[11],
             poses[pose_idx].matrix.val[12], poses[pose_idx].matrix.val[13], poses[pose_idx].matrix.val[14], poses[pose_idx].matrix.val[15];
+        cout<<"push_back initial pose"<<endl;
         initial_poses.push_back(poses[pose_idx]);
         transformations.push_back(transformation);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
         try {
+            cout<<"transform cloud"<<endl;
             pcl::transformPointCloudWithNormals(*cloud_read, *transformed_cloud, transformation);
         } catch (const std::exception& e) {
             std::cerr << "Exiting program due to transformation failure." << std::endl;
@@ -740,6 +736,7 @@ void kfusion::KinFu::loopClosureOptimize(
         }
         clouds_transformed.push_back(transformed_cloud);
     }
+    cout<<"generate loop pair"<<endl;
     //进行匹配的点云对从正方两个方向同时进行，这样可以平衡单方向导致的结果偏差
     int cloud_num = clouds.size();
     // 将浮点数除法结果向上取整
@@ -754,6 +751,12 @@ void kfusion::KinFu::loopClosureOptimize(
         loop_pair.push_back(std::make_pair(i-1,i));
     }
     loop_pair.push_back(std::make_pair(clouds.size()-1,0));
+    // 估计运动轨迹的圆心和半径
+    CircularMotionConstraint motion_constraint;
+    motion_constraint.estimateFromTrajectory(poses);
+    std::cout << "Estimated center of circular motion: " << motion_constraint.getCenter() << std::endl;
+    std::cout << "Estimated radius of circular motion: " << motion_constraint.getRadius() << std::endl;
+
     //调用闭环模块进行闭环
     cout<<"开始BA优化"<<endl;
     LoopClosureSolver solver_ba;
@@ -764,9 +767,7 @@ void kfusion::KinFu::loopClosureOptimize(
         optimized_poses = solver_ba.optimizePoses(clouds, initial_poses, loop_pair);
         cout<<"第"<<i<<"次BA优化完成"<<endl;
         cout<<"BA finished"<<endl;
-        CeresGraph::optimizePoseGraph(poses, anchor_frame_idx, optimized_poses);
-
-
+        CeresGraph::optimizePoseGraph(poses, anchor_frame_idx, loop_pair, optimized_poses,motion_constraint.getCenter(), motion_constraint.getRadius());
         int k = 0;
         for(auto idx : anchor_frame_idx)
         {
@@ -800,12 +801,31 @@ void kfusion::KinFu::loopClosureOptimize(
     for (size_t i = 0; i < clouds.size(); ++i) {
         auto cloud_read = clouds[i];
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
-        Eigen::Matrix4f transformation = affineToEigen(optimized_poses[i]) ;
+        Eigen::Matrix4f transformation = affineToEigen(poses[anchor_frame_idx[i]]);
         pcl::transformPointCloudWithNormals(*cloud_read, *transformed_cloud, transformation);
         *merged_cloud += *transformed_cloud;
+        cout<<"anchor idx: "<<i<<", "<<anchor_frame_idx[i]<<endl;
+        cout<<"opt pose "<<i<<endl<<optimized_poses[i].matrix<<endl<<endl;
     }
     //合并的点云现在是好的
     pcl::io::savePLYFile("./results/origin_cloud.ply", *merged_cloud);
+    // anchor frame对应的深度图转换为点云，并变换到全局位姿进行保存
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr merged_cloud_depth(new pcl::PointCloud<pcl::PointXYZRGB>);
+    for (size_t i = 0; i < anchor_frame_idx.size(); ++i) {
+        auto cloud_read = depthToPCL(depth_imgs_[anchor_frame_idx[i]], params_.intr);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr transformed_cloud_d(new pcl::PointCloud<pcl::PointXYZRGB>());
+        Eigen::Matrix4f transformation = affineToEigen(poses[anchor_frame_idx[i]]) ;
+        pcl::transformPointCloud(*cloud_read, *transformed_cloud_d, transformation);
+        // 不同深度图的点用不同的颜色
+        for (auto& point : transformed_cloud_d->points) {
+            point.r = 255-i*20;
+            point.g = i*20;
+        }
+        cout<<"transformed_cloud_d size: "<<transformed_cloud_d->points.size()<<endl;
+        *merged_cloud_depth += *transformed_cloud_d;
+    }
+    pcl::io::savePLYFile("./results/origin_cloud_depth.ply", *merged_cloud_depth);
+    
 #ifdef USE_G2O
     volume_->clear(); 
     volume_loop_->clear();
@@ -996,21 +1016,16 @@ void kfusion::KinFu::loopClosureOptimize(
         pcl::io::savePLYFile(transformed_filename, *transformed_cloud);
     }
     //先合成一个闭环的TSDF，用于后续位姿估计的基准
-    for(int i=0; i<frame_count; i++)
+    for(int j=0; j<anchor_frame_idx.size(); j++)
     {
         // 稀疏帧合成作为锚点，再次基础上进行闭环优化
-        int j=i%20;
-        if(j>3)
-            continue;
-        // if(i>30 && i<frame_count -30)
-        // {
-        //     continue;
-        // }
+        int i = anchor_frame_idx[j];
         auto &depth = depth_imgs_[i];
         depth_device_tmp_.upload(depth.data, depth.step, depth.rows, depth.cols);
         cuda::computeDists(depth_device_tmp_, dists_, p.intr);
         volume_->integrate(dists_, poses[i], p.intr);
-        if(false)
+        cout<<"pose "<<i<<endl<<poses[i].matrix<<endl<<endl;
+        if(true)
         { 
             volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
             for (int i = 1; i < LEVELS; ++i)
@@ -1065,7 +1080,7 @@ void kfusion::KinFu::loopClosureOptimize(
             poses[i] = poses[i] * affine;//更新当前帧的pose
 
             volume_->integrate(dists_, poses[i], p.intr);
-            if(false)
+            if(true)
             { 
                 volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
                 for (int i = 1; i < LEVELS; ++i)
@@ -1121,7 +1136,7 @@ void kfusion::KinFu::loopClosureOptimize(
             poses[i] = poses[i] * affine;//更新当前帧的pose
 
             volume_->integrate(dists_, poses[i], p.intr);
-            if(false)
+            if(true)
             { 
                 volume_->raycast(poses[i], p.intr, prev_.points_pyr[0], prev_.normals_pyr[0]); 
                 for (int i = 1; i < LEVELS; ++i)
@@ -1148,6 +1163,125 @@ void kfusion::KinFu::loopClosureOptimize(
     std::cout<<"图像总数量为: "<<depth_imgs_.size()<<"闭环重建帧数:"<<frame_count<<std::endl;
 }
 
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr kfusion::KinFu::depthToPCL(const cv::Mat& depth, const Intr& intr) {
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    
+    // Reserve space for points
+    // cloud->points.reserve(depth.cols * depth.rows);
+    cloud->is_dense = true;  // 因为我们只添加有效点
+    // Get camera parameters
+    float fx = intr.fx, fy = intr.fy;
+    float cx = intr.cx, cy = intr.cy;
+
+    // Convert depth to 3D points
+    for (int y = 0; y < depth.rows; y++) {
+        for (int x = 0; x < depth.cols; x++) {
+
+            ushort z_ushort = depth.at<ushort>(y, x);
+            float z = z_ushort / 1000.0f;
+            
+            // Skip invalid depth values
+            if (z <= 0.001  || std::isnan(z)) {
+                continue;
+            }
+
+            pcl::PointXYZRGB pt;
+            pt.x = (x - cx) * z / fx;
+            pt.y = (y - cy) * z / fy;
+            pt.z = z;
+            
+            // Initialize color to white
+            pt.r = 255;
+            pt.g = 255;
+            pt.b = 255;
+            cloud->points.push_back(pt);
+            // cout<<"z: "<<z<<", "<<pt.x<<", "<<pt.y<<", "<<pt.z<<endl;
+        }
+    }
+
+    // Set as unorganized point cloud
+    cloud->width = cloud->points.size();
+    cloud->height = 1;
+    
+    std::cout << "Generated point cloud size: " << cloud->points.size() 
+              << " (from " << depth.cols * depth.rows << " depth pixels)" << std::endl;
+    return cloud;
+}
+pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr kfusion::KinFu::depthToPCLWithNormals(const cv::Mat& depth, const Intr& intr) {
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    
+    // Get camera parameters
+    float fx = intr.fx, fy = intr.fy;
+    float cx = intr.cx, cy = intr.cy;
+
+    // Convert depth to 3D points
+    for (int y = 1; y < depth.rows-1; y++) {
+        for (int x = 1; x < depth.cols-1; x++) {
+            ushort z_ushort = depth.at<ushort>(y, x);
+            float z = z_ushort / 1000.0f;
+            
+            // Skip invalid depth values
+            if (z <= 0.001f || z > 10.0f || std::isnan(z)) {
+                continue;
+            }
+
+            // Calculate point coordinates
+            float x_world = (x - cx) * z / fx;
+            float y_world = (y - cy) * z / fy;
+            float z_world = z;
+
+            // Skip points with invalid coordinates
+            if (!std::isfinite(x_world) || !std::isfinite(y_world) || !std::isfinite(z_world)) {
+                continue;
+            }
+
+            // Calculate normal using neighboring points
+            float zl = depth.at<ushort>(y, x-1) / 1000.0f;
+            float zr = depth.at<ushort>(y, x+1) / 1000.0f;
+            float zt = depth.at<ushort>(y-1, x) / 1000.0f;
+            float zb = depth.at<ushort>(y+1, x) / 1000.0f;
+
+            if (zl > 0.001f && zr > 0.001f && zt > 0.001f && zb > 0.001f) {
+                // Calculate world coordinates for neighboring points
+                float xl = (x-1 - cx) * zl / fx;
+                float xr = (x+1 - cx) * zr / fx;
+                float yt = (y-1 - cy) * zt / fy;
+                float yb = (y+1 - cy) * zb / fy;
+
+                // Calculate vectors for normal
+                Eigen::Vector3f dx(xr - xl, 0, zr - zl);
+                Eigen::Vector3f dy(0, yb - yt, zb - zt);
+                Eigen::Vector3f normal = dx.cross(dy).normalized();
+
+                pcl::PointXYZRGBNormal pt;
+                pt.x = x_world;
+                pt.y = y_world;
+                pt.z = z_world;
+                
+                // Set normal
+                pt.normal_x = normal.x();
+                pt.normal_y = normal.y();
+                pt.normal_z = normal.z();
+                
+                // Initialize color to white
+                pt.r = 255;
+                pt.g = 255;
+                pt.b = 255;
+
+                cloud->points.push_back(pt);
+            }
+        }
+    }
+
+    // Set as unorganized point cloud
+    cloud->width = cloud->points.size();
+    cloud->height = 1;
+    cloud->is_dense = true;  // 现在确保所有点都是有效的
+    
+    std::cout << "Generated point cloud with normals, size: " << cloud->points.size() 
+              << " (from " << depth.cols * depth.rows << " depth pixels)" << std::endl;
+    return cloud;
+}
 void kfusion::KinFu::toPly(cv::Mat& points, cv::Mat &normals, std::string spath)
 {
     int ptnum = 0;
@@ -1345,6 +1479,7 @@ void kfusion::KinFu::toPlyVec3Color(cv::Mat& points, cv::Mat &normals, std::stri
     }
     saveToPlyColor(pts, nls, spath,r,g,b);
 }
+
 /**
  * \brief 将当前深度图和当前fusion的结果进行融合，计算动态warp
  * \param image

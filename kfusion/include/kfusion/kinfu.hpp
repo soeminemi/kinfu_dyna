@@ -6,6 +6,8 @@
 #include <vector>
 #include <string>
 #include <kfusion/warp_field.hpp>
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
 
 namespace kfusion
 {
@@ -98,6 +100,11 @@ namespace kfusion
         }
         bool isLoopClosed() const { return flag_closed_; }
         bool isFinished() const { return flag_finish_; }
+
+        // Convert depth image to PCL point cloud
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr depthToPCL(const cv::Mat& depth, const Intr& intr);
+        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr depthToPCLWithNormals(const cv::Mat& depth, const Intr& intr);
+
     private:
         void allocate_buffers();
 

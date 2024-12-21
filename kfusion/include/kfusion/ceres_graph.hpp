@@ -71,7 +71,10 @@ class CeresGraph {
 public:
     static void optimizePoseGraph(std::vector<Affine3f>& poses,
                                 const std::vector<int>& loop_frame_idx,
-                                const std::vector<Affine3f>& loop_poses);
+                                const std::vector<std::pair<int, int>>& loop_pairs,
+                                const std::vector<Affine3f>& loop_poses,
+                                const cv::Vec3f& center,
+                                const float radius);
 };
 
 } // namespace kfusion

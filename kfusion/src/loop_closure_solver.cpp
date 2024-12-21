@@ -55,7 +55,7 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
 ) {
     pcl::IterativeClosestPointWithNormals<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> icp;
    
-    
+    cout<<"in icp: "<<source_cloud->points.size()<<" "<<target_cloud->points.size()<<endl;
     icp.setInputSource(source_cloud);
     icp.setInputTarget(target_cloud);
     //先设置点云，在icp临近点方法设置时需要用到，再设置icp参数
@@ -128,6 +128,7 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
     cout<<"基于icp进行相对位姿估计及对应点获取"<<endl;
     for (const auto& pair : loop_pairs) {
         cout<<"估计ICP 从: "<<pair.first<<" 到 "<<pair.second<<endl;
+        cout<<"size: "<<point_clouds[pair.first]->points.size()<<" "<<point_clouds[pair.second]->points.size()<<endl;
         cv::Affine3f initial_guess = initial_poses[pair.second].inv() * initial_poses[pair.first];
         icp_name_ = std::to_string(pair.first)+"_"+std::to_string(pair.second);
         cv::Affine3f relative_pose = estimateRelativePose(
