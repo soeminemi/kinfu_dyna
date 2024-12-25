@@ -53,30 +53,30 @@ async def calculate_arm_angles(image):
     left_angle = (left_angle + 360) % 360
     right_angle = (right_angle + 360) % 360
     if left_angle > 180:
-        left_angle = 360 - left_angle
+left_angle = 360 - left_angle
     if right_angle > 180:
-        right_angle = 360 - right_angle
+right_angle = 360 - right_angle
     # 绘制关节图
     image_with_keypoints = image.copy()
     
     # 定义关节连接
     connections = [
-        (5, 7), (7, 9),  # 左臂
-        (6, 8), (8, 10),  # 右臂
-        (5, 6), (5, 11), (6, 12),  # 躯干
-        (11, 13), (13, 15),  # 左腿
-        (12, 14), (14, 16)  # 右腿
+(5, 7), (7, 9),  # 左臂
+(6, 8), (8, 10),  # 右臂
+(5, 6), (5, 11), (6, 12),  # 躯干
+(11, 13), (13, 15),  # 左腿
+(12, 14), (14, 16)  # 右腿
     ]
     
     # 绘制关节点
     for point in keypoints:
-        cv2.circle(image_with_keypoints, tuple(point.astype(int)), 5, (0, 255, 0), -1)
+cv2.circle(image_with_keypoints, tuple(point.astype(int)), 5, (0, 255, 0), -1)
     
     # 绘制连接线
     for connection in connections:
-        start_point = tuple(keypoints[connection[0]].astype(int))
-        end_point = tuple(keypoints[connection[1]].astype(int))
-        cv2.line(image_with_keypoints, start_point, end_point, (255, 0, 0), 2)
+start_point = tuple(keypoints[connection[0]].astype(int))
+end_point = tuple(keypoints[connection[1]].astype(int))
+cv2.line(image_with_keypoints, start_point, end_point, (255, 0, 0), 2)
     
     # 保存结果图像
     cv2.imwrite('result.jpg', image_with_keypoints)
@@ -84,22 +84,22 @@ async def calculate_arm_angles(image):
 
 async def handle_websocket(websocket, path):
     async for message in websocket:
-        # 解码Base64图像
-        image_data = base64.b64decode(message)
-        nparr = np.frombuffer(image_data, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        # 计算手臂角度
-        left_angle, right_angle = await calculate_arm_angles(image)
-        
-        # 构造响应
-        response = json.dumps({
-            "left_angle": left_angle,
-            "right_angle": right_angle
-        })
-        
-        # 发送响应
-        await websocket.send(response)
+# 解码Base64图像
+image_data = base64.b64decode(message)
+nparr = np.frombuffer(image_data, np.uint8)
+image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+# 计算手臂角度
+left_angle, right_angle = await calculate_arm_angles(image)
+
+# 构造响应
+response = json.dumps({
+    "left_angle": left_angle,
+    "right_angle": right_angle
+})
+
+# 发送响应
+await websocket.send(response)
 
 async def main():
     server = await websockets.serve(handle_websocket, "localhost", 8765)

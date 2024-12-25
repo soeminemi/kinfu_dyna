@@ -8,6 +8,7 @@ import cvui
 import threading
 from imageio import imread
 import time
+
 # # 获取深度图, 默认尺寸 424x512
 # def get_last_depth():
 #     frame = kinect.get_last_depth_frame()
@@ -20,14 +21,13 @@ import time
 # def get_last_rbg():
 #     frame = kinect.get_last_color_frame()
 #     return np.reshape(frame, [1080, 1920, 4])[:, :, 0:3]
-#
-#socket client
+
+##socket client
 # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # server_address = ('localhost', 9099)
 # client_socket.connect(server_address)
-#
 
-depths = []
+#depths = []
 images=[]
 global lock
 lock = threading.Lock()
@@ -52,26 +52,32 @@ def pub_msg(ws):
         else:
             lock.release()
         time.sleep(0.01)
+
 import os
 import re
 import sys
+
 if __name__ == "__main__":
     print(f"当前程序执行路径: {os.getcwd()}")
+    
     if len(sys.argv) < 2:
         print("使用方法: python testServer.py <深度图像文件夹路径>")
         sys.exit(1)
-
+    
     depth_folder = sys.argv[1]  # 从命令行参数获取深度图像文件夹路径
+    
     if not os.path.isdir(depth_folder):
         print(f"错误: 文件夹 '{depth_folder}' 不存在")
         sys.exit(1)
-
+    
     print(f"使用深度图像文件夹: {depth_folder}")
+    
     sample_num = 1500
     flag_cache_send = True
     flag_save_disk = False
     flag_start = True
     flag_end = False
+    
     # for fid in range(sample_num):
     # 查询可用服务
     def query_available_service():
@@ -100,11 +106,10 @@ if __name__ == "__main__":
             else:
                 print("当前没有可用的服务")
                 return None
-        
         except Exception as e:
             print(f"查询服务时发生错误: {str(e)}")
             return None
-
+    
     # 获取可用服务信息
     service_info = query_available_service()
     
@@ -112,23 +117,22 @@ if __name__ == "__main__":
         print("无法获取可用服务，程序退出")
         sys.exit(1)
 
-        # 连接到给定的WebSocket服务
+    # 连接到给定的WebSocket服务
     ws_url = f"ws://{service_info['ip']}:{service_info['port']}"
     vcode = service_info['verification_code']
     fid = 0
     # ws_url = "ws://175.6.27.254:9099"
     ws = websocket.create_connection(ws_url)
+    
     # 判断连接是否成功
     # print("try to connect to server")
     # try:
     #     # 发送一个简单的消息来测试连接
     #     test_message = json.dumps({"ack": "test"})
     #     ws.send(test_message)
-        
     #     # 等待服务器响应
     #     response = ws.recv()
     #     response_data = json.loads(response)
-        
     #     if response_data.get("status") == "ok":
     #         print("WebSocket连接成功")
     #     else:
@@ -139,6 +143,7 @@ if __name__ == "__main__":
     #     print(f"连接测试时发生错误: {str(e)}")
     #     ws.close()
     #     sys.exit(1)
+    
     show_msg = "Ready"
     orig = (50,50)
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -155,18 +160,21 @@ if __name__ == "__main__":
     result_str = "None"
     global msgs
     msgs = []
+    
     if flag_cache_send:
         print("try to start the msg sending thread")
         thread_sdmsg = threading.Thread(target=pub_msg, args=(ws,),name="send1")
         thread_sdmsg.start()
         # thread_sdmsg.join()
+    
     # depth_folder = "./body_1726305326/depths"  # 指定深度图像文件夹
     # depth_files = sorted([f for f in os.listdir(depth_folder) if f.endswith('.png')])
+    
     def sort_key(filename):
         # 从文件名中提取数字
         numbers = re.findall(r'\d+', filename)
         return int(numbers[0]) if numbers else 0
-
+    
     depth_files = sorted([f for f in os.listdir(depth_folder) if f.endswith('.png')], key=sort_key)
     
     depth_index = 0
@@ -182,8 +190,7 @@ if __name__ == "__main__":
             flag_start = False
             flag_end = True
             show_msg = '所有深度图像已发送,等待接收结果'
-
-
+        
         # last_color_frame = cv2.imread(color_file)
         last_color_frame = np.ones((300, 300, 3), dtype=np.uint8) * 128  # 128 是中灰色
         showimg = last_color_frame
@@ -196,7 +203,6 @@ if __name__ == "__main__":
         # if cvui.checkbox(showimg,50,80,"female",female_checked):
         #     male_checked = [False]
         #     gender = "female"
-
         # if cvui.button(showimg, 50, 100,  button_name):
         #     if button_name == "START":
         #         button_name = "STOP"
@@ -221,6 +227,7 @@ if __name__ == "__main__":
         # cv2.imshow(WINDOW_NAME,showimg)
         # key = cv2.waitKey(30)
         time.sleep(0.03)
+        
         if flag_start:
             if flag_save_disk:
                 depths.append(last_depth_frame)
@@ -270,8 +277,8 @@ if __name__ == "__main__":
                     lock.release()
                 else:
                     ws.send(sdstr)
-            fid += 1
-
+                fid += 1
+        
         if flag_end:
             sd = {}
             sd["gender"]=gender
@@ -291,7 +298,7 @@ if __name__ == "__main__":
             stime = time.time()
             print("测量中，请稍候")
             fid = 0
-            flag_start = False;
+            flag_start = False
             flag_end = False
             result = ws.recv()
             print("测量结果如下:",result)
@@ -302,7 +309,7 @@ if __name__ == "__main__":
                         # print(key, value)
                         f.write((value))
                         f.close()
-                else: 
+                else:
                     print(key, value)
             print("测量耗时: ", time.time()-stime," 秒")
             print("Press \'s\' to start and \'e\' to stop")
@@ -311,14 +318,13 @@ if __name__ == "__main__":
             flag_exit = True
             lock.release()
             break
-            show_msg = "Ready"
-
-    # if flag_save_disk:
-    #     print("saving to disk")
-    #     # path = "/home/john/Projects/dynamicfusion/data/desk1"
-    #     path = "./data_kinfu/rotperson_1"
-    #     for fid in range(len(depths)):
-    #         o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
-    #         o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
-    #         print("saving: ",fid)
-    
+        
+        show_msg = "Ready"
+        # if flag_save_disk:
+        #     print("saving to disk")
+        #     # path = "/home/john/Projects/dynamicfusion/data/desk1"
+        #     path = "./data_kinfu/rotperson_1"
+        #     for fid in range(len(depths)):
+        #         o3d.io.write_image(f"{path}/color/color{fid:05d}.png", images[fid])
+        #         o3d.io.write_image(f"{path}/depth/depth{fid:05d}.png",depths[fid])
+        #         print("saving: ",fid)

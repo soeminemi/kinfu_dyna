@@ -6,9 +6,9 @@ def txt_to_pointcloud(txt_path):
     """
     从txt文件读取点云数据并转换为ply格式
     Args:
-        txt_path: txt文件路径,每行包含 x y z r g b 6个值
+txt_path: txt文件路径,每行包含 x y z r g b 6个值
     Returns:
-        点云对象
+点云对象
     """
     # 读取txt文件
     data = np.loadtxt(txt_path)
@@ -27,10 +27,10 @@ def txt_to_pointcloud(txt_path):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("请提供txt文件路径作为命令行参数")
-        print("用法: python txt2pts.py <txt文件路径>")
-        sys.exit(1)
-        
+print("请提供txt文件路径作为命令行参数")
+print("用法: python txt2pts.py <txt文件路径>")
+sys.exit(1)
+
     txt_path = sys.argv[1]
     
     # 生成点云

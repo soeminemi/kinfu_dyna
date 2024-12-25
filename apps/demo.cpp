@@ -323,6 +323,7 @@ public:
         pause_ = false;
         Json::Value jv;
         Json::Reader jreader;
+        string bodyname = "none";
         static std::chrono::steady_clock::time_point lastValidMessageTime = std::chrono::steady_clock::now();
         while (true)
         {
@@ -435,6 +436,7 @@ public:
                         meshFittor->setWeight(50.0,false);
                         flag_weight_set = false;
                     }
+                    meshFittor->setName(bodyname);
                     if (jv["measure_type"].isString())
                     {
                         measure_type = jv["measure_type"].asString();
@@ -575,6 +577,7 @@ public:
                         if (jv["name"].isString())
                         {
                             std::cout << "name:" << jv["name"].asString() << std::endl;
+                            bodyname = jv["name"].asString();
                             name = jv["name"].asString() + "_" + name;
                         }
                         if (jv["flag_test"].isBool() && jv["flag_test"].asBool() == true)

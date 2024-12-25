@@ -88,9 +88,7 @@ namespace kfusion
                     float sdf = Dp - __fsqrt_rn(dot(vc, vc)); //Dp - norm(v)
                     // printf("%f,%f\n",Dp, __fsqrt_rn(dot(vc, vc)));
                     if (sdf >= -volume.trunc_dist)
-                    {
-                        
-                        float tsdf = fmin(1.f, sdf * tranc_dist_inv);
+                    {    float tsdf = fmin(1.f, sdf * tranc_dist_inv);
 
                         //read and unpack
                         int weight_prev;

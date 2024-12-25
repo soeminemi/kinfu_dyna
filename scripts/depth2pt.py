@@ -6,11 +6,11 @@ def depth_to_pointcloud(depth_path, fx, fy, cx, cy):
     """
     将深度图转换为点云
     Args:
-        depth_path: 深度图路径
-        fx, fy: 相机焦距
-        cx, cy: 相机主点坐标
+depth_path: 深度图路径
+fx, fy: 相机焦距
+cx, cy: 相机主点坐标
     Returns:
-        点云对象
+点云对象
     """
     depth = cv2.imread(depth_path, cv2.IMREAD_ANYDEPTH)
     height, width = depth.shape
@@ -34,9 +34,9 @@ def depth_to_pointcloud(depth_path, fx, fy, cx, cy):
     
     # 构建旋转矩阵和平移向量
     R = np.array([
-        [0.999995, -0.00173292, -0.00259683],
-        [0.00171829, 0.999983, -0.00562471], 
-        [0.00260653, 0.00562022, 0.999981]
+[0.999995, -0.00173292, -0.00259683],
+[0.00171829, 0.999983, -0.00562471], 
+[0.00260653, 0.00562022, 0.999981]
     ])
     T = np.array([-12.1293, -0.159468, 0.101271])
     
@@ -64,9 +64,9 @@ if __name__ == "__main__":
     depth_path = "./test/ASC60CE45000218/ASC60CE45000218/Frames/depth/depth_20241120_115425263_0.png"  # 深度图路径
     import sys
     if len(sys.argv) < 2:
-        print("请提供深度图路径作为命令行参数")
-        print("用法: python depth2pt.py <深度图路径>")
-        sys.exit(1)
+print("请提供深度图路径作为命令行参数")
+print("用法: python depth2pt.py <深度图路径>")
+sys.exit(1)
     depth_path = sys.argv[1]
     # # 相机内参
     # fx = 435.32*1.35
