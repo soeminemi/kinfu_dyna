@@ -604,7 +604,7 @@ void kfusion::KinFu::loopClosureOptimize(
     cout<<"step: "<<step<<endl;
     cout<<"bias: "<<bias<<endl;
     bias = bias < 1 ? 1 : bias;
-    bias = bias > 15? 15: bias;
+    bias = bias > 5? 5: bias;
     for(int i=0; i<frame_count; i+=step)
     {
         auto depth_cloud = depthToPCLWithNormals(depth_imgs_[i], p.intr);
@@ -650,10 +650,10 @@ void kfusion::KinFu::loopClosureOptimize(
             for (int y = 0; y < cloud_host.rows; ++y) {
                 for (int x = 0; x < cloud_host.cols; ++x) {
                     cv::Vec4f pt = cloud_host.at<cv::Vec4f>(y, x);
-                    if(pt[0]>0.6)
-                    {
-                        continue;
-                    }
+                    // if(pt[0]>0.6)
+                    // {
+                    //     continue;
+                    // }
                     cv::Vec3f tpt(pt[0],pt[1],pt[2]);
                     tpt = pinv * tpt;
                     cv::Vec4f nl = normal_host.at<cv::Vec4f>(y, x);
@@ -706,14 +706,12 @@ void kfusion::KinFu::loopClosureOptimize(
     cout<<"clouds size: "<<clouds.size()<<endl;
     std::vector<Eigen::Matrix4d> transformations;
     std::vector<Affine3f> initial_poses;
-    cout<<"mark1"<<endl;
     // Store each point cloud in 'clouds' as a PLY file
     transformations.clear();
     clouds_transformed.clear();
     initial_poses.clear();
     std::vector<std::pair<int,int>> loop_pair;
     for (size_t i = 0; i < clouds.size(); ++i) {
-        cout<<"mark 2"<<endl;
         auto cloud_read = clouds[i];
         Eigen::Matrix4d transformation;
         int pose_idx = anchor_frame_idx[i];
@@ -722,7 +720,6 @@ void kfusion::KinFu::loopClosureOptimize(
             poses[pose_idx].matrix.val[4], poses[pose_idx].matrix.val[5], poses[pose_idx].matrix.val[6], poses[pose_idx].matrix.val[7],
             poses[pose_idx].matrix.val[8], poses[pose_idx].matrix.val[9], poses[pose_idx].matrix.val[10], poses[pose_idx].matrix.val[11],
             poses[pose_idx].matrix.val[12], poses[pose_idx].matrix.val[13], poses[pose_idx].matrix.val[14], poses[pose_idx].matrix.val[15];
-        cout<<"push_back initial pose"<<endl;
         initial_poses.push_back(poses[pose_idx]);
         transformations.push_back(transformation);
         pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>());
@@ -762,9 +759,9 @@ void kfusion::KinFu::loopClosureOptimize(
     LoopClosureSolver solver_ba;
     std::vector<cv::Affine3f> optimized_poses;
     //用ICP进行初步配准已经进行了多次迭代，整个BA多次优化没有任何效果，一次就可以了
-    for(size_t i=0;i<1;i++)
+    for(size_t i=0;i<3;i++)
     {
-        optimized_poses = solver_ba.optimizePoses(clouds, initial_poses, loop_pair);
+        optimized_poses = solver_ba.optimizePoses(clouds, initial_poses, loop_pair,i==0);
         cout<<"第"<<i<<"次BA优化完成"<<endl;
         cout<<"BA finished"<<endl;
         CeresGraph::optimizePoseGraph(poses, anchor_frame_idx, loop_pair, optimized_poses,motion_constraint.getCenter(), motion_constraint.getRadius());
@@ -1257,6 +1254,10 @@ pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr kfusion::KinFu::depthToPCLWithNorma
                 Eigen::Vector3f dx(xr - xl, 0, zr - zl);
                 Eigen::Vector3f dy(0, yb - yt, zb - zt);
                 Eigen::Vector3f normal = dy.cross(dx).normalized();
+                // 检查法向量是否有效
+                if (normal.hasNaN() || normal.norm() < 0.001f) {
+                    continue;
+                }
 
                 pcl::PointXYZRGBNormal pt;
                 pt.x = x_world;

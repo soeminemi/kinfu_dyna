@@ -119,7 +119,8 @@ cv::Affine3f LoopClosureSolver::estimateRelativePose(
 std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
     const std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr>& point_clouds,
     const std::vector<cv::Affine3f>& initial_poses,
-    const std::vector<std::pair<int, int>>& loop_pairs
+    const std::vector<std::pair<int, int>>& loop_pairs,
+    const bool flag_icp
 ) {
     // 计算闭环帧之间的相对位姿,并获取对应点对
     std::vector<cv::Affine3f> relative_poses;
@@ -131,14 +132,29 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
         cout<<"size: "<<point_clouds[pair.first]->points.size()<<" "<<point_clouds[pair.second]->points.size()<<endl;
         cv::Affine3f initial_guess = initial_poses[pair.second].inv() * initial_poses[pair.first];
         icp_name_ = std::to_string(pair.first)+"_"+std::to_string(pair.second);
-        cv::Affine3f relative_pose = estimateRelativePose(
-            point_clouds[pair.first],
-            point_clouds[pair.second],
-            initial_guess,
-            initial_poses[pair.second],
-            source_indices,
-            target_indices
-        );
+        cv::Affine3f relative_pose;
+        if(flag_icp)
+        {
+            relative_pose = estimateRelativePose(
+                point_clouds[pair.first],
+                point_clouds[pair.second],
+                initial_guess,
+                initial_poses[pair.second],
+                source_indices,
+                target_indices
+            );
+        
+        }
+        else{
+            relative_pose = getCorrespondence(
+                point_clouds[pair.first],
+                point_clouds[pair.second],
+                initial_guess,
+                initial_poses[pair.second],
+                source_indices,
+                target_indices
+            );
+        }
         std::vector<std::pair<int, int>> pcorres;
         pcorres.clear();
         pcorres.reserve(source_indices.size());
@@ -160,16 +176,16 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
         optimized_poses[loop_pairs[i].first] = optimized_poses[loop_pairs[i].second] * relative_poses[i];
     }
     
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud_beforeba(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-    for (size_t i = 0; i < point_clouds.size(); ++i) {
-        pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-        Eigen::Matrix4f transform_matrix;
-        cv::cv2eigen(optimized_poses[i].matrix, transform_matrix);
-        pcl::transformPointCloud(*point_clouds[i], *transformed_cloud, transform_matrix);
-        *merged_cloud_beforeba += *transformed_cloud;
-        pcl::io::savePLYFile("./results/icp_cloud_" + std::to_string(i) + ".ply", *transformed_cloud);
-    }
-    pcl::io::savePLYFile("./results/ba_merged_cloud_beforeba.ply", *merged_cloud_beforeba);
+    // pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr merged_cloud_beforeba(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    // for (size_t i = 0; i < point_clouds.size(); ++i) {
+    //     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    //     Eigen::Matrix4f transform_matrix;
+    //     cv::cv2eigen(optimized_poses[i].matrix, transform_matrix);
+    //     pcl::transformPointCloud(*point_clouds[i], *transformed_cloud, transform_matrix);
+    //     *merged_cloud_beforeba += *transformed_cloud;
+    //     pcl::io::savePLYFile("./results/icp_cloud_" + std::to_string(i) + ".ply", *transformed_cloud);
+    // }
+    // pcl::io::savePLYFile("./results/ba_merged_cloud_beforeba.ply", *merged_cloud_beforeba);
     // 使用BA优化位姿
     auto optimizedPose = optimizePosesBA(point_clouds, optimized_poses, loop_pairs, loop_corres);
     // 合并所有点云
@@ -420,6 +436,63 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePosesBA(
     }
     
     return optimized_poses;
+}
+
+cv::Affine3f LoopClosureSolver::getCorrespondence(
+    const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& source_cloud,
+    const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& target_cloud,
+    const cv::Affine3f& relative_pose,
+    const cv::Affine3f& global_pose_src,
+    std::vector<int>& source_indices,
+    std::vector<int>& target_indices
+) {
+    cout << "获取对应点: " << source_cloud->points.size() << " " << target_cloud->points.size() << endl;
+
+    // 将相对位姿转换为PCL格式
+    Eigen::Matrix4f transform_mat = Eigen::Matrix4f::Identity();
+    const cv::Matx44f& cv_mat = relative_pose.matrix;
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            transform_mat(i, j) = cv_mat(i, j);
+
+    // 使用相对位姿变换source点云
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+    pcl::transformPointCloud(*source_cloud, *transformed_source, transform_mat);
+
+    // 创建对应点估计对象
+    pcl::registration::CorrespondenceEstimation<pcl::PointXYZRGBNormal, pcl::PointXYZRGBNormal> est;
+    est.setInputSource(transformed_source);
+    est.setInputTarget(target_cloud);
+
+    // 设置搜索参数
+    // est.setKSearch(10);  // 设置k近邻搜索的k值
+
+    // 计算对应关系
+    pcl::Correspondences correspondences;
+    est.determineCorrespondences(correspondences, max_correspondence_distance_);  // 使用类中已有的距离阈值
+
+    // 使用RANSAC进行离群点剔除
+    pcl::registration::CorrespondenceRejectorSampleConsensus<pcl::PointXYZRGBNormal> ransac;
+    ransac.setInputSource(transformed_source);
+    ransac.setInputTarget(target_cloud);
+    ransac.setInlierThreshold(0.05);  // 设置RANSAC内点阈值
+    ransac.setMaximumIterations(100);   // RANSAC最大迭代次数
+    pcl::Correspondences filtered_correspondences;
+    ransac.getRemainingCorrespondences(correspondences, filtered_correspondences);
+
+    // 提取对应点索引
+    source_indices.clear();
+    target_indices.clear();
+    source_indices.reserve(filtered_correspondences.size());
+    target_indices.reserve(filtered_correspondences.size());
+    
+    for (const auto& corr : filtered_correspondences) {
+        source_indices.push_back(corr.index_query);
+        target_indices.push_back(corr.index_match);
+    }
+    
+    cout << "找到对应点对数量: " << source_indices.size() << endl;
+    return relative_pose;
 }
 
 } // namespace kfusion

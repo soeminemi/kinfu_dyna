@@ -706,6 +706,55 @@ public:
                                     }
                                 }
                             }
+                            //计算三维坐标
+                            cv::Mat points3d = cv::Mat::zeros(depth.rows, depth.cols, CV_32FC3);
+                            for (size_t i = 0; i < depth.rows; i++)
+                            {
+                                for (size_t j = 0; j < depth.cols; j++)
+                                {
+                                    ushort depthValue = filteredDepth.at<ushort>(i, j);
+                                    if (depthValue > 0)
+                                    {
+                                        float x = (j - cx) * depthValue / fx;
+                                        float y = (i - cy) * depthValue / fy;
+                                        float z = depthValue;
+                                        points3d.at<cv::Vec3f>(i, j) = cv::Vec3f(x, y, z);
+                                    }
+                                }
+                            }
+                            //获取最大x
+                            float maxX = 0;
+                            for (int i = 0; i < points3d.rows; i++)
+                            {
+                                for (int j = 0; j < points3d.cols; j++)
+                                {
+                                    cv::Vec3f point3d = points3d.at<cv::Vec3f>(i, j);
+                                    if (point3d[0] > maxX)
+                                    {
+                                        maxX = point3d[0];
+                                    }
+                                }
+                            }
+                            cout << "maxX: " << maxX << endl;
+                            for (int i = 0; i < points3d.rows; i++)
+                            {
+                                for (int j = 0; j < points3d.cols; j++)
+                                {
+                                    cv::Vec3f point3d = points3d.at<cv::Vec3f>(i, j);
+                                    if (point3d[0] > maxX - 50)
+                                    {
+                                        filteredDepth.at<ushort>(i, j) = 0;
+                                    }
+                                    if(j>320)
+                                    {
+                                        if(i<130 || i > 300)
+                                        {
+                                            filteredDepth.at<ushort>(i,j) = 0;
+                                        }
+                                    }
+                                }
+                            }
+                            
                             // 对深度图进行噪声过滤
                             // depth = filteredDepth;
                             // cv::Mat noiseFilteredDepth = cv::Mat::zeros(depth.rows, depth.cols, depth.type());

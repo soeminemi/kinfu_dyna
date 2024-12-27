@@ -21,7 +21,17 @@ public:
     std::vector<cv::Affine3f> optimizePoses(
         const std::vector<pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr>& point_clouds,
         const std::vector<cv::Affine3f>& initial_poses,
-        const std::vector<std::pair<int, int>>& loop_pairs
+        const std::vector<std::pair<int, int>>& loop_pairs,
+        const bool flag_icp
+    );
+    
+    cv::Affine3f getCorrespondence(
+        const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& source_cloud,
+        const pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr& target_cloud,
+        const cv::Affine3f& relative_pose,
+        const cv::Affine3f& global_pose_src,
+        std::vector<int>& source_indices,
+        std::vector<int>& target_indices
     );
     
 private:
