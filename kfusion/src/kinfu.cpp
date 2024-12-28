@@ -598,7 +598,7 @@ void kfusion::KinFu::loopClosureOptimize(
     anchor_frame_idx.clear();
     if(frame_count == 0)
         return;
-    int step = 30/(360/frame_count);
+    int step = 20/(360/frame_count);
     int bias = 15/(360/frame_count);
     cout<<"step: "<<step<<endl;
     cout<<"bias: "<<bias<<endl;
