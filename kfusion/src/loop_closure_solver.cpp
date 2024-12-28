@@ -198,7 +198,6 @@ std::vector<cv::Affine3f> LoopClosureSolver::optimizePoses(
         *merged_cloud += *transformed_cloud;
     }
     pcl::io::savePLYFile("./results/ba_merged_cloud.ply", *merged_cloud);
-    cout << "Merged cloud saved to ./results/ba_merged_cloud.ply" << endl;
     return optimizedPose;
 }
 
